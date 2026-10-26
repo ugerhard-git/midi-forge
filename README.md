@@ -24,6 +24,7 @@ The plug-in is built entirely by GitHub Actions – nothing needs to be built lo
 
 - [CONTRIBUTING.md](CONTRIBUTING.md) – ground rules, building, checks, releases
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) – how the code is organised
+- [docs/IDEAS.md](docs/IDEAS.md) – planned features and ideas
 - [SECURITY.md](SECURITY.md) – reporting vulnerabilities
 
 Built with [JUCE](https://juce.com) and [clap-juce-extensions](https://github.com/free-audio/clap-juce-extensions).

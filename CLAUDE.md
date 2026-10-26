@@ -19,6 +19,8 @@ Read first: [CONTRIBUTING.md](CONTRIBUTING.md) (all ground rules apply to you), 
 8. When the owner asks about a possible new feature: first discuss and plan, then **wait for an explicit
    go** before writing code or building.
 9. Record new ground rules from the owner in this file and/or CONTRIBUTING.md.
+10. Features that are discussed but postponed go into [docs/IDEAS.md](docs/IDEAS.md) (agreed designs as
+    *Planned*, open ideas as *Idea*), so nothing gets forgotten. Remove an entry once it is built.
 
 ## Checklist for every change
 
