@@ -38,6 +38,42 @@ void ParameterKnob::resized()
     valueLabel.setBounds (area.withTrimmedBottom (4));
 }
 
+void ParameterKnob::setModulation (bool isModulated, float modulatedValue01)
+{
+    if (isModulated == showsModulation && std::abs (modulatedValue01 - modulatedValue) < 0.001f)
+        return;
+    showsModulation = isModulated;
+    modulatedValue = modulatedValue01;
+    repaint();
+}
+
+void ParameterKnob::paintOverChildren (juce::Graphics& graphics)
+{
+    if (! showsModulation || ! isVisible())
+        return;
+
+    // Same geometry as ForgeLookAndFeel::drawRotarySlider, one ring further out.
+    const auto rotary = knob.getRotaryParameters();
+    const auto knobArea = knob.getBounds().toFloat().reduced (3.0f);
+    const auto centre = knobArea.getCentre();
+    const float ringRadius = juce::jmin (knobArea.getWidth(), knobArea.getHeight()) / 2.0f + 1.5f;
+    const auto angleOf = [&] (float value01)
+    { return rotary.startAngleRadians + value01 * (rotary.endAngleRadians - rotary.startAngleRadians); };
+
+    const float baseAngle = angleOf ((float) knob.valueToProportionOfLength (knob.getValue()));
+    const float modulatedAngle = angleOf (modulatedValue);
+
+    juce::Path offset;
+    offset.addCentredArc (centre.x, centre.y, ringRadius, ringRadius, 0.0f, juce::jmin (baseAngle, modulatedAngle),
+                          juce::jmax (baseAngle, modulatedAngle), true);
+    graphics.setColour (Theme::Colours::modulation.withAlpha (0.55f));
+    graphics.strokePath (offset, juce::PathStrokeType (1.5f));
+
+    graphics.setColour (Theme::Colours::modulation);
+    graphics.fillEllipse (
+        juce::Rectangle<float> (5.0f, 5.0f).withCentre (centre.getPointOnCircumference (ringRadius, modulatedAngle)));
+}
+
 //==============================================================================
 SlotRow::SlotRow (MidiForgeProcessor& processorToControl, int slotIndexToShow)
     : processor (processorToControl), slotIndex (slotIndexToShow)
@@ -164,6 +200,19 @@ void SlotRow::refreshFromProcessor()
     }
 
     updateValueTexts();
+    updateModulationRings();
+}
+
+void SlotRow::updateModulationRings()
+{
+    const auto& description = getModuleDescription (displayedModuleType);
+    for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
+    {
+        const bool isModulated = displayedAsEnabled && description.parameters[parameterIndex].isUsed() &&
+                                 processor.isParameterModulated (slotIndex, parameterIndex);
+        parameterKnobs[parameterIndex].setModulation (isModulated,
+                                                      processor.getModulatedParameterValue (slotIndex, parameterIndex));
+    }
 }
 
 void SlotRow::paint (juce::Graphics& graphics)

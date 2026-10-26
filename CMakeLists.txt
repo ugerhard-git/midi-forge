@@ -10,7 +10,7 @@
 
 cmake_minimum_required(VERSION 3.28)
 
-project(MidiForge VERSION 0.1.0 LANGUAGES C CXX)
+project(MidiForge VERSION 0.2.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -61,6 +61,11 @@ add_library(midi_forge_engine STATIC
     Source/Engine/MidiModule.cpp
     Source/Engine/ModuleChain.h
     Source/Engine/ModuleChain.cpp
+    Source/Engine/MidiForgeEngine.h
+    Source/Engine/MidiForgeEngine.cpp
+    Source/Engine/Modulation/Lfo.h
+    Source/Engine/Modulation/Lfo.cpp
+    Source/Engine/Modulation/ModulationRoutes.h
     Source/Engine/Modules/FilterModules.h
     Source/Engine/Modules/FilterModules.cpp
     Source/Engine/Modules/TransformModules.h
@@ -84,7 +89,8 @@ if(MIDI_FORGE_BUILD_ENGINE_TESTS)
         Tests/Engine/ModuleDescriptionTests.cpp
         Tests/Engine/FilterAndTransformTests.cpp
         Tests/Engine/GeneratorAndRandomizerTests.cpp
-        Tests/Engine/ModuleChainTests.cpp)
+        Tests/Engine/ModuleChainTests.cpp
+        Tests/Engine/ModulationTests.cpp)
     target_link_libraries(midi_forge_engine_tests PRIVATE midi_forge_engine midi_forge_warnings)
     add_test(NAME engine COMMAND midi_forge_engine_tests)
 endif()
@@ -121,6 +127,8 @@ if(MIDI_FORGE_BUILD_PLUGIN)
         Source/UI/ForgeLookAndFeel.cpp
         Source/UI/SlotRow.h
         Source/UI/SlotRow.cpp
+        Source/UI/ModulationPage.h
+        Source/UI/ModulationPage.cpp
         Source/UI/PluginEditor.h
         Source/UI/PluginEditor.cpp)
 

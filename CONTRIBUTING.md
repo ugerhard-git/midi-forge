@@ -16,7 +16,8 @@ These rules apply to every change, by people and by AI assistants alike. AI-spec
    layout updates [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the doc comments in the same commit.
 4. **The manual stays true.** Every user-visible change (modules, parameters, ranges, presets, UI,
    installation) updates [docs/MANUAL.md](docs/MANUAL.md) in the same commit. If the editor looks
-   different, update `docs/images/editor.png` from the CI artifact `editor-screenshot`.
+   different, update `docs/images/editor.png` and `docs/images/modulation.png` from the CI artifact
+   `editor-screenshots`.
 5. **Tests.** Write tests whenever possible or sensible, and keep them up to date with the code:
    - engine behaviour → `Tests/Engine/` (fast, no JUCE),
    - plug-in layer (parameters, presets, state, editor) → `Tests/Plugin/`,
@@ -63,7 +64,7 @@ Results land in `build/MidiForge_artefacts/Release/VST3` and `.../CLAP`.
 ```sh
 pip install clang-format==19.1.7           # the version CI uses
 clang-format --dry-run --Werror $(git ls-files '*.cpp' '*.h')
-clang-tidy -p build Source/Engine/*.cpp Source/Engine/Modules/*.cpp Tests/Engine/*.cpp
+clang-tidy -p build Source/Engine/*.cpp Source/Engine/Modules/*.cpp Source/Engine/Modulation/*.cpp Tests/Engine/*.cpp
 ctest --test-dir build --output-on-failure
 ```
 

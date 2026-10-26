@@ -11,17 +11,32 @@
 namespace midiforge
 {
 
-/** A rotary knob with the parameter name and its current value next to it. */
+/**
+ * A rotary knob with the parameter name and its current value next to it.
+ * When an LFO modulates the parameter, a dot on an outer ring shows the value the chain actually uses.
+ */
 class ParameterKnob final : public juce::Component
 {
 public:
     ParameterKnob();
     void resized() override;
+    void paintOverChildren (juce::Graphics& graphics) override;
+
+    /**
+     * Shows or hides the modulation ring.
+     * @param isModulated          True if an active route targets this parameter.
+     * @param modulatedValue01     The value (0..1) after modulation.
+     */
+    void setModulation (bool isModulated, float modulatedValue01);
 
     juce::Slider knob;
     juce::Label nameLabel;
     juce::Label valueLabel;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> parameterAttachment;
+
+private:
+    bool showsModulation = false;
+    float modulatedValue = 0.0f;
 };
 
 /**
@@ -43,6 +58,7 @@ private:
     void fillModuleMenu();
     void showModule (int moduleType);
     void updateValueTexts();
+    void updateModulationRings();
 
     MidiForgeProcessor& processor;
     const int slotIndex;

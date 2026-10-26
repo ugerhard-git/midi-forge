@@ -1,10 +1,11 @@
 /**
  * @file ChainTestRig.h
- * @brief Drives a ModuleChain block by block, like a host would, and records everything it outputs.
+ * @brief Drives the engine (module chain plus LFOs) block by block, like a host would, and records
+ *        everything it outputs.
  */
 #pragma once
 
-#include "Engine/ModuleChain.h"
+#include "Engine/MidiForgeEngine.h"
 
 #include <initializer_list>
 #include <map>
@@ -22,7 +23,7 @@ class ChainTestRig
 public:
     ChainTestRig()
     {
-        chain.prepare (testSampleRate);
+        engine.prepare (testSampleRate);
         context.sampleRate = testSampleRate;
         context.tempoBpm = 120.0;
         context.numSamples = testBlockSize;
@@ -62,7 +63,7 @@ public:
     MidiEventList processBlock (MidiEventList input = {})
     {
         sortBySamplePosition (input);
-        chain.process (input, context, slots);
+        engine.process (input, context, settings);
 
         for (const auto& event : input)
         {
@@ -110,8 +111,18 @@ public:
         return noteNumbers;
     }
 
-    ModuleChain chain;
-    SlotSettings slots[numSlots];
+    /** Routes one LFO to a slot parameter. @param amountPercent -100..+100 */
+    void routeLfo (int routeIndex, int lfoIndex, int slotIndex, int parameterIndex, float amountPercent)
+    {
+        settings.routes[routeIndex].lfoIndex = lfoIndex;
+        settings.routes[routeIndex].targetIndex = modulationTargetIndex (slotIndex, parameterIndex);
+        settings.routes[routeIndex].amount = amountPercent / 100.0f;
+    }
+
+    MidiForgeEngine engine;
+    EngineSettings settings;
+    SlotSettings (&slots)[numSlots] = settings.slots; ///< Shortcut to settings.slots
+    LfoSettings (&lfos)[numLfos] = settings.lfos;     ///< Shortcut to settings.lfos
     BlockContext context;
     MidiEventList everyOutputEvent; ///< samplePosition holds the absolute time in samples
     int64_t samplesElapsed = 0;

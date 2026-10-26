@@ -19,15 +19,46 @@ constexpr size_t reservedEngineEvents = 8192;
 constexpr int reservedLongMessageBytes = 4096;
 constexpr int largestShortMessage = 3;
 constexpr juce::uint8 sysexStart = 0xF0;
+
+const juce::StringArray syncModeNames { "Free", "Tempo" };
+constexpr int tempoSyncIndex = 1;
+const juce::String middleDot = juce::String::fromUTF8 (" \xc2\xb7 ");
+
+juce::StringArray namesOf (const char* const* names, int count)
+{
+    juce::StringArray result;
+    for (int index = 0; index < count; ++index)
+        result.add (names[index]);
+    return result;
+}
+
+juce::StringArray lfoDivisionNames()
+{
+    juce::StringArray result;
+    for (int index = 0; index < numLfoDivisions; ++index)
+        result.add (lfoDivisions[index].name);
+    return result;
+}
+
+/** Fixed host-side names of the modulation targets: "None", "Slot 1 A" ... "Slot 8 D". */
+juce::StringArray fixedModulationTargetNames()
+{
+    juce::StringArray result { "None" };
+    for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
+        for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
+            result.add ("Slot " + juce::String (slotIndex + 1) + " " +
+                        juce::String (ParameterIds::valueSuffixes[parameterIndex]).toUpperCase());
+    return result;
+}
 } // namespace
 
 MidiForgeProcessor::MidiForgeProcessor()
     : AudioProcessor (BusesProperties()), // MIDI only: no audio inputs or outputs
       parameters (*this, nullptr, "MidiForge", createParameterLayout())
 {
-    // Seed the randomizer modules differently in every session, then build the chain.
+    // Seed the randomizer modules and LFOs differently in every session, then build the engine.
     setRandomSeedForNewModules ((unsigned) juce::Time::currentTimeMillis());
-    moduleChain = std::make_unique<ModuleChain>();
+    engine = std::make_unique<MidiForgeEngine>();
 
     for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
     {
@@ -39,14 +70,49 @@ MidiForgeProcessor::MidiForgeProcessor()
                 parameters.getRawParameterValue (ParameterIds::moduleParameter (slotIndex, parameterIndex));
     }
 
+    for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
+    {
+        auto& values = lfoParameterValues[(size_t) lfoIndex];
+        values.waveform = parameters.getRawParameterValue (ParameterIds::lfoWaveform (lfoIndex));
+        values.syncMode = parameters.getRawParameterValue (ParameterIds::lfoSyncMode (lfoIndex));
+        values.rateHz = parameters.getRawParameterValue (ParameterIds::lfoRate (lfoIndex));
+        values.division = parameters.getRawParameterValue (ParameterIds::lfoDivision (lfoIndex));
+        values.phaseDegrees = parameters.getRawParameterValue (ParameterIds::lfoPhase (lfoIndex));
+        values.pulseWidthPercent = parameters.getRawParameterValue (ParameterIds::lfoPulseWidth (lfoIndex));
+        values.restartsOnKey = parameters.getRawParameterValue (ParameterIds::lfoRestartOnKey (lfoIndex));
+    }
+
+    for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
+    {
+        auto& values = routeParameterValues[(size_t) routeIndex];
+        values.source = parameters.getRawParameterValue (ParameterIds::routeSource (routeIndex));
+        values.target = parameters.getRawParameterValue (ParameterIds::routeTarget (routeIndex));
+        values.amountPercent = parameters.getRawParameterValue (ParameterIds::routeAmount (routeIndex));
+    }
+
+    for (auto& readout : modulatedValueReadouts)
+        readout.store (0.0f);
+    for (auto& readout : lfoValueReadouts)
+        readout.store (0.0f);
+    for (auto& readout : lfoPhaseReadouts)
+        readout.store (0.0f);
+
     engineEvents.reserve (reservedEngineEvents);
     longMessagesPassedThrough.ensureSize (reservedLongMessageBytes);
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout MidiForgeProcessor::createParameterLayout()
 {
+    // The order matters to hosts that list parameters by index: new parameters are only ever appended.
     juce::AudioProcessorValueTreeState::ParameterLayout layout;
+    addSlotParameters (layout);
+    addLfoParameters (layout);
+    addRouteParameters (layout);
+    return layout;
+}
 
+void MidiForgeProcessor::addSlotParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+{
     juce::StringArray moduleNames;
     for (int type = 0; type < numModuleTypes; ++type)
         moduleNames.add (getModuleDescription (type).name);
@@ -58,11 +124,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout MidiForgeProcessor::createPa
                                                                            slotName, " | ");
 
         group->addChild (std::make_unique<juce::AudioParameterChoice> (
-            juce::ParameterID { ParameterIds::moduleType (slotIndex), ParameterIds::parameterVersion },
+            juce::ParameterID { ParameterIds::moduleType (slotIndex), ParameterIds::slotParameterVersion },
             slotName + " Module", moduleNames, 0));
 
         group->addChild (std::make_unique<juce::AudioParameterBool> (
-            juce::ParameterID { ParameterIds::slotEnabled (slotIndex), ParameterIds::parameterVersion },
+            juce::ParameterID { ParameterIds::slotEnabled (slotIndex), ParameterIds::slotParameterVersion },
             slotName + " On", true));
 
         for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
@@ -88,13 +154,110 @@ juce::AudioProcessorValueTreeState::ParameterLayout MidiForgeProcessor::createPa
 
             group->addChild (std::make_unique<juce::AudioParameterFloat> (
                 juce::ParameterID { ParameterIds::moduleParameter (slotIndex, parameterIndex),
-                                    ParameterIds::parameterVersion },
+                                    ParameterIds::slotParameterVersion },
                 slotName + " " + juce::String (ParameterIds::valueSuffixes[parameterIndex]).toUpperCase(),
                 juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f, attributes));
         }
         layout.add (std::move (group));
     }
-    return layout;
+}
+
+void MidiForgeProcessor::addLfoParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+{
+    constexpr int version = ParameterIds::modulationParameterVersion;
+    for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
+    {
+        const juce::String lfoName = "LFO " + juce::String (lfoIndex + 1);
+        auto group =
+            std::make_unique<juce::AudioProcessorParameterGroup> ("lfo" + juce::String (lfoIndex + 1), lfoName, " | ");
+
+        group->addChild (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIds::lfoWaveform (lfoIndex), version }, lfoName + " Wave",
+            namesOf (lfoWaveformNames, numLfoWaveforms), 0));
+
+        group->addChild (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIds::lfoSyncMode (lfoIndex), version }, lfoName + " Sync", syncModeNames,
+            tempoSyncIndex));
+
+        juce::NormalisableRange<float> rateRange (0.01f, 20.0f);
+        rateRange.setSkewForCentre (1.0f); // half the knob covers 0.01-1 Hz, the other half 1-20 Hz
+        group->addChild (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIds::lfoRate (lfoIndex), version }, lfoName + " Rate", rateRange, 1.0f,
+            juce::AudioParameterFloatAttributes().withLabel ("Hz").withStringFromValueFunction (
+                [] (float hertz, int) { return juce::String (hertz, hertz < 1.0f ? 2 : 1) + " Hz"; })));
+
+        group->addChild (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIds::lfoDivision (lfoIndex), version }, lfoName + " Division",
+            lfoDivisionNames(), defaultLfoDivisionIndex));
+
+        group->addChild (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIds::lfoPhase (lfoIndex), version }, lfoName + " Phase",
+            juce::NormalisableRange<float> (0.0f, 360.0f, 1.0f), 0.0f,
+            juce::AudioParameterFloatAttributes().withStringFromValueFunction (
+                [] (float degrees, int)
+                { return juce::String (juce::roundToInt (degrees)) + juce::String::fromUTF8 ("\xc2\xb0"); })));
+
+        group->addChild (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIds::lfoPulseWidth (lfoIndex), version }, lfoName + " Pulse Width",
+            juce::NormalisableRange<float> (5.0f, 95.0f, 1.0f), 50.0f,
+            juce::AudioParameterFloatAttributes().withStringFromValueFunction (
+                [] (float percent, int) { return juce::String (juce::roundToInt (percent)) + "%"; })));
+
+        group->addChild (std::make_unique<juce::AudioParameterBool> (
+            juce::ParameterID { ParameterIds::lfoRestartOnKey (lfoIndex), version }, lfoName + " Restart On Key",
+            false));
+
+        layout.add (std::move (group));
+    }
+}
+
+void MidiForgeProcessor::addRouteParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+{
+    constexpr int version = ParameterIds::modulationParameterVersion;
+    juce::StringArray sourceNames;
+    for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
+        sourceNames.add ("LFO " + juce::String (lfoIndex + 1));
+    const juce::StringArray targetNames = fixedModulationTargetNames();
+
+    for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
+    {
+        const juce::String routeName = "Route " + juce::String (routeIndex + 1);
+        auto group = std::make_unique<juce::AudioProcessorParameterGroup> ("route" + juce::String (routeIndex + 1),
+                                                                           routeName, " | ");
+
+        group->addChild (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIds::routeSource (routeIndex), version }, routeName + " Source", sourceNames,
+            0));
+
+        // The host shows the target with the name of the module parameter, e.g. "Slot 2 · Gate".
+        auto targetAttributes =
+            juce::AudioParameterChoiceAttributes()
+                .withStringFromValueFunction ([this] (int targetIndex, int)
+                                              { return getModulationTargetName (targetIndex); })
+                .withValueFromStringFunction (
+                    [this, targetNames] (const juce::String& text)
+                    {
+                        for (int targetIndex = 0; targetIndex < numModulationTargets; ++targetIndex)
+                            if (text == targetNames[targetIndex] || text == getModulationTargetName (targetIndex))
+                                return targetIndex;
+                        return 0;
+                    });
+        group->addChild (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIds::routeTarget (routeIndex), version }, routeName + " Target", targetNames,
+            0, targetAttributes));
+
+        group->addChild (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIds::routeAmount (routeIndex), version }, routeName + " Amount",
+            juce::NormalisableRange<float> (-100.0f, 100.0f, 1.0f), 50.0f,
+            juce::AudioParameterFloatAttributes().withStringFromValueFunction (
+                [] (float percent, int)
+                {
+                    const int rounded = juce::roundToInt (percent);
+                    return (rounded > 0 ? "+" : "") + juce::String (rounded) + "%";
+                })));
+
+        layout.add (std::move (group));
+    }
 }
 
 //==============================================================================
@@ -102,12 +265,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout MidiForgeProcessor::createPa
 
 void MidiForgeProcessor::prepareToPlay (double sampleRate, int /*maximumBlockSize*/)
 {
-    moduleChain->prepare (sampleRate);
+    engine->prepare (sampleRate);
 }
 
 void MidiForgeProcessor::releaseResources()
 {
-    moduleChain->reset();
+    engine->reset();
 }
 
 bool MidiForgeProcessor::isBusesLayoutSupported (const BusesLayout& /*layouts*/) const
@@ -115,16 +278,28 @@ bool MidiForgeProcessor::isBusesLayoutSupported (const BusesLayout& /*layouts*/)
     return true; // no audio is processed, so any layout a host insists on is fine
 }
 
-void MidiForgeProcessor::readSlotSettings()
+void MidiForgeProcessor::readEngineSettings()
 {
     for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
     {
         const auto& values = slotParameterValues[(size_t) slotIndex];
-        auto& settings = slotSettings[(size_t) slotIndex];
+        auto& settings = engineSettings.slots[slotIndex];
         settings.moduleType = getModuleType (slotIndex);
         settings.isEnabled = values.isEnabled->load() >= 0.5f;
         for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
             settings.parameterValues[parameterIndex] = juce::jlimit (0.0f, 1.0f, values.values[parameterIndex]->load());
+    }
+
+    for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
+        engineSettings.lfos[lfoIndex] = getLfoSettings (lfoIndex);
+
+    for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
+    {
+        const auto& values = routeParameterValues[(size_t) routeIndex];
+        auto& route = engineSettings.routes[routeIndex];
+        route.lfoIndex = juce::jlimit (0, numLfos - 1, (int) std::lround (values.source->load()));
+        route.targetIndex = juce::jlimit (0, numModulationTargets - 1, (int) std::lround (values.target->load()));
+        route.amount = juce::jlimit (-1.0f, 1.0f, values.amountPercent->load() / 100.0f);
     }
 }
 
@@ -156,7 +331,7 @@ void MidiForgeProcessor::processBlock (juce::AudioBuffer<float>& audio, juce::Mi
     juce::ScopedNoDenormals noDenormals;
     audio.clear();
 
-    readSlotSettings();
+    readEngineSettings();
     const BlockContext context = readBlockContext (audio.getNumSamples());
 
     // Split the incoming MIDI: short messages go through the engine, long ones pass untouched.
@@ -182,7 +357,8 @@ void MidiForgeProcessor::processBlock (juce::AudioBuffer<float>& audio, juce::Mi
         }
     }
 
-    moduleChain->process (engineEvents, context, slotSettings.data());
+    engine->process (engineEvents, context, engineSettings);
+    publishReadoutsForEditor();
 
     midi.clear();
     for (const auto& event : engineEvents)
@@ -191,6 +367,76 @@ void MidiForgeProcessor::processBlock (juce::AudioBuffer<float>& audio, juce::Mi
         midi.addEvent (bytes, event.numBytes, event.samplePosition);
     }
     midi.addEvents (longMessagesPassedThrough, 0, -1, 0);
+}
+
+void MidiForgeProcessor::publishReadoutsForEditor()
+{
+    const SlotSettings* modulatedSlots = engine->getLastModulatedSlots();
+    for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
+        for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
+            modulatedValueReadouts[(size_t) (slotIndex * numParametersPerSlot + parameterIndex)].store (
+                modulatedSlots[slotIndex].parameterValues[parameterIndex], std::memory_order_relaxed);
+
+    for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
+    {
+        lfoValueReadouts[(size_t) lfoIndex].store (engine->getLastLfoValues()[lfoIndex], std::memory_order_relaxed);
+        lfoPhaseReadouts[(size_t) lfoIndex].store ((float) engine->getLastLfoPhases()[lfoIndex],
+                                                   std::memory_order_relaxed);
+    }
+}
+
+//==============================================================================
+// Modulation access
+
+LfoSettings MidiForgeProcessor::getLfoSettings (int lfoIndex) const noexcept
+{
+    const auto& values = lfoParameterValues[(size_t) lfoIndex];
+    LfoSettings settings;
+    settings.waveform =
+        (LfoWaveform) juce::jlimit (0, numLfoWaveforms - 1, (int) std::lround (values.waveform->load()));
+    settings.isTempoSynced = std::lround (values.syncMode->load()) == tempoSyncIndex;
+    settings.rateHz = juce::jlimit (0.01, 20.0, (double) values.rateHz->load());
+    settings.divisionIndex = juce::jlimit (0, numLfoDivisions - 1, (int) std::lround (values.division->load()));
+    settings.phaseDegrees = juce::jlimit (0.0, 360.0, (double) values.phaseDegrees->load());
+    settings.pulseWidth = juce::jlimit (0.05, 0.95, (double) values.pulseWidthPercent->load() / 100.0);
+    settings.restartsOnFirstKey = values.restartsOnKey->load() >= 0.5f;
+    return settings;
+}
+
+bool MidiForgeProcessor::isParameterModulated (int slotIndex, int parameterIndex) const noexcept
+{
+    const int targetIndex = modulationTargetIndex (slotIndex, parameterIndex);
+    for (const auto& values : routeParameterValues)
+        if ((int) std::lround (values.target->load()) == targetIndex &&
+            std::abs (values.amountPercent->load()) / 100.0f >= ModulationRoute::smallestEffectiveAmount)
+            return true;
+    return false;
+}
+
+float MidiForgeProcessor::getModulatedParameterValue (int slotIndex, int parameterIndex) const noexcept
+{
+    return modulatedValueReadouts[(size_t) (slotIndex * numParametersPerSlot + parameterIndex)].load (
+        std::memory_order_relaxed);
+}
+
+juce::String MidiForgeProcessor::getModulationTargetName (int targetIndex) const
+{
+    if (targetIndex <= 0 || targetIndex >= numModulationTargets)
+        return "None";
+
+    ModulationRoute route;
+    route.targetIndex = targetIndex;
+    const int slotIndex = route.targetSlotIndex();
+    const int parameterIndex = route.targetParameterIndex();
+    const juce::String slotName = "Slot " + juce::String (slotIndex + 1);
+
+    const auto& description = getModuleDescription (getModuleType (slotIndex));
+    const auto& parameter = description.parameters[parameterIndex];
+    if (parameter.isUsed())
+        return slotName + middleDot + parameter.name;
+
+    const juce::String letter = juce::String (ParameterIds::valueSuffixes[parameterIndex]).toUpperCase();
+    return slotName + middleDot + letter + " (unused)";
 }
 
 //==============================================================================
@@ -287,6 +533,7 @@ void MidiForgeProcessor::setCurrentProgram (int presetIndex)
 
     currentPresetIndex = presetIndex;
     const auto& preset = presets[(size_t) presetIndex];
+    applyPresetModulation (preset);
     for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
     {
         if (slotIndex >= (int) preset.slots.size())
@@ -304,6 +551,57 @@ void MidiForgeProcessor::setCurrentProgram (int presetIndex)
                                        plainValueToNormalised (description.parameters[parameterIndex],
                                                                presetSlot.plainValues[parameterIndex]));
         setParameterAsGesture (ParameterIds::slotEnabled (slotIndex), 1.0f);
+    }
+}
+
+void MidiForgeProcessor::resetModulationToDefaults()
+{
+    juce::StringArray ids;
+    for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
+        ids.addArray ({ ParameterIds::lfoWaveform (lfoIndex), ParameterIds::lfoSyncMode (lfoIndex),
+                        ParameterIds::lfoRate (lfoIndex), ParameterIds::lfoDivision (lfoIndex),
+                        ParameterIds::lfoPhase (lfoIndex), ParameterIds::lfoPulseWidth (lfoIndex),
+                        ParameterIds::lfoRestartOnKey (lfoIndex) });
+    for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
+        ids.addArray ({ ParameterIds::routeSource (routeIndex), ParameterIds::routeTarget (routeIndex),
+                        ParameterIds::routeAmount (routeIndex) });
+
+    for (const auto& id : ids)
+        if (auto* parameter = parameters.getParameter (id))
+            setParameterAsGesture (id, parameter->getDefaultValue());
+}
+
+void MidiForgeProcessor::setPlainParameterValue (const juce::String& parameterId, float plainValue)
+{
+    if (auto* parameter = parameters.getParameter (parameterId))
+        setParameterAsGesture (parameterId, parameter->convertTo0to1 (plainValue));
+}
+
+void MidiForgeProcessor::applyPresetModulation (const FactoryPreset& preset)
+{
+    resetModulationToDefaults();
+
+    for (const auto& presetLfo : preset.lfos)
+    {
+        const int lfoIndex = presetLfo.lfoIndex;
+        const auto& settings = presetLfo.settings;
+        setPlainParameterValue (ParameterIds::lfoWaveform (lfoIndex), (float) settings.waveform);
+        setPlainParameterValue (ParameterIds::lfoSyncMode (lfoIndex),
+                                settings.isTempoSynced ? (float) tempoSyncIndex : 0.0f);
+        setPlainParameterValue (ParameterIds::lfoRate (lfoIndex), (float) settings.rateHz);
+        setPlainParameterValue (ParameterIds::lfoDivision (lfoIndex), (float) settings.divisionIndex);
+        setPlainParameterValue (ParameterIds::lfoPhase (lfoIndex), (float) settings.phaseDegrees);
+        setPlainParameterValue (ParameterIds::lfoPulseWidth (lfoIndex), (float) settings.pulseWidth * 100.0f);
+        setPlainParameterValue (ParameterIds::lfoRestartOnKey (lfoIndex), settings.restartsOnFirstKey ? 1.0f : 0.0f);
+    }
+
+    for (int routeIndex = 0; routeIndex < (int) preset.routes.size() && routeIndex < numModulationRoutes; ++routeIndex)
+    {
+        const auto& presetRoute = preset.routes[(size_t) routeIndex];
+        setPlainParameterValue (ParameterIds::routeSource (routeIndex), (float) presetRoute.lfoIndex);
+        setPlainParameterValue (ParameterIds::routeTarget (routeIndex),
+                                (float) modulationTargetIndex (presetRoute.slotIndex, presetRoute.parameterIndex));
+        setPlainParameterValue (ParameterIds::routeAmount (routeIndex), presetRoute.amountPercent);
     }
 }
 

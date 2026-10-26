@@ -1,5 +1,5 @@
 # Static analysis for the engine and tests (the JUCE layer is covered by the compiler warnings).
-# Run: clang-tidy -p <build-dir> --warnings-as-errors='*' Source/Engine/*.cpp Source/Engine/Modules/*.cpp
+# Run: clang-tidy -p <build-dir> --warnings-as-errors='*' Source/Engine/*.cpp Source/Engine/Modules/*.cpp Source/Engine/Modulation/*.cpp
 #
 # readability-identifier-length enforces the project's "generous names" rule: no one- or two-letter
 # variables except the conventional loop/graphics names listed below.

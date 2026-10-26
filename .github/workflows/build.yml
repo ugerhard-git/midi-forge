@@ -44,7 +44,7 @@ jobs:
         run: ctest --test-dir build --output-on-failure
 
       - name: Lint (clang-tidy)
-        run: clang-tidy -p build --quiet --warnings-as-errors='*' Source/Engine/*.cpp Source/Engine/Modules/*.cpp Tests/Engine/*.cpp
+        run: clang-tidy -p build --quiet --warnings-as-errors='*' Source/Engine/*.cpp Source/Engine/Modules/*.cpp Source/Engine/Modulation/*.cpp Tests/Engine/*.cpp
 
       - name: Run engine tests with address and undefined-behaviour sanitizers
         run: |
@@ -53,7 +53,7 @@ jobs:
           ctest --test-dir build-sanitizers --output-on-failure
 
   plugin-tests:
-    name: Plug-in layer tests and editor screenshot
+    name: Plug-in layer tests and editor screenshots
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -83,12 +83,12 @@ jobs:
       - name: Run tests and render the editor
         run: |
           binary=$(find build -type f -name midi_forge_plugin_tests -perm -u+x | head -n 1)
-          xvfb-run -a "$binary" --snapshot editor.png
+          xvfb-run -a "$binary" --snapshot-dir screenshots
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: editor-screenshot
-          path: editor.png
+          name: editor-screenshots
+          path: screenshots/*.png
           if-no-files-found: error
           retention-days: 30
 

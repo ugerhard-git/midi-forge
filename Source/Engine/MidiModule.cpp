@@ -25,11 +25,16 @@ void setRandomSeedForNewModules (unsigned seed) noexcept
     seedForNextModule = seed;
 }
 
-unsigned MidiModule::createSeed() noexcept
+unsigned takeNextRandomSeed() noexcept
 {
-    // Linear congruential step, so every module created after one seed gets its own sequence.
+    // Linear congruential step, so every module or LFO created after one seed gets its own sequence.
     seedForNextModule = seedForNextModule * 1664525u + 1013904223u;
     return seedForNextModule;
+}
+
+unsigned MidiModule::createSeed() noexcept
+{
+    return takeNextRandomSeed();
 }
 
 //==============================================================================

@@ -24,6 +24,11 @@ public:
     void drawToggleButton (juce::Graphics& graphics, juce::ToggleButton& button, bool isHighlighted,
                            bool isDown) override;
 
+    /** Horizontal sliders: a thin track filled from the left, or from the centre for bipolar sliders. */
+    void drawLinearSlider (juce::Graphics& graphics, int x, int y, int width, int height, float sliderPosition,
+                           float minSliderPosition, float maxSliderPosition, juce::Slider::SliderStyle style,
+                           juce::Slider& slider) override;
+
     void drawButtonBackground (juce::Graphics& graphics, juce::Button& button, const juce::Colour& backgroundColour,
                                bool isHighlighted, bool isDown) override;
 };

@@ -86,6 +86,41 @@ void ForgeLookAndFeel::drawToggleButton (juce::Graphics& graphics, juce::ToggleB
     }
 }
 
+void ForgeLookAndFeel::drawLinearSlider (juce::Graphics& graphics, int x, int y, int width, int height,
+                                         float sliderPosition, float minSliderPosition, float maxSliderPosition,
+                                         juce::Slider::SliderStyle style, juce::Slider& slider)
+{
+    if (style != juce::Slider::LinearHorizontal)
+    {
+        LookAndFeel_V4::drawLinearSlider (graphics, x, y, width, height, sliderPosition, minSliderPosition,
+                                          maxSliderPosition, style, slider);
+        return;
+    }
+
+    const auto area = juce::Rectangle<int> (x, y, width, height).toFloat();
+    constexpr float trackThickness = 4.0f;
+    const auto track = area.withSizeKeepingCentre (area.getWidth(), trackThickness);
+    graphics.setColour (Theme::Colours::controlTrack);
+    graphics.fillRoundedRectangle (track, trackThickness / 2.0f);
+
+    const bool isBipolar = (bool) slider.getProperties().getWithDefault (Theme::bipolarSliderProperty, false);
+    const float fillStart = isBipolar ? track.getCentreX() : track.getX();
+    const auto fill =
+        juce::Rectangle<float>::leftTopRightBottom (juce::jmin (fillStart, sliderPosition), track.getY(),
+                                                    juce::jmax (fillStart, sliderPosition), track.getBottom());
+    graphics.setColour (slider.isEnabled() ? Theme::Colours::modulation : Theme::Colours::secondaryText);
+    graphics.fillRoundedRectangle (fill, trackThickness / 2.0f);
+
+    if (isBipolar)
+    {
+        graphics.setColour (Theme::Colours::secondaryText);
+        graphics.fillRect (juce::Rectangle<float> (1.0f, 10.0f).withCentre (track.getCentre()));
+    }
+
+    graphics.setColour (juce::Colours::white);
+    graphics.fillEllipse (juce::Rectangle<float> (11.0f, 11.0f).withCentre ({ sliderPosition, track.getCentreY() }));
+}
+
 void ForgeLookAndFeel::drawButtonBackground (juce::Graphics& graphics, juce::Button& button,
                                              const juce::Colour& backgroundColour, bool isHighlighted, bool isDown)
 {

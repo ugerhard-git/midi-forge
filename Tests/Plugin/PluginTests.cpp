@@ -2,8 +2,9 @@
  * @file PluginTests.cpp
  * @brief Tests of the JUCE plug-in layer: parameters, presets, state, slot editing and MIDI routing.
  *
- * Usage: midi_forge_plugin_tests [name filter] [--snapshot path.png]
- * With --snapshot the editor is rendered to a PNG file, which CI publishes for visual review.
+ * Usage: midi_forge_plugin_tests [name filter] [--snapshot-dir folder]
+ * With --snapshot-dir both editor pages are rendered to editor.png and modulation.png in that folder,
+ * which CI publishes for visual review and which are used in the manual.
  */
 #include "../TestFramework.h"
 
@@ -41,17 +42,23 @@ std::vector<juce::MidiMessage> toMessages (const juce::MidiBuffer& buffer)
 }
 } // namespace
 
-TEST_CASE ("plugin: exposes 6 host parameters per slot with stable IDs")
+TEST_CASE ("plugin: exposes slot, LFO and route parameters with stable IDs")
 {
     MidiForgeProcessor processor;
     int numOurParameters = 0;
     for (auto* parameter : processor.getParameters())
         if (dynamic_cast<juce::AudioProcessorParameterWithID*> (parameter) != nullptr)
             ++numOurParameters;
-    EXPECT (numOurParameters == numSlots * 6);
-    EXPECT (processor.parameters.getParameter ("s1_type") != nullptr);
-    EXPECT (processor.parameters.getParameter ("s8_d") != nullptr);
+    constexpr int parametersPerSlot = 6, parametersPerLfo = 7, parametersPerRoute = 3;
+    EXPECT (numOurParameters ==
+            numSlots * parametersPerSlot + numLfos * parametersPerLfo + numModulationRoutes * parametersPerRoute);
+
+    for (const char* id : { "s1_type", "s8_d", "l1_wave", "l4_restart", "r1_source", "r8_amount" })
+        EXPECT (processor.parameters.getParameter (id) != nullptr);
     EXPECT (processor.isMidiEffect() && processor.acceptsMidi() && processor.producesMidi());
+
+    // Slot parameters stay at the start, so hosts that address parameters by index keep working.
+    EXPECT (dynamic_cast<juce::AudioProcessorParameterWithID*> (processor.getParameters()[0])->paramID == "s1_type");
 }
 
 TEST_CASE ("plugin: loading a module sets its defaults and the host text follows the module")
@@ -211,34 +218,160 @@ TEST_CASE ("plugin: the editor opens, follows the processor and closes cleanly")
     }
 }
 
+//==============================================================================
+// LFOs and modulation
+
+TEST_CASE ("plugin: route targets are shown with the module's parameter names")
+{
+    MidiForgeProcessor processor;
+    processor.loadModule (1, (int) ModuleType::Arpeggiator);
+    EXPECT (processor.getModulationTargetName (0) == "None");
+    EXPECT (processor.getModulationTargetName (modulationTargetIndex (1, 3)) ==
+            juce::String::fromUTF8 ("Slot 2 \xc2\xb7 Gate"));
+    EXPECT (processor.getModulationTargetName (modulationTargetIndex (0, 0)).endsWith ("A (unused)"));
+
+    auto* target = processor.parameters.getParameter (ParameterIds::routeTarget (0));
+    target->setValueNotifyingHost (target->getValueForText ("Slot 2 D"));
+    EXPECT (target->getCurrentValueAsText() == juce::String::fromUTF8 ("Slot 2 \xc2\xb7 Gate"));
+    target->setValueNotifyingHost (target->getValueForText (juce::String::fromUTF8 ("Slot 2 \xc2\xb7 Octaves")));
+    EXPECT (target->getCurrentValueAsText() == juce::String::fromUTF8 ("Slot 2 \xc2\xb7 Octaves"));
+
+    auto* rate = processor.parameters.getParameter (ParameterIds::lfoRate (0));
+    rate->setValueNotifyingHost (rate->convertTo0to1 (0.25f));
+    EXPECT (rate->getCurrentValueAsText() == "0.25 Hz");
+}
+
+TEST_CASE ("plugin: presets set up their LFOs and routes and clear them again")
+{
+    MidiForgeProcessor processor;
+    const auto& presets = getFactoryPresets();
+    int breathingArpIndex = -1;
+    for (int index = 0; index < (int) presets.size(); ++index)
+        if (juce::String (presets[(size_t) index].name) == "Breathing Arp")
+            breathingArpIndex = index;
+    EXPECT (breathingArpIndex > 0);
+
+    processor.setCurrentProgram (breathingArpIndex);
+    EXPECT (processor.isParameterModulated (1, 3)); // arpeggiator gate
+    EXPECT (processor.isParameterModulated (0, 1)); // chord inversion
+    EXPECT (processor.getLfoSettings (0).waveform == LfoWaveform::Triangle);
+    EXPECT (processor.getLfoSettings (1).waveform == LfoWaveform::SampleAndHold);
+
+    processor.setCurrentProgram (0); // Init
+    EXPECT (! processor.isParameterModulated (1, 3) && ! processor.isParameterModulated (0, 1));
+    EXPECT (processor.getLfoSettings (0).waveform == LfoWaveform::Sine);
+}
+
+TEST_CASE ("plugin: an LFO route changes what the chain plays, the knob itself stays put")
+{
+    MidiForgeProcessor processor;
+    processor.prepareToPlay (testSampleRate, testBlockSize);
+    processor.loadModule (0, (int) ModuleType::Transpose);
+
+    auto setPlain = [&] (const juce::String& id, float plainValue)
+    {
+        auto* parameter = processor.parameters.getParameter (id);
+        parameter->setValueNotifyingHost (parameter->convertTo0to1 (plainValue));
+    };
+    setPlain (ParameterIds::lfoWaveform (0), (float) LfoWaveform::Square);
+    setPlain (ParameterIds::lfoSyncMode (0), 0.0f); // free
+    setPlain (ParameterIds::lfoRate (0), 0.01f);    // so slow it stays high during the test
+    setPlain (ParameterIds::lfoPhase (0), 1.0f);
+    setPlain (ParameterIds::routeTarget (0), (float) modulationTargetIndex (0, 0));
+    setPlain (ParameterIds::routeAmount (0), 25.0f); // +25 % of 48 semitone steps = +12
+
+    juce::MidiBuffer input;
+    input.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+    const auto messages = toMessages (processBlock (processor, input));
+    EXPECT (messages.size() == 1 && messages[0].getNoteNumber() == 72);
+
+    EXPECT (processor.isParameterModulated (0, 0));
+    EXPECT (std::abs (processor.getParameterValue (0, 0) - 0.5f) < 1.0e-6f);           // the knob: unchanged
+    EXPECT (std::abs (processor.getModulatedParameterValue (0, 0) - 0.75f) < 1.0e-3f); // what the chain used
+    EXPECT (processor.getLfoValue (0) > 0.99f);
+}
+
+TEST_CASE ("plugin: LFO and route settings survive a save and load round-trip")
+{
+    MidiForgeProcessor original;
+    auto* wave = original.parameters.getParameter (ParameterIds::lfoWaveform (2));
+    wave->setValueNotifyingHost (wave->convertTo0to1 ((float) LfoWaveform::SmoothRandom));
+    auto* amount = original.parameters.getParameter (ParameterIds::routeAmount (5));
+    amount->setValueNotifyingHost (amount->convertTo0to1 (-40.0f));
+    juce::MemoryBlock savedState;
+    original.getStateInformation (savedState);
+
+    MidiForgeProcessor restored;
+    restored.setStateInformation (savedState.getData(), (int) savedState.getSize());
+    EXPECT (restored.getLfoSettings (2).waveform == LfoWaveform::SmoothRandom);
+    EXPECT (restored.parameters.getParameter (ParameterIds::routeAmount (5))->getCurrentValueAsText() == "-40%");
+}
+
+namespace
+{
+/** Renders both editor pages to PNG files at twice the size, for the manual and for CI review. */
+void writeEditorSnapshots (MidiForgeProcessor& processor, const juce::File& directory)
+{
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditorAndMakeActive());
+    auto* forgeEditor = dynamic_cast<MidiForgeEditor*> (editor.get());
+    if (forgeEditor == nullptr)
+        return;
+
+    const std::pair<MidiForgeEditor::Page, const char*> pages[] = {
+        { MidiForgeEditor::Page::chain, "editor.png" }, { MidiForgeEditor::Page::modulation, "modulation.png" }
+    };
+    for (const auto& [page, fileName] : pages)
+    {
+        forgeEditor->showPage (page);
+        // Pick up the current state (knob texts, LFO positions, modulation rings), as the editor's timer would.
+        forgeEditor->refreshFromProcessor();
+
+        const auto image = editor->createComponentSnapshot (editor->getLocalBounds(), true, 2.0f);
+        const auto file = directory.getChildFile (fileName);
+        file.deleteFile();
+        juce::FileOutputStream stream (file);
+        juce::PNGImageFormat().writeImageToStream (image, stream);
+        std::printf ("Editor snapshot written to %s\n", file.getFullPathName().toRawUTF8());
+    }
+}
+
+/** Loads a preset with LFOs and runs the engine for a moment, so the snapshots show modulation. */
+void prepareProcessorForSnapshots (MidiForgeProcessor& processor)
+{
+    const auto& presets = getFactoryPresets();
+    for (int index = 0; index < (int) presets.size(); ++index)
+        if (juce::String (presets[(size_t) index].name) == "Breathing Arp")
+            processor.setCurrentProgram (index);
+
+    processor.prepareToPlay (testSampleRate, testBlockSize);
+    for (int block = 0; block < 150; ++block)
+        processBlock (processor, {});
+}
+} // namespace
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juceInitialiser;
 
     juce::String nameFilter;
-    juce::File snapshotFile;
+    juce::File snapshotDirectory;
     for (int argumentIndex = 1; argumentIndex < argc; ++argumentIndex)
     {
         const juce::String argument (argv[argumentIndex]);
-        if (argument == "--snapshot" && argumentIndex + 1 < argc)
-            snapshotFile = juce::File::getCurrentWorkingDirectory().getChildFile (argv[++argumentIndex]);
+        if (argument == "--snapshot-dir" && argumentIndex + 1 < argc)
+            snapshotDirectory = juce::File::getCurrentWorkingDirectory().getChildFile (argv[++argumentIndex]);
         else
             nameFilter = argument;
     }
 
     const int result = testing::runAllTests (nameFilter.toStdString());
 
-    if (snapshotFile != juce::File())
+    if (snapshotDirectory != juce::File())
     {
-        // Render the editor with a preset loaded so reviewers can see the UI without a DAW.
+        snapshotDirectory.createDirectory();
         MidiForgeProcessor processor;
-        processor.setCurrentProgram (4);
-        std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditorAndMakeActive());
-        const auto image = editor->createComponentSnapshot (editor->getLocalBounds(), true, 2.0f);
-        snapshotFile.deleteFile();
-        juce::FileOutputStream stream (snapshotFile);
-        juce::PNGImageFormat().writeImageToStream (image, stream);
-        std::printf ("Editor snapshot written to %s\n", snapshotFile.getFullPathName().toRawUTF8());
+        prepareProcessorForSnapshots (processor);
+        writeEditorSnapshots (processor, snapshotDirectory);
     }
     return result;
 }

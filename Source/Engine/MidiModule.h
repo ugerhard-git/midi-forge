@@ -135,6 +135,9 @@ private:
  */
 void setRandomSeedForNewModules (unsigned seed) noexcept;
 
+/** @return The next seed from the sequence started by setRandomSeedForNewModules(). Not thread safe. */
+unsigned takeNextRandomSeed() noexcept;
+
 //==============================================================================
 /**
  * @brief Remembers which output notes every incoming (channel, note) produced, so its note-off

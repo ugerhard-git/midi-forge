@@ -10,6 +10,7 @@ stack in **slots**.
 - [The window](#the-window)
 - [How the chain works](#how-the-chain-works)
 - [Modules](#modules)
+- [Modulation (LFOs)](#modulation-lfos)
 - [Presets](#presets)
 - [Automation](#automation)
 - [Panic and stuck notes](#panic-and-stuck-notes)
@@ -49,14 +50,17 @@ MIDI Forge does not process audio. Ableton Live cannot host MIDI-effect plug-ins
 
 ![MIDI Forge window](images/editor.png)
 
-- **Header:** the preset menu and the **Panic** button.
-- **Eight slot rows**, each with:
+- **Header:** the **Chain** and **Modulation** tabs, the preset menu and the **Panic** button.
+- The **Chain** tab shows the **eight slot rows**, each with:
   - the **slot number** and a coloured strip showing the module's category,
   - a **power switch** – a switched-off slot passes everything through unchanged,
   - the **module menu** – pick what this slot does; picking a module resets its knobs to their defaults,
   - a one-line **description** of the module,
   - up to **four knobs** – drag up/down or left/right; **double-click** to reset a knob,
   - **▲ / ▼** buttons that move the module one slot up or down.
+  - A knob that an LFO is moving gets a thin **yellow ring with a dot**: the knob shows your setting,
+    the dot shows the value the module is using right now.
+- The **Modulation** tab holds the LFOs and modulation routes, see [Modulation (LFOs)](#modulation-lfos).
 - **Footer:** the colour legend: blue = filters, green = transforms, orange = generators, purple = randomizers.
 
 Note names follow the convention **C3 = MIDI note 60** (as in Bitwig and Cubase; Reaper calls it C4 by default).
@@ -207,10 +211,59 @@ varied. The note-off is delayed by the same amount, so note lengths stay as play
 | Chance | 0 … 100 % | Share of notes that get shifted |
 | Mode | Any / Octaves / 5ths + Oct | Which intervals are used |
 
+## Modulation (LFOs)
+
+![Modulation tab](images/modulation.png)
+
+The four **LFOs** (low-frequency oscillators) move slot knobs automatically, without DAW automation:
+an LFO on *Note Echo · Pitch* makes the echoes rise and fall, an S&H on *Chord · Type* switches chords,
+an LFO on *Arpeggiator · Gate* lets the notes breathe. The LFOs make no sound themselves; they only move
+the settings of the MIDI modules. All of this lives on the **Modulation** tab.
+
+### LFOs
+
+| Control | Range | Meaning |
+|---------|-------|---------|
+| Wave | Sine, Triangle, Saw Up, Saw Down, Square, S&H, Smooth Random | The shape. *S&H* (sample and hold) jumps to a new random value every cycle; *Smooth Random* glides from one random value to the next |
+| Sync | Tempo / Free | *Tempo:* the cycle length is a note value. *Free:* the speed is set in Hz |
+| Rate (Tempo) | 8 Bars … 1/32 (incl. dotted D and triplets T) | Length of one cycle; turning right makes it faster |
+| Rate (Free) | 0.01 … 20 Hz | Cycles per second |
+| Phase | 0 … 360° | Shifts the wave, e.g. to run two LFOs against each other |
+| Width | 5 … 95 % | Square wave only: how much of the cycle the wave is high |
+| Restart on key | on / off | Restarts the cycle when you press a key while no other key is held, so every phrase starts the same way |
+
+The preview shows the wave's shape and a white dot where the LFO is now; the number in the top right is
+its current output (−100 … +100). For the random waves the preview shows an example of their character.
+
+**Timing:** a tempo-synced LFO follows the DAW's bar grid while the transport runs, so it is always at the
+same place at the same bar, even when you jump around in the song. When the transport is stopped it keeps
+running at the project tempo. A free LFO always runs on its own clock.
+
+### Modulation routes
+
+The eight routes connect an LFO to a slot knob:
+
+| Control | Meaning |
+|---------|---------|
+| Source | Which LFO (1 … 4) |
+| Target | Which knob, named after the module in that slot, e.g. *Slot 2 · Gate*. *None* switches the route off |
+| Amount | −100 … +100 %. How far the LFO moves the knob around its own setting. At 100 % the LFO can sweep the knob's whole range; negative amounts turn the LFO upside down. Double-click: 50 % |
+
+- The LFO moves the parameter **around the knob's position**: set the knob to the centre of the movement you want.
+  Values are limited to the parameter's range.
+- Several routes on the same knob add up. One LFO can drive several routes.
+- On knobs with fixed choices (scale, chord type, arpeggiator pattern …) the LFO steps through the choices.
+- The module type and the slot's on/off switch cannot be modulated (switching them releases notes).
+- If you change the module in a slot, routes to that slot keep pointing at the same knob position (A … D),
+  which now belongs to the new module. The target name shows what it controls.
+- Modulation never changes your knob settings, and it never writes into your DAW's automation.
+- LFO values are taken at the exact moment a note arrives; notes the plug-in generates itself
+  (arpeggio steps, echoes) use a value at most 32 samples old.
+
 ## Presets
 
 The preset menu in the header (also available as "programs" in your DAW) loads one of these chains.
-Loading a preset replaces all eight slots.
+Loading a preset replaces all eight slots, all LFOs and all routes.
 
 | Preset | Chain |
 |--------|-------|
@@ -220,12 +273,16 @@ Loading a preset replaces all eight slots.
 | Echo Cascade | Note Echo (1/8 dotted, 6 repeats, +7 st) → Scale Quantize (C minor pentatonic) |
 | Generative Dorian | Probability 60 % → Random Pitch (octaves) → Scale Quantize (D Dorian) → Note Echo (1/4 triplet) → Humanize |
 | Bass Split to Ch 2 | Note Range (up to B2) → Channel Remap (to channel 2) → Velocity Curve (fixed 100) |
+| Breathing Arp | Chord (Maj7) → Arpeggiator (1/16, Up/Down, 2 octaves); LFO 1 (triangle, 2 bars) moves the gate, LFO 2 (S&H, 1 bar) picks a new chord inversion every bar |
+| Wandering Echo | Note Echo (1/8 dotted, 5 repeats) → Scale Quantize (C minor pentatonic); LFO 1 (smooth random, 1 bar) lets the echo pitch step drift |
 
 Your own settings are saved with your DAW project. Use your DAW's preset function to save your own chains.
 
 ## Automation
 
 Each slot has six automatable parameters: **Slot n Module**, **Slot n On** and **Slot n A … D**.
+The LFOs (**LFO n Wave, Sync, Rate, Division, Phase, Pulse Width, Restart On Key**) and routes
+(**Route n Source, Target, Amount**) can be automated too.
 Your DAW displays A … D in the units of the module currently loaded in that slot, and you can type
 values in those units (e.g. `+7 st`, `1/16`, `C3`, `75%`).
 

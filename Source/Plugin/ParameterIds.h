@@ -2,7 +2,9 @@
  * @file ParameterIds.h
  * @brief The host parameter IDs. They are stored in projects and automation, so never rename them.
  *
- * Per slot n (1..8):  sn_type  (module), sn_on (on/off), sn_a .. sn_d (the four module parameters).
+ * Per slot n (1..8):   sn_type (module), sn_on (on/off), sn_a .. sn_d (the four module parameters)
+ * Per LFO n (1..4):    ln_wave, ln_sync, ln_rate, ln_div, ln_phase, ln_width, ln_restart
+ * Per route n (1..8):  rn_source, rn_target, rn_amount
  */
 #pragma once
 
@@ -16,25 +18,72 @@ namespace midiforge::ParameterIds
 /** Suffixes of the four module parameters, in order A..D. */
 inline constexpr const char* valueSuffixes[numParametersPerSlot] = { "a", "b", "c", "d" };
 
-inline juce::String forSlot (int slotIndex, const char* suffix)
+/** Builds an ID such as "s3_type" or "l2_rate": prefix, 1-based number, underscore, suffix. */
+inline juce::String makeId (const char* prefix, int zeroBasedIndex, const char* suffix)
 {
-    return "s" + juce::String (slotIndex + 1) + "_" + suffix;
+    return prefix + juce::String (zeroBasedIndex + 1) + "_" + suffix;
 }
 
+// Slots ------------------------------------------------------------------------------------------
 inline juce::String moduleType (int slotIndex)
 {
-    return forSlot (slotIndex, "type");
+    return makeId ("s", slotIndex, "type");
 }
 inline juce::String slotEnabled (int slotIndex)
 {
-    return forSlot (slotIndex, "on");
+    return makeId ("s", slotIndex, "on");
 }
 inline juce::String moduleParameter (int slotIndex, int parameterIndex)
 {
-    return forSlot (slotIndex, valueSuffixes[parameterIndex]);
+    return makeId ("s", slotIndex, valueSuffixes[parameterIndex]);
 }
 
-/** Version hint for the hosts' parameter caching (see juce::ParameterID). Bump when adding parameters. */
-inline constexpr int parameterVersion = 1;
+// LFOs -------------------------------------------------------------------------------------------
+inline juce::String lfoWaveform (int lfoIndex)
+{
+    return makeId ("l", lfoIndex, "wave");
+}
+inline juce::String lfoSyncMode (int lfoIndex)
+{
+    return makeId ("l", lfoIndex, "sync");
+}
+inline juce::String lfoRate (int lfoIndex)
+{
+    return makeId ("l", lfoIndex, "rate");
+}
+inline juce::String lfoDivision (int lfoIndex)
+{
+    return makeId ("l", lfoIndex, "div");
+}
+inline juce::String lfoPhase (int lfoIndex)
+{
+    return makeId ("l", lfoIndex, "phase");
+}
+inline juce::String lfoPulseWidth (int lfoIndex)
+{
+    return makeId ("l", lfoIndex, "width");
+}
+inline juce::String lfoRestartOnKey (int lfoIndex)
+{
+    return makeId ("l", lfoIndex, "restart");
+}
+
+// Modulation routes ------------------------------------------------------------------------------
+inline juce::String routeSource (int routeIndex)
+{
+    return makeId ("r", routeIndex, "source");
+}
+inline juce::String routeTarget (int routeIndex)
+{
+    return makeId ("r", routeIndex, "target");
+}
+inline juce::String routeAmount (int routeIndex)
+{
+    return makeId ("r", routeIndex, "amount");
+}
+
+/** Version hints for the hosts' parameter caching (see juce::ParameterID). */
+inline constexpr int slotParameterVersion = 1;       ///< Version 0.1.0: slot parameters
+inline constexpr int modulationParameterVersion = 2; ///< Version 0.2.0: LFOs and routes
 
 } // namespace midiforge::ParameterIds

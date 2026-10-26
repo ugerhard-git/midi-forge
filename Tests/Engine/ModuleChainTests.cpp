@@ -64,7 +64,7 @@ TEST_CASE ("chain: panic releases every note and sends All Notes Off on all chan
     rig.loadModule (1, ModuleType::NoteEcho, { 11, 8, 90, 0 });
     rig.processBlock ({ noteOnAt (0, 60) });
     rig.processSeconds (3.0);
-    rig.chain.requestPanic();
+    rig.engine.requestPanic();
     const auto output = rig.processBlock();
 
     int numAllNotesOff = 0;
@@ -81,7 +81,7 @@ TEST_CASE ("chain: panic releases every note and sends All Notes Off on all chan
 }
 
 /**
- * Random chains, random parameter changes, random playing and random slot switching.
+ * Random chains, random parameter changes, random LFO modulation, random playing and random slot switching.
  * Once every key is released and the longest tail has finished, no note may still sound.
  */
 TEST_CASE ("chain: randomized stress test leaves no stuck notes")
@@ -107,6 +107,30 @@ TEST_CASE ("chain: randomized stress test leaves no stuck notes")
             slot.isEnabled = randomInteger (0, 5) != 0;
             for (float& value : slot.parameterValues)
                 value = randomUnit();
+        }
+
+        // Random LFOs and routes in half of the runs, so modulation is part of the stress test.
+        const auto randomizeLfo = [&] (LfoSettings& lfo)
+        {
+            lfo.waveform = (LfoWaveform) randomInteger (0, numLfoWaveforms - 1);
+            lfo.isTempoSynced = randomInteger (0, 1) == 1;
+            lfo.rateHz = 0.05 + 20.0 * randomUnit();
+            lfo.divisionIndex = randomInteger (0, numLfoDivisions - 1);
+            lfo.phaseDegrees = 360.0 * randomUnit();
+            lfo.pulseWidth = 0.05 + 0.9 * randomUnit();
+            lfo.restartsOnFirstKey = randomInteger (0, 1) == 1;
+        };
+        const bool usesModulation = run % 2 == 1;
+        if (usesModulation)
+        {
+            for (auto& lfo : rig.lfos)
+                randomizeLfo (lfo);
+            for (auto& route : rig.settings.routes)
+            {
+                route.lfoIndex = randomInteger (0, numLfos - 1);
+                route.targetIndex = randomInteger (0, numModulationTargets - 1);
+                route.amount = 2.0f * randomUnit() - 1.0f;
+            }
         }
 
         std::vector<std::pair<int, int>> heldKeys; // (channel, note)
@@ -153,7 +177,12 @@ TEST_CASE ("chain: randomized stress test leaves no stuck notes")
             if (randomInteger (0, 80) == 0)
                 rig.context.isPlaying = rig.context.hasPpqPosition = ! rig.context.isPlaying;
             if (randomInteger (0, 300) == 0)
-                rig.chain.requestPanic();
+                rig.engine.requestPanic();
+            if (usesModulation && randomInteger (0, 40) == 0)
+                randomizeLfo (rig.lfos[randomInteger (0, numLfos - 1)]);
+            if (usesModulation && randomInteger (0, 40) == 0)
+                rig.settings.routes[randomInteger (0, numModulationRoutes - 1)].targetIndex =
+                    randomInteger (0, numModulationTargets - 1);
 
             rig.processBlock (input);
         }

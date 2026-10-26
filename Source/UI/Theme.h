@@ -22,6 +22,8 @@ inline const juce::Colour controlTrack { 0xff343944 };
 inline const juce::Colour popupBackground { 0xff22262e };
 inline const juce::Colour popupHighlight { 0xff343a46 };
 inline const juce::Colour panicButton { 0xffb8434e };
+inline const juce::Colour modulation { 0xfff2f2a0 }; ///< LFO rings, waveform previews and route sliders
+inline const juce::Colour selectedTab { 0xff2c313b };
 } // namespace Colours
 
 /** The accent colour of a module category, used for the slot strip, knobs and power switch. */
@@ -37,6 +39,9 @@ inline juce::Colour accentColourFor (ModuleCategory category)
     }
     return juce::Colour (0xff5a606e); // grey for empty slots
 }
+
+/** Slider property: when true, ForgeLookAndFeel fills a linear slider from its centre (for -100..+100 values). */
+inline const juce::Identifier bipolarSliderProperty { "bipolar" };
 
 /** The editor's font at a given size. */
 inline juce::Font font (float height, bool isBold = false)
