@@ -1,0 +1,157 @@
+/**
+ * @file ModuleDescriptions.h
+ * @brief Static description of every module type: its name, category and (up to four) parameters.
+ *
+ * Every slot of the chain exposes four generic host parameters, called A to D, each normalised to 0..1.
+ * The description of the module loaded in a slot decides what each of them means, which range it maps
+ * to and how its value is shown as text. Keeping this in one table means the engine, the host parameter
+ * display and the editor can never disagree about it.
+ */
+#pragma once
+
+#include <string>
+
+namespace midiforge
+{
+
+/**
+ * @brief All module types. The numeric values are stored in host projects and presets,
+ *        so existing entries must never be reordered or removed; new types go at the end (before Count).
+ */
+enum class ModuleType : int
+{
+    Empty = 0,
+    // Filters
+    NoteRange,
+    VelocityRange,
+    ChannelFilter,
+    EventBlocker,
+    // Transforms
+    Transpose,
+    ScaleQuantize,
+    VelocityCurve,
+    ChannelRemap,
+    // Generators
+    Arpeggiator,
+    Chord,
+    NoteEcho,
+    // Randomizers
+    Humanize,
+    Probability,
+    RandomPitch,
+
+    Count
+};
+
+constexpr int numModuleTypes = (int) ModuleType::Count;
+constexpr int numParametersPerSlot = 4;
+
+/** How a parameter's normalised value is turned into a plain value and displayed. */
+enum class ParameterKind
+{
+    Unused,     ///< The module does not use this parameter.
+    Integer,    ///< Whole number between minimum and maximum.
+    Continuous, ///< Real number between minimum and maximum.
+    Choice,     ///< Index into choiceLabels.
+    NoteNumber, ///< MIDI note number shown as a note name (C3 = 60).
+    Percent     ///< Whole number shown with a % sign.
+};
+
+/** The groups the module menu and the colour coding of the editor are organised by. */
+enum class ModuleCategory
+{
+    None,
+    Filter,
+    Transform,
+    Generator,
+    Randomizer
+};
+
+/** Describes one of the four parameters of a module. */
+struct ParameterDescription
+{
+    const char* name = "";
+    ParameterKind kind = ParameterKind::Unused;
+    float minimum = 0.0f;
+    float maximum = 1.0f;
+    float defaultValue = 0.0f;                 ///< Plain (not normalised) default value.
+    const char* const* choiceLabels = nullptr; ///< Labels for ParameterKind::Choice.
+    const char* unitSuffix = "";               ///< Appended to the displayed number, e.g. " st".
+    const char* labelForMinimum = nullptr;     ///< Optional text shown at the minimum, e.g. "Off".
+
+    bool isUsed() const noexcept { return kind != ParameterKind::Unused; }
+};
+
+/** Describes one module type. */
+struct ModuleDescription
+{
+    const char* name;
+    ModuleCategory category;
+    const char* summary; ///< One sentence shown in the editor and the manual.
+    ParameterDescription parameters[numParametersPerSlot];
+};
+
+/** @return The description of a module type. Out-of-range values return the Empty module. */
+const ModuleDescription& getModuleDescription (ModuleType type) noexcept;
+const ModuleDescription& getModuleDescription (int typeIndex) noexcept;
+
+/** @return The display name of a category, e.g. "Filters". */
+const char* getCategoryName (ModuleCategory category) noexcept;
+
+/** @return The number of distinct values of an Integer, Choice, NoteNumber or Percent parameter. */
+int getNumberOfSteps (const ParameterDescription& parameter) noexcept;
+
+/** Converts a normalised value (0..1) into the parameter's plain value (rounded for whole-number kinds). */
+float normalisedToPlainValue (const ParameterDescription& parameter, float normalisedValue) noexcept;
+/** Converts a normalised value (0..1) into the nearest whole plain value. */
+int normalisedToInteger (const ParameterDescription& parameter, float normalisedValue) noexcept;
+/** Converts a plain value into the normalised range 0..1. */
+float plainValueToNormalised (const ParameterDescription& parameter, float plainValue) noexcept;
+/** @return The normalised default value of a parameter (0 for unused parameters). */
+float getNormalisedDefault (const ParameterDescription& parameter) noexcept;
+
+/** Formats a normalised value for display, e.g. "+7 st", "1/16", "C3", "75%". */
+std::string formatParameterValue (const ParameterDescription& parameter, float normalisedValue);
+/**
+ * Parses text typed by the user in a host's parameter field.
+ * @return The matching normalised value, or valueIfUnparseable when the text makes no sense.
+ */
+float parseParameterText (const ParameterDescription& parameter, const std::string& text, float valueIfUnparseable);
+
+/** @return A note name such as "C#3", using the convention C3 = MIDI note 60. */
+std::string getNoteName (int noteNumber);
+
+//==============================================================================
+// Lookup tables shared by the descriptions and the modules
+
+/** A musical note length expressed in quarter notes ("beats"). */
+struct NoteDivision
+{
+    const char* name;
+    double lengthInBeats;
+};
+extern const NoteDivision echoDivisions[];
+extern const int numEchoDivisions;
+extern const NoteDivision arpeggiatorDivisions[];
+extern const int numArpeggiatorDivisions;
+
+/** A scale as a bit mask: bit n is set if the scale contains the note n semitones above the root. */
+struct Scale
+{
+    const char* name;
+    unsigned short semitoneMask;
+};
+extern const Scale scales[];
+extern const int numScales;
+
+/** A chord as semitone offsets from the played note. */
+struct ChordShape
+{
+    const char* name;
+    int numNotes;
+    int semitoneOffsets[5];
+};
+extern const ChordShape chordShapes[];
+extern const int numChordShapes;
+
+} // namespace midiforge

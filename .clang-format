@@ -1,0 +1,35 @@
+# Formatting rules for all C++ code. Check with: clang-format --dry-run --Werror <files>
+# CI uses clang-format 19.1.7 (pip install clang-format==19.1.7); other versions may format slightly differently.
+---
+Language: Cpp
+Standard: c++17
+BasedOnStyle: LLVM
+ColumnLimit: 120
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+AccessModifierOffset: -4
+BreakBeforeBraces: Allman
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: true
+AllowShortEnumsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: All
+AllowShortLoopsOnASingleLine: false
+AlignConsecutiveAssignments: None
+AlignTrailingComments: true
+BinPackArguments: true
+BinPackParameters: true
+BreakConstructorInitializers: BeforeColon
+Cpp11BracedListStyle: false
+FixNamespaceComments: true
+IncludeBlocks: Preserve
+IndentCaseLabels: true
+NamespaceIndentation: None
+PointerAlignment: Left
+SpaceAfterCStyleCast: true
+SpaceAfterLogicalNot: true
+SpaceBeforeParens: NonEmptyParentheses
+SpaceBeforeCpp11BracedList: true
+SortIncludes: CaseSensitive

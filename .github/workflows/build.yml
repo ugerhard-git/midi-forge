@@ -1,0 +1,182 @@
+# Builds, checks and (for v* tags) releases MIDI Forge. See docs/ARCHITECTURE.md#build-and-ci.
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege by default; only the release job may write.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  engine-checks:
+    name: Format, lint and engine tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install tools
+        run: |
+          pip install --user clang-format==19.1.7
+          sudo apt-get update -q
+          sudo apt-get install -y -q clang-tidy
+
+      - name: Check formatting
+        run: ~/.local/bin/clang-format --dry-run --Werror $(git ls-files '*.cpp' '*.h')
+
+      - name: Build engine tests (warnings are errors)
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DMIDI_FORGE_BUILD_PLUGIN=OFF -DMIDI_FORGE_WARNINGS_AS_ERRORS=ON
+          cmake --build build --parallel
+
+      - name: Run engine tests
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Lint (clang-tidy)
+        run: clang-tidy -p build --quiet --warnings-as-errors='*' Source/Engine/*.cpp Source/Engine/Modules/*.cpp Tests/Engine/*.cpp
+
+      - name: Run engine tests with address and undefined-behaviour sanitizers
+        run: |
+          cmake -S . -B build-sanitizers -DCMAKE_BUILD_TYPE=Debug -DMIDI_FORGE_BUILD_PLUGIN=OFF -DMIDI_FORGE_SANITIZERS=ON
+          cmake --build build-sanitizers --parallel
+          ctest --test-dir build-sanitizers --output-on-failure
+
+  plugin-tests:
+    name: Plug-in layer tests and editor screenshot
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install JUCE dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ninja-build xvfb libasound2-dev libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxext-dev libxi-dev libxcomposite-dev \
+            libxrender-dev libgl1-mesa-dev
+
+      - name: Cache dependency sources
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .deps
+          key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+
+      - name: Build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMIDI_FORGE_BUILD_PLUGIN_TESTS=ON \
+            -DMIDI_FORGE_BUILD_ENGINE_TESTS=OFF -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps"
+          cmake --build build --target midi_forge_plugin_tests
+
+      - name: Run tests and render the editor
+        run: |
+          binary=$(find build -type f -name midi_forge_plugin_tests -perm -u+x | head -n 1)
+          xvfb-run -a "$binary" --snapshot editor.png
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: editor-screenshot
+          path: editor.png
+          if-no-files-found: error
+          retention-days: 30
+
+  build:
+    name: Plug-in (${{ matrix.name }})
+    needs: engine-checks
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+          - name: macOS
+            os: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Cache dependency sources
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .deps
+          key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+
+      - name: Configure
+        shell: bash
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DMIDI_FORGE_BUILD_ENGINE_TESTS=OFF -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps"
+
+      - name: Build
+        shell: bash
+        run: cmake --build build --config Release --target MidiForge_VST3 MidiForge_CLAP --parallel 4
+
+      - name: Collect plug-ins
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp -R "build/MidiForge_artefacts/Release/VST3/MIDI Forge.vst3" dist/
+          cp -R "build/MidiForge_artefacts/Release/CLAP/MIDI Forge.clap" dist/
+          cp packaging/INSTALL.txt dist/
+
+      - name: Ad-hoc sign and verify (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          codesign --force --deep --sign - "dist/MIDI Forge.vst3"
+          codesign --force --deep --sign - "dist/MIDI Forge.clap"
+          codesign --verify --deep --verbose=2 "dist/MIDI Forge.vst3"
+          lipo -info "dist/MIDI Forge.vst3/Contents/MacOS/MIDI Forge"
+
+      - name: Zip (macOS)
+        if: runner.os == 'macOS'
+        run: cd dist && ditto -c -k --sequesterRsrc . "../MIDI-Forge-macOS.zip"
+
+      - name: Zip (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path dist/* -DestinationPath MIDI-Forge-Windows.zip
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: MIDI-Forge-${{ matrix.name }}
+          path: MIDI-Forge-${{ matrix.name }}.zip
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, plugin-tests]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: MIDI-Forge-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" artifacts/*.zip \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "MIDI Forge $TAG" \
+            --generate-notes

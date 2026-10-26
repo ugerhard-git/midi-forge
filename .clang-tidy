@@ -1,0 +1,31 @@
+# Static analysis for the engine and tests (the JUCE layer is covered by the compiler warnings).
+# Run: clang-tidy -p <build-dir> --warnings-as-errors='*' Source/Engine/*.cpp Source/Engine/Modules/*.cpp
+#
+# readability-identifier-length enforces the project's "generous names" rule: no one- or two-letter
+# variables except the conventional loop/graphics names listed below.
+---
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-narrowing-conversions,
+  -bugprone-implicit-widening-of-multiplication-result,
+  performance-*,
+  -performance-enum-size,
+  readability-identifier-length,
+  readability-misleading-indentation,
+  readability-redundant-*,
+  readability-else-after-return,
+  misc-unused-parameters,
+  misc-redundant-expression,
+  modernize-use-override,
+  modernize-use-nullptr
+CheckOptions:
+  readability-identifier-length.MinimumVariableNameLength: 3
+  readability-identifier-length.MinimumParameterNameLength: 3
+  readability-identifier-length.MinimumLoopCounterNameLength: 3
+  readability-identifier-length.IgnoredVariableNames: '^(x|y|g)$'
+  readability-identifier-length.IgnoredParameterNames: '^(x|y|g)$'
+  readability-identifier-length.IgnoredLoopCounterNames: '^$'
+HeaderFilterRegex: 'Source/Engine/.*'
+WarningsAsErrors: ''

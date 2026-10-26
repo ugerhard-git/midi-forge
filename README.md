@@ -1,0 +1,29 @@
+# MIDI Forge
+
+A modular MIDI filter and effect plug-in. Stack up to eight modules – filters, transforms, generators
+and randomizers – in front of any instrument.
+
+![MIDI Forge](docs/images/editor.png)
+
+- **Formats:** VST3 and CLAP · **Systems:** Windows, macOS (Apple Silicon + Intel)
+- **Made for:** Reaper and Bitwig Studio (any host that supports MIDI-effect plug-ins should work)
+- **14 modules:** Note Range, Velocity Range, Channel Filter, Event Blocker, Transpose, Scale Quantize,
+  Velocity Curve, Channel Remap, Arpeggiator, Chord, Note Echo, Humanize, Probability, Random Pitch
+- No stuck notes, even when you change modules while playing
+
+## Download
+
+- **Releases:** the *Releases* section of this repository.
+- **Latest build:** *Actions* tab → latest green *Build* run → *Artifacts* → `MIDI-Forge-Windows` or `MIDI-Forge-macOS`.
+
+Installation and usage: **[User manual](docs/MANUAL.md)**.
+
+## Development
+
+The plug-in is built entirely by GitHub Actions – nothing needs to be built locally.
+
+- [CONTRIBUTING.md](CONTRIBUTING.md) – ground rules, building, checks, releases
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) – how the code is organised
+- [SECURITY.md](SECURITY.md) – reporting vulnerabilities
+
+Built with [JUCE](https://juce.com) and [clap-juce-extensions](https://github.com/free-audio/clap-juce-extensions).
