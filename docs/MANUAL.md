@@ -50,7 +50,7 @@ MIDI Forge does not process audio. Ableton Live cannot host MIDI-effect plug-ins
 
 ![MIDI Forge window](images/editor.png)
 
-- **Header:** the **Chain** and **Modulation** tabs, the preset menu and the **Panic** button.
+- **Header:** the **Chain** and **Modulation** tabs, the [preset controls](#presets) and the **Panic** button.
 - The **Chain** tab shows the **eight slot rows**, each with:
   - the **slot number** and a coloured strip showing the module's category,
   - a **power switch** – a switched-off slot passes everything through unchanged,
@@ -262,8 +262,40 @@ The eight routes connect an LFO to a slot knob:
 
 ## Presets
 
-The preset menu in the header (also available as "programs" in your DAW) loads one of these chains.
-Loading a preset replaces all eight slots, all LFOs and all routes.
+A preset stores the complete setup: all eight slots, the four LFOs and the eight routes.
+
+### The preset controls
+
+| Control | What it does |
+|---------|--------------|
+| **◀ / ▶** | Previous / next preset: the factory presets first, then yours, wrapping around |
+| **Preset menu** | Pick any preset. The menu has two sections, *Factory* and *User* (your presets, alphabetical) |
+| **\*** after the name | Your settings differ from the saved preset |
+| **Save** | If one of *your* presets is loaded: saves the changes into it. Otherwise asks for a name, like *Save As* |
+| **⋯ → Save As…** | Saves the current settings under a new name (asks before replacing an existing preset) |
+| **⋯ → Rename…** | Renames the loaded user preset |
+| **⋯ → Delete** | Moves the loaded user preset to the trash (asks first). Your current settings stay as they are |
+| **⋯ → Import…** | Copies a `.mfpreset` file (e.g. one someone sent you) into your presets and loads it. Never overwrites: a second copy gets " (2)" |
+| **⋯ → Show preset folder** | Opens the folder in Explorer / Finder |
+
+Factory presets cannot be changed or deleted; save your changes as your own preset instead.
+
+### Where your presets are stored
+
+Every preset is a small file called `Name.mfpreset` in
+
+- **Windows:** `Documents\MIDI Forge\Presets\`
+- **macOS:** `~/Documents/MIDI Forge/Presets/`
+
+Because they are in one place, your presets are available in every project and every DAW. Back up or
+share them by copying the files. You can also copy files into the folder directly; while the plug-in window
+is open, MIDI Forge notices new or removed files within a couple of seconds. Names may not contain `/ \ : * ? " < > |` – such characters are
+replaced by spaces.
+
+Preset files are checked when they are loaded: files that are damaged, not from MIDI Forge, or larger
+than 256 KB are refused, and values outside a parameter's range are limited to the range.
+
+### Factory presets
 
 | Preset | Chain |
 |--------|-------|
@@ -276,7 +308,8 @@ Loading a preset replaces all eight slots, all LFOs and all routes.
 | Breathing Arp | Chord (Maj7) → Arpeggiator (1/16, Up/Down, 2 octaves); LFO 1 (triangle, 2 bars) moves the gate, LFO 2 (S&H, 1 bar) picks a new chord inversion every bar |
 | Wandering Echo | Note Echo (1/8 dotted, 5 repeats) → Scale Quantize (C minor pentatonic); LFO 1 (smooth random, 1 bar) lets the echo pitch step drift |
 
-Your own settings are saved with your DAW project. Use your DAW's preset function to save your own chains.
+Your current settings are also saved with your DAW project, together with the name of the loaded preset.
+Your DAW's own program list shows only the factory presets; your DAW's preset functions keep working too.
 
 ## Automation
 
@@ -299,6 +332,7 @@ every note MIDI Forge has sent and sends *All Notes Off* on all 16 channels.
 | Problem | Solution |
 |---------|----------|
 | macOS says the plug-in is damaged or from an unidentified developer | Run the `xattr` commands under [Installation](#installation) |
+| A preset file is refused | It is damaged, not a MIDI Forge preset, or larger than 256 KB |
 | DAW doesn't list MIDI Forge | Check the install folder, then rescan plug-ins |
 | No sound | MIDI Forge outputs MIDI only – it must sit *before* an instrument on the same track |
 | Arpeggiator or echo at the wrong speed | They follow the project tempo; check the tempo of the project |

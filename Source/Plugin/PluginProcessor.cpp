@@ -97,6 +97,8 @@ MidiForgeProcessor::MidiForgeProcessor()
     for (auto& readout : lfoPhaseReadouts)
         readout.store (0.0f);
 
+    rememberValuesOfCurrentPreset(); // the "Init" state everything starts with
+
     engineEvents.reserve (reservedEngineEvents);
     longMessagesPassedThrough.ensureSize (reservedLongMessageBytes);
 }
@@ -552,6 +554,10 @@ void MidiForgeProcessor::setCurrentProgram (int presetIndex)
                                                                presetSlot.plainValues[parameterIndex]));
         setParameterAsGesture (ParameterIds::slotEnabled (slotIndex), 1.0f);
     }
+
+    currentPresetKind = PresetKind::factory;
+    currentUserPresetName.clear();
+    rememberValuesOfCurrentPreset();
 }
 
 void MidiForgeProcessor::resetModulationToDefaults()
@@ -609,6 +615,8 @@ void MidiForgeProcessor::getStateInformation (juce::MemoryBlock& destination)
 {
     auto state = parameters.copyState();
     state.setProperty ("preset", currentPresetIndex, nullptr);
+    state.setProperty ("presetKind", (int) currentPresetKind, nullptr);
+    state.setProperty ("userPresetName", currentUserPresetName, nullptr);
     if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destination);
 }
@@ -622,7 +630,149 @@ void MidiForgeProcessor::setStateInformation (const void* data, int sizeInBytes)
 
     auto state = juce::ValueTree::fromXml (*xml);
     currentPresetIndex = juce::jlimit (0, getNumPrograms() - 1, (int) state.getProperty ("preset", 0));
+    currentPresetKind =
+        (PresetKind) juce::jlimit (0, 2, (int) state.getProperty ("presetKind", (int) PresetKind::factory));
+    currentUserPresetName = UserPresetLibrary::cleanName (state.getProperty ("userPresetName").toString());
+    if (currentPresetKind == PresetKind::user && currentUserPresetName.isEmpty())
+        currentPresetKind = PresetKind::none;
     parameters.replaceState (state);
+    rememberValuesOfCurrentPreset();
+}
+
+//==============================================================================
+// User presets
+
+void MidiForgeProcessor::rememberValuesOfCurrentPreset()
+{
+    valuesOfCurrentPreset.clear();
+    for (auto* parameter : getParameters())
+        valuesOfCurrentPreset.push_back (parameter->getValue());
+}
+
+bool MidiForgeProcessor::isCurrentPresetModified() const
+{
+    const auto& allParameters = getParameters();
+    if ((size_t) allParameters.size() != valuesOfCurrentPreset.size())
+        return true;
+    for (int index = 0; index < allParameters.size(); ++index)
+        if (std::abs (allParameters[index]->getValue() - valuesOfCurrentPreset[(size_t) index]) > 1.0e-4f)
+            return true;
+    return false;
+}
+
+juce::String MidiForgeProcessor::getCurrentPresetName() const
+{
+    switch (currentPresetKind)
+    {
+        case PresetKind::factory: return getFactoryPresets()[(size_t) currentPresetIndex].name;
+        case PresetKind::user: return currentUserPresetName;
+        case PresetKind::none: break;
+    }
+    return "Untitled";
+}
+
+void MidiForgeProcessor::applyStateValues (const juce::ValueTree& state)
+{
+    for (auto* parameter : getParameters())
+    {
+        auto* rangedParameter = dynamic_cast<juce::RangedAudioParameter*> (parameter);
+        if (rangedParameter == nullptr)
+            continue;
+
+        float normalisedValue = rangedParameter->getDefaultValue();
+        const auto savedParameter = state.getChildWithProperty ("id", rangedParameter->paramID);
+        if (savedParameter.isValid() && savedParameter.hasProperty ("value"))
+        {
+            const double plainValue = savedParameter.getProperty ("value");
+            if (std::isfinite (plainValue))
+            {
+                const auto& range = rangedParameter->getNormalisableRange();
+                normalisedValue =
+                    rangedParameter->convertTo0to1 (juce::jlimit (range.start, range.end, (float) plainValue));
+            }
+        }
+        setParameterAsGesture (rangedParameter->paramID, normalisedValue);
+    }
+}
+
+bool MidiForgeProcessor::loadUserPreset (const juce::String& name)
+{
+    const auto state = userPresets.load (name);
+    if (! state.has_value())
+        return false;
+
+    applyStateValues (*state);
+    currentPresetKind = PresetKind::user;
+    currentUserPresetName = UserPresetLibrary::cleanName (name);
+    rememberValuesOfCurrentPreset();
+    return true;
+}
+
+juce::String MidiForgeProcessor::saveUserPreset (const juce::String& name)
+{
+    const auto error = userPresets.save (name, parameters.copyState());
+    if (error.isNotEmpty())
+        return error;
+
+    currentPresetKind = PresetKind::user;
+    currentUserPresetName = UserPresetLibrary::cleanName (name);
+    rememberValuesOfCurrentPreset();
+    return {};
+}
+
+juce::String MidiForgeProcessor::renameCurrentUserPreset (const juce::String& newName)
+{
+    if (currentPresetKind != PresetKind::user)
+        return "Only your own presets can be renamed.";
+
+    const auto error = userPresets.rename (currentUserPresetName, newName);
+    if (error.isEmpty())
+        currentUserPresetName = UserPresetLibrary::cleanName (newName);
+    return error;
+}
+
+bool MidiForgeProcessor::deleteCurrentUserPreset()
+{
+    if (currentPresetKind != PresetKind::user || ! userPresets.remove (currentUserPresetName))
+        return false;
+
+    currentPresetKind = PresetKind::none;
+    currentUserPresetName.clear();
+    return true;
+}
+
+juce::String MidiForgeProcessor::importUserPreset (const juce::File& file)
+{
+    juce::String importedName;
+    const auto error = userPresets.importFile (file, importedName);
+    if (error.isNotEmpty())
+        return error;
+    loadUserPreset (importedName);
+    return {};
+}
+
+void MidiForgeProcessor::stepPreset (int direction)
+{
+    const int numFactoryPresets = getNumPrograms();
+    const auto userPresetNames = userPresets.getPresetNames();
+    const int numPresets = numFactoryPresets + userPresetNames.size();
+
+    int position = -1;
+    if (currentPresetKind == PresetKind::factory)
+        position = currentPresetIndex;
+    else if (currentPresetKind == PresetKind::user && userPresetNames.contains (currentUserPresetName))
+        position = numFactoryPresets + userPresetNames.indexOf (currentUserPresetName);
+
+    int next = 0;
+    if (position < 0)
+        next = direction >= 0 ? 0 : numPresets - 1;
+    else
+        next = ((position + (direction >= 0 ? 1 : -1)) % numPresets + numPresets) % numPresets;
+
+    if (next < numFactoryPresets)
+        setCurrentProgram (next);
+    else
+        loadUserPreset (userPresetNames[next - numFactoryPresets]);
 }
 
 juce::AudioProcessorEditor* MidiForgeProcessor::createEditor()

@@ -10,7 +10,7 @@
 
 cmake_minimum_required(VERSION 3.28)
 
-project(MidiForge VERSION 0.2.0 LANGUAGES C CXX)
+project(MidiForge VERSION 0.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -122,6 +122,8 @@ if(MIDI_FORGE_BUILD_PLUGIN)
         Source/Plugin/ParameterIds.h
         Source/Plugin/PluginProcessor.h
         Source/Plugin/PluginProcessor.cpp
+        Source/Plugin/UserPresetLibrary.h
+        Source/Plugin/UserPresetLibrary.cpp
         Source/UI/Theme.h
         Source/UI/ForgeLookAndFeel.h
         Source/UI/ForgeLookAndFeel.cpp
@@ -129,6 +131,8 @@ if(MIDI_FORGE_BUILD_PLUGIN)
         Source/UI/SlotRow.cpp
         Source/UI/ModulationPage.h
         Source/UI/ModulationPage.cpp
+        Source/UI/PresetBar.h
+        Source/UI/PresetBar.cpp
         Source/UI/PluginEditor.h
         Source/UI/PluginEditor.cpp)
 

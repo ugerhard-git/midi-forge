@@ -7,6 +7,7 @@
 
 #include "Engine/MidiForgeEngine.h"
 #include "FactoryPresets.h"
+#include "UserPresetLibrary.h"
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -66,6 +67,41 @@ public:
     void panic() noexcept { engine->requestPanic(); }
 
     //==============================================================================
+    // Presets (message thread). The host's "programs" are the factory presets; user presets are files
+    // managed by UserPresetLibrary.
+
+    /** What the preset menu shows as loaded. */
+    enum class PresetKind
+    {
+        none, ///< Settings that were never saved as a preset (or the preset was deleted)
+        factory,
+        user
+    };
+
+    PresetKind getCurrentPresetKind() const noexcept { return currentPresetKind; }
+    /** @return The name of the loaded preset, or "Untitled" if there is none. */
+    juce::String getCurrentPresetName() const;
+    /** @return True if any parameter differs from the values the current preset was loaded or saved with. */
+    bool isCurrentPresetModified() const;
+
+    UserPresetLibrary& getUserPresetLibrary() noexcept { return userPresets; }
+    /** Uses another folder for user presets (the tests use a temporary folder). */
+    void setUserPresetFolder (const juce::File& folder) { userPresets = UserPresetLibrary (folder); }
+
+    /** Loads a user preset. @return False if it is missing or not a valid preset file. */
+    bool loadUserPreset (const juce::String& name);
+    /** Saves the current settings as a user preset and makes it the current preset. @return Error text or "". */
+    juce::String saveUserPreset (const juce::String& name);
+    /** Renames the current user preset. @return Error text or "". */
+    juce::String renameCurrentUserPreset (const juce::String& newName);
+    /** Deletes the current user preset file; the settings stay as they are, now "Untitled". */
+    bool deleteCurrentUserPreset();
+    /** Copies a preset file into the library and loads it. @return Error text or "". */
+    juce::String importUserPreset (const juce::File& file);
+    /** Loads the next (+1) or previous (-1) preset: factory presets first, then user presets, wrapping around. */
+    void stepPreset (int direction);
+
+    //==============================================================================
     // Modulation access for the editor (message thread)
 
     /** @return True if at least one active route targets this slot parameter. */
@@ -97,6 +133,13 @@ private:
     void readEngineSettings();
     BlockContext readBlockContext (int numSamples);
     void publishReadoutsForEditor();
+    /**
+     * Sets every host parameter from a saved state (preset file or project). Values are clamped to each
+     * parameter's range; parameters missing from the state get their defaults. Unknown entries are ignored.
+     */
+    void applyStateValues (const juce::ValueTree& state);
+    /** Remembers the current parameter values, to detect later changes (the "*" in the preset menu). */
+    void rememberValuesOfCurrentPreset();
     /** Sets every LFO and route parameter back to its default. */
     void resetModulationToDefaults();
     /** Sets the LFOs and routes of a factory preset (everything else back to defaults). */
@@ -142,7 +185,11 @@ private:
     std::array<std::atomic<float>, numLfos> lfoPhaseReadouts {};
     MidiEventList engineEvents;
     juce::MidiBuffer longMessagesPassedThrough; ///< SysEx and other messages the engine does not handle.
-    int currentPresetIndex = 0;
+    int currentPresetIndex = 0;                 ///< Last factory preset, reported to the host as the current program
+    PresetKind currentPresetKind = PresetKind::factory;
+    juce::String currentUserPresetName;
+    std::vector<float> valuesOfCurrentPreset;
+    UserPresetLibrary userPresets;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiForgeProcessor)
 };

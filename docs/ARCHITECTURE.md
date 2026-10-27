@@ -41,7 +41,8 @@ from `clap-juce-extensions`.
 | `Source/Plugin/PluginProcessor.*` | `MidiForgeProcessor`: host parameters, presets, state, MidiBuffer ↔ engine |
 | `Source/Plugin/ParameterIds.h` | Host parameter IDs (stored in projects – never rename) |
 | `Source/Plugin/FactoryPresets.*` | The factory presets (JUCE-free, so the engine tests can check them too) |
-| `Source/UI/*` | Editor: `MidiForgeEditor` (tabs), `SlotRow` + `ParameterKnob` (Chain tab), `ModulationPage` with `LfoPanel`, `WaveformPreview`, `RouteRow`, `CompactKnob` (Modulation tab), `ForgeLookAndFeel`, `Theme` |
+| `Source/Plugin/UserPresetLibrary.*` | User preset files: folder, save/load/rename/delete/import, validation, name cleaning |
+| `Source/UI/*` | Editor: `MidiForgeEditor` (tabs), `SlotRow` + `ParameterKnob` (Chain tab), `ModulationPage` with `LfoPanel`, `WaveformPreview`, `RouteRow`, `CompactKnob` (Modulation tab), `PresetBar` (◀ menu ▶, Save, ⋯ menu with async dialogs), `ForgeLookAndFeel`, `Theme` |
 | `Tests/Engine/*` | Engine tests (no JUCE) |
 | `Tests/Plugin/*` | Tests of the JUCE layer; can also render both editor pages to PNGs |
 | `docs/` | This document, the user manual, images |
@@ -128,6 +129,27 @@ test in `Tests/Engine/ModuleChainTests.cpp` checks them across hundreds of rando
   notes; the stress test runs half of its random chains with random LFO routings.
 - The engine publishes the modulated slot values and LFO outputs/phases after each block; the processor
   copies them into atomics that the editor reads for the rings and previews.
+
+## Presets
+
+- **Factory presets** (`FactoryPresets.cpp`) are the host's "programs". Loading one sets every slot, LFO and
+  route parameter as a user gesture, so hosts can record it.
+- **User presets** are files managed by `UserPresetLibrary` in `Documents/MIDI Forge/Presets`. Format:
+  `<MidiForgePreset formatVersion="1">` containing the same `<MidiForge>` parameter tree that DAW projects
+  store. Saving writes to a temporary file first and then replaces the target, so a crash never leaves a
+  half-written preset.
+- **Validation:** files over 256 KB, unparsable XML, a wrong root tag or a missing `<MidiForge>` child are
+  refused. `MidiForgeProcessor::applyStateValues()` applies a state parameter by parameter: values are
+  clamped to the range, non-finite values and missing parameters fall back to defaults, unknown entries
+  are ignored. Names are cleaned (`UserPresetLibrary::cleanName()`): no path separators or other
+  characters Windows/macOS forbid, no control characters, no leading/trailing dots or spaces, no reserved
+  Windows device names, at most 64 characters – so a name can never point outside the preset folder.
+- The processor tracks the current preset (`PresetKind`: none, factory, user) and a snapshot of all
+  parameter values taken when it was loaded or saved; `isCurrentPresetModified()` compares against it
+  (the `*` in the menu). Projects store the kind and name, so reopening shows the right preset.
+- All preset handling runs on the message thread; the audio thread only ever sees parameter values.
+- Dialogs are asynchronous (`AlertWindow::enterModalState`, `FileChooser::launchAsync`) because plug-ins
+  must not block the host; their callbacks hold weak references to the `PresetBar`.
 
 ## Randomness
 

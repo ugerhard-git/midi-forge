@@ -7,6 +7,7 @@
 
 #include "ForgeLookAndFeel.h"
 #include "ModulationPage.h"
+#include "PresetBar.h"
 #include "SlotRow.h"
 
 namespace midiforge
@@ -45,7 +46,7 @@ private:
     MidiForgeProcessor& processor;
     ForgeLookAndFeel lookAndFeel;
     juce::TooltipWindow tooltipWindow { this, 600 };
-    juce::ComboBox presetMenu;
+    PresetBar presetBar;
     juce::TextButton panicButton { "Panic" };
     juce::TextButton chainTab { "Chain" }, modulationTab { "Modulation" };
     juce::Component chainPage; ///< Holds the slot rows

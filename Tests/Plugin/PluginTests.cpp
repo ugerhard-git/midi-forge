@@ -11,6 +11,7 @@
 #include "Plugin/FactoryPresets.h"
 #include "Plugin/ParameterIds.h"
 #include "Plugin/PluginProcessor.h"
+#include "Plugin/UserPresetLibrary.h"
 #include "UI/PluginEditor.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -216,6 +217,207 @@ TEST_CASE ("plugin: the editor opens, follows the processor and closes cleanly")
     {
         EXPECT (editor->getWidth() > 0 && editor->getHeight() > 0);
     }
+}
+
+//==============================================================================
+// User presets
+
+namespace
+{
+/** A fresh, empty folder for one test; deleted again when the test ends. */
+struct TemporaryPresetFolder
+{
+    TemporaryPresetFolder()
+        : folder (juce::File::getSpecialLocation (juce::File::tempDirectory)
+                      .getChildFile ("midi-forge-tests-" + juce::Uuid().toString()))
+    {
+    }
+    ~TemporaryPresetFolder() { folder.deleteRecursively(); }
+
+    juce::File folder;
+};
+
+juce::ValueTree stateOf (MidiForgeProcessor& processor)
+{
+    return processor.parameters.copyState();
+}
+} // namespace
+
+TEST_CASE ("user presets: names are cleaned to safe file names")
+{
+    EXPECT (UserPresetLibrary::cleanName ("My Preset") == "My Preset");
+    EXPECT (UserPresetLibrary::cleanName ("  Bass: low/high?  ") == "Bass low high");
+    EXPECT (UserPresetLibrary::cleanName ("..hidden..") == "hidden");
+    EXPECT (UserPresetLibrary::cleanName ("back\\slash") == "back slash");
+    EXPECT (UserPresetLibrary::cleanName ("tab\there") == "tab here"); // control characters become spaces
+    EXPECT (UserPresetLibrary::cleanName ("../../etc/passwd") == "etc passwd");
+    EXPECT (UserPresetLibrary::cleanName ("CON").isEmpty());
+    EXPECT (UserPresetLibrary::cleanName ("lpt1").isEmpty());
+    EXPECT (UserPresetLibrary::cleanName ("   ").isEmpty());
+    EXPECT (UserPresetLibrary::cleanName ("***").isEmpty());
+    EXPECT (UserPresetLibrary::cleanName (juce::String::repeatedString ("x", 200)).length() ==
+            UserPresetLibrary::maximumNameLength);
+    EXPECT (UserPresetLibrary::cleanName (juce::String::fromUTF8 ("Gro\xc3\x9f"
+                                                                  "e Akkorde")) ==
+            juce::String::fromUTF8 ("Gro\xc3\x9f"
+                                    "e Akkorde"));
+}
+
+TEST_CASE ("user presets: library saves, lists, loads, renames and deletes")
+{
+    TemporaryPresetFolder temporary;
+    const UserPresetLibrary library (temporary.folder.getChildFile ("Presets"));
+    MidiForgeProcessor processor;
+
+    EXPECT (library.getPresetNames().isEmpty()); // folder does not exist yet
+    EXPECT (library.save ("beta", stateOf (processor)).isEmpty());
+    EXPECT (library.save ("Alpha", stateOf (processor)).isEmpty());
+    EXPECT (library.save ("Gamma 10", stateOf (processor)).isEmpty());
+    EXPECT (library.save ("Gamma 9", stateOf (processor)).isEmpty());
+    EXPECT (library.getPresetNames() == juce::StringArray ({ "Alpha", "beta", "Gamma 9", "Gamma 10" }));
+    EXPECT (library.save ("   ", stateOf (processor)).isNotEmpty()); // no usable name
+
+    EXPECT (library.load ("Alpha").has_value());
+    EXPECT (! library.load ("Missing").has_value());
+
+    EXPECT (library.rename ("Alpha", "Omega").isEmpty());
+    EXPECT (library.contains ("Omega") && ! library.contains ("Alpha"));
+    EXPECT (library.rename ("Omega", "beta").isNotEmpty()); // name taken
+    EXPECT (library.rename ("Omega", "omega").isEmpty());   // only the case changes
+
+    EXPECT (library.remove ("beta"));
+    EXPECT (! library.contains ("beta"));
+    EXPECT (! library.remove ("beta"));
+}
+
+TEST_CASE ("user presets: damaged, foreign and oversized files are rejected")
+{
+    TemporaryPresetFolder temporary;
+    temporary.folder.createDirectory();
+    const UserPresetLibrary library (temporary.folder);
+
+    temporary.folder.getChildFile ("Garbage.mfpreset").replaceWithText ("this is not xml <<<");
+    temporary.folder.getChildFile ("Foreign.mfpreset").replaceWithText ("<SomethingElse><MidiForge/></SomethingElse>");
+    temporary.folder.getChildFile ("Empty.mfpreset").replaceWithText ("<MidiForgePreset formatVersion=\"1\"/>");
+    temporary.folder.getChildFile ("Huge.mfpreset")
+        .replaceWithText ("<MidiForgePreset><MidiForge>" + juce::String::repeatedString ("<PARAM/>", 60000) +
+                          "</MidiForge></MidiForgePreset>");
+
+    for (const char* name : { "Garbage", "Foreign", "Empty", "Huge" })
+        EXPECT (! library.load (name).has_value());
+
+    juce::String importedName;
+    EXPECT (library.importFile (temporary.folder.getChildFile ("Garbage.mfpreset"), importedName).isNotEmpty());
+}
+
+TEST_CASE ("user presets: import copies valid files without overwriting")
+{
+    TemporaryPresetFolder temporary;
+    const UserPresetLibrary source (temporary.folder.getChildFile ("Somewhere"));
+    const UserPresetLibrary library (temporary.folder.getChildFile ("Presets"));
+    MidiForgeProcessor processor;
+    EXPECT (source.save ("Shared Arp", stateOf (processor)).isEmpty());
+    const auto sharedFile = source.getFolder().getChildFile ("Shared Arp.mfpreset");
+
+    juce::String firstName, secondName;
+    EXPECT (library.importFile (sharedFile, firstName).isEmpty());
+    EXPECT (library.importFile (sharedFile, secondName).isEmpty());
+    EXPECT (firstName == "Shared Arp" && secondName == "Shared Arp (2)");
+    EXPECT (library.getPresetNames().size() == 2);
+}
+
+TEST_CASE ("user presets: save, modify, reload and the modified marker")
+{
+    TemporaryPresetFolder temporary;
+    MidiForgeProcessor processor;
+    processor.setUserPresetFolder (temporary.folder);
+    processor.setCurrentProgram (6); // a factory preset with LFOs
+    EXPECT (! processor.isCurrentPresetModified());
+
+    auto* semitones = processor.parameters.getParameter (ParameterIds::moduleParameter (0, 2));
+    semitones->setValueNotifyingHost (0.9f);
+    EXPECT (processor.isCurrentPresetModified());
+
+    EXPECT (processor.saveUserPreset ("My Arp").isEmpty());
+    EXPECT (processor.getCurrentPresetKind() == MidiForgeProcessor::PresetKind::user);
+    EXPECT (processor.getCurrentPresetName() == "My Arp");
+    EXPECT (! processor.isCurrentPresetModified());
+    const auto savedValues = stateOf (processor).createXml()->toString();
+
+    processor.setCurrentProgram (0); // Init
+    EXPECT (processor.loadUserPreset ("My Arp"));
+    EXPECT (stateOf (processor).createXml()->toString() == savedValues);
+    EXPECT (! processor.isCurrentPresetModified());
+    EXPECT (processor.getLfoSettings (1).waveform == LfoWaveform::SampleAndHold); // LFOs are part of it
+
+    EXPECT (! processor.loadUserPreset ("Does Not Exist"));
+    EXPECT (processor.getCurrentPresetName() == "My Arp");
+}
+
+TEST_CASE ("user presets: values from files are clamped, missing ones get defaults")
+{
+    TemporaryPresetFolder temporary;
+    temporary.folder.createDirectory();
+    temporary.folder.getChildFile ("Edited.mfpreset")
+        .replaceWithText ("<MidiForgePreset formatVersion=\"1\"><MidiForge>"
+                          "<PARAM id=\"s1_type\" value=\"999\"/>"
+                          "<PARAM id=\"r1_amount\" value=\"-5000\"/>"
+                          "<PARAM id=\"l1_rate\" value=\"nan\"/>"
+                          "<PARAM id=\"unknown_parameter\" value=\"1\"/>"
+                          "</MidiForge></MidiForgePreset>");
+
+    MidiForgeProcessor processor;
+    processor.setUserPresetFolder (temporary.folder);
+    processor.setCurrentProgram (1); // something that differs from the defaults
+    EXPECT (processor.loadUserPreset ("Edited"));
+    EXPECT (processor.getModuleType (0) == numModuleTypes - 1); // clamped to the last module
+    EXPECT (processor.parameters.getParameter (ParameterIds::routeAmount (0))->getCurrentValueAsText() == "-100%");
+    EXPECT (std::abs (processor.getLfoSettings (0).rateHz - 1.0) < 1.0e-3); // NaN -> default
+    EXPECT (processor.getModuleType (1) == 0);                              // missing -> default (Empty)
+}
+
+TEST_CASE ("user presets: stepping goes through factory and user presets and wraps")
+{
+    TemporaryPresetFolder temporary;
+    MidiForgeProcessor processor;
+    processor.setUserPresetFolder (temporary.folder);
+    EXPECT (processor.saveUserPreset ("Zeta").isEmpty());
+    EXPECT (processor.saveUserPreset ("Alpha").isEmpty());
+
+    processor.setCurrentProgram (processor.getNumPrograms() - 1); // last factory preset
+    processor.stepPreset (+1);
+    EXPECT (processor.getCurrentPresetName() == "Alpha");
+    processor.stepPreset (+1);
+    EXPECT (processor.getCurrentPresetName() == "Zeta");
+    processor.stepPreset (+1);
+    EXPECT (processor.getCurrentPresetKind() == MidiForgeProcessor::PresetKind::factory);
+    EXPECT (processor.getCurrentProgram() == 0); // wrapped around
+    processor.stepPreset (-1);
+    EXPECT (processor.getCurrentPresetName() == "Zeta");
+}
+
+TEST_CASE ("user presets: rename and delete the current preset; projects remember the name")
+{
+    TemporaryPresetFolder temporary;
+    MidiForgeProcessor processor;
+    processor.setUserPresetFolder (temporary.folder);
+    EXPECT (processor.saveUserPreset ("Draft").isEmpty());
+    EXPECT (processor.renameCurrentUserPreset ("Final").isEmpty());
+    EXPECT (processor.getCurrentPresetName() == "Final");
+
+    juce::MemoryBlock projectState;
+    processor.getStateInformation (projectState);
+    MidiForgeProcessor reopened;
+    reopened.setStateInformation (projectState.getData(), (int) projectState.getSize());
+    EXPECT (reopened.getCurrentPresetKind() == MidiForgeProcessor::PresetKind::user);
+    EXPECT (reopened.getCurrentPresetName() == "Final");
+    EXPECT (! reopened.isCurrentPresetModified());
+
+    EXPECT (processor.deleteCurrentUserPreset());
+    EXPECT (processor.getCurrentPresetKind() == MidiForgeProcessor::PresetKind::none);
+    EXPECT (processor.getCurrentPresetName() == "Untitled");
+    EXPECT (! processor.getUserPresetLibrary().contains ("Final"));
+    EXPECT (processor.renameCurrentUserPreset ("Again").isNotEmpty()); // nothing to rename now
 }
 
 //==============================================================================

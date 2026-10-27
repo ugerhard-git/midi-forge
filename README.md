@@ -10,6 +10,7 @@ and randomizers – in front of any instrument.
 - **14 modules:** Note Range, Velocity Range, Channel Filter, Event Blocker, Transpose, Scale Quantize,
   Velocity Curve, Channel Remap, Arpeggiator, Chord, Note Echo, Humanize, Probability, Random Pitch
 - **4 LFOs and 8 modulation routes** move any module setting: tempo-synced or free, 7 waveforms incl. random
+- **Your own presets**, saved as files you can back up and share, plus 8 factory presets
 - No stuck notes, even when you change modules while playing
 
 ## Download

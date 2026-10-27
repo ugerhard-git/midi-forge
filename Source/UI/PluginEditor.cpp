@@ -10,25 +10,12 @@ namespace midiforge
 {
 
 MidiForgeEditor::MidiForgeEditor (MidiForgeProcessor& processorToEdit)
-    : AudioProcessorEditor (processorToEdit), processor (processorToEdit), modulationPage (processorToEdit)
+    : AudioProcessorEditor (processorToEdit), processor (processorToEdit), presetBar (processorToEdit),
+      modulationPage (processorToEdit)
 {
     setLookAndFeel (&lookAndFeel);
 
-    // Preset menu: item ID = preset index + 1 (ID 0 means "nothing selected" in JUCE)
-    for (int presetIndex = 0; presetIndex < processor.getNumPrograms(); ++presetIndex)
-        presetMenu.addItem (processor.getProgramName (presetIndex), presetIndex + 1);
-    presetMenu.setSelectedId (processor.getCurrentProgram() + 1, juce::dontSendNotification);
-    presetMenu.setTooltip ("Factory presets. Loading one replaces all eight slots.");
-    presetMenu.onChange = [this]
-    {
-        const int presetIndex = presetMenu.getSelectedId() - 1;
-        if (presetIndex >= 0)
-        {
-            processor.setCurrentProgram (presetIndex);
-            processor.updateHostDisplay (juce::AudioProcessor::ChangeDetails().withProgramChanged (true));
-        }
-    };
-    addAndMakeVisible (presetMenu);
+    addAndMakeVisible (presetBar);
 
     panicButton.setTooltip ("Release all sounding notes and send All Notes Off on every channel");
     panicButton.setColour (juce::TextButton::buttonColourId, Theme::Colours::panicButton);
@@ -116,13 +103,13 @@ void MidiForgeEditor::resized()
     auto area = getLocalBounds();
 
     auto header = area.removeFromTop (headerHeight).reduced (outerMargin, 16);
-    header.removeFromLeft (180); // title
+    header.removeFromLeft (172); // title
     chainTab.setBounds (header.removeFromLeft (96));
     header.removeFromLeft (6);
     modulationTab.setBounds (header.removeFromLeft (110));
     panicButton.setBounds (header.removeFromRight (76));
     header.removeFromRight (10);
-    presetMenu.setBounds (header.removeFromRight (220));
+    presetBar.setBounds (header.removeFromRight (juce::jmin (360, header.getWidth())));
 
     area.removeFromBottom (footerHeight);
     area = area.reduced (outerMargin, 0);
@@ -160,9 +147,7 @@ void MidiForgeEditor::refreshFromProcessor()
     else
         modulationPage.refreshFromProcessor();
 
-    const int currentPresetId = processor.getCurrentProgram() + 1;
-    if (presetMenu.getSelectedId() != currentPresetId)
-        presetMenu.setSelectedId (currentPresetId, juce::dontSendNotification);
+    presetBar.refreshFromProcessor();
 }
 
 } // namespace midiforge
