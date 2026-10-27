@@ -585,33 +585,132 @@ void MidiForgeProcessor::loadModule (int slotIndex, int moduleType)
     shownPages[(size_t) slotIndex].store (0); // a new module starts on its first page
 }
 
+MidiForgeProcessor::SlotContents MidiForgeProcessor::copySlotContents (int slotIndex) const
+{
+    SlotContents contents;
+    contents.moduleTypeValue = parameters.getParameter (ParameterIds::moduleType (slotIndex))->getValue();
+    contents.enabledValue = parameters.getParameter (ParameterIds::slotEnabled (slotIndex))->getValue();
+    for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
+        contents.parameterValues[(size_t) parameterIndex] =
+            parameters.getParameter (ParameterIds::moduleParameter (slotIndex, parameterIndex))->getValue();
+    contents.shownPage = shownPages[(size_t) slotIndex].load();
+    return contents;
+}
+
+void MidiForgeProcessor::setSlotContents (int slotIndex, const SlotContents& contents)
+{
+    setParameterAsGesture (ParameterIds::moduleType (slotIndex), contents.moduleTypeValue);
+    setParameterAsGesture (ParameterIds::slotEnabled (slotIndex), contents.enabledValue);
+    for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
+        setParameterAsGesture (ParameterIds::moduleParameter (slotIndex, parameterIndex),
+                               contents.parameterValues[(size_t) parameterIndex]);
+    shownPages[(size_t) slotIndex].store (contents.shownPage);
+}
+
+int MidiForgeProcessor::getRouteTarget (int routeIndex) const noexcept
+{
+    return (int) std::lround (parameters.getRawParameterValue (ParameterIds::routeTarget (routeIndex))->load());
+}
+
+void MidiForgeProcessor::moveRouteTargets (const std::array<int, numSlots>& newSlotOfOldSlot)
+{
+    for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
+    {
+        ModulationRoute route;
+        route.targetIndex = getRouteTarget (routeIndex);
+        if (route.targetIndex <= 0 || route.targetIndex >= numModulationTargets)
+            continue;
+        const int newSlot = newSlotOfOldSlot[(size_t) route.targetSlotIndex()];
+        const int newTarget = newSlot < 0 ? 0 : modulationTargetIndex (newSlot, route.targetParameterIndex());
+        if (newTarget != route.targetIndex)
+            setPlainParameterValue (ParameterIds::routeTarget (routeIndex), (float) newTarget);
+    }
+}
+
 void MidiForgeProcessor::swapSlots (int firstSlotIndex, int secondSlotIndex)
 {
     const auto isValid = [] (int slotIndex) { return slotIndex >= 0 && slotIndex < numSlots; };
     if (firstSlotIndex == secondSlotIndex || ! isValid (firstSlotIndex) || ! isValid (secondSlotIndex))
         return;
 
-    juce::StringArray firstIds { ParameterIds::moduleType (firstSlotIndex),
-                                 ParameterIds::slotEnabled (firstSlotIndex) };
-    juce::StringArray secondIds { ParameterIds::moduleType (secondSlotIndex),
-                                  ParameterIds::slotEnabled (secondSlotIndex) };
-    for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
+    const auto firstContents = copySlotContents (firstSlotIndex);
+    setSlotContents (firstSlotIndex, copySlotContents (secondSlotIndex));
+    setSlotContents (secondSlotIndex, firstContents);
+
+    std::array<int, numSlots> newSlotOfOldSlot {};
+    for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
+        newSlotOfOldSlot[(size_t) slotIndex] = slotIndex;
+    std::swap (newSlotOfOldSlot[(size_t) firstSlotIndex], newSlotOfOldSlot[(size_t) secondSlotIndex]);
+    moveRouteTargets (newSlotOfOldSlot);
+}
+
+void MidiForgeProcessor::removeModule (int slotIndex)
+{
+    if (slotIndex < 0 || slotIndex >= numSlots || getModuleType (slotIndex) == 0)
+        return;
+
+    RemovedModule removed;
+    removed.slotIndex = slotIndex;
+    removed.contents = copySlotContents (slotIndex);
+    for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
     {
-        firstIds.add (ParameterIds::moduleParameter (firstSlotIndex, parameterIndex));
-        secondIds.add (ParameterIds::moduleParameter (secondSlotIndex, parameterIndex));
+        ModulationRoute route;
+        route.targetIndex = getRouteTarget (routeIndex);
+        const bool targetsRemovedSlot =
+            route.targetIndex > 0 && route.targetIndex < numModulationTargets && route.targetSlotIndex() == slotIndex;
+        removed.targetsOfRoutesToIt[(size_t) routeIndex] = targetsRemovedSlot ? route.targetIndex : 0;
     }
 
-    for (int index = 0; index < firstIds.size(); ++index)
-    {
-        const float firstValue = parameters.getParameter (firstIds[index])->getValue();
-        const float secondValue = parameters.getParameter (secondIds[index])->getValue();
-        setParameterAsGesture (firstIds[index], secondValue);
-        setParameterAsGesture (secondIds[index], firstValue);
-    }
+    // Close the gap: every module below moves up one slot; the last slot becomes empty.
+    for (int targetSlot = slotIndex; targetSlot < numSlots - 1; ++targetSlot)
+        setSlotContents (targetSlot, copySlotContents (targetSlot + 1));
+    clearSlot (numSlots - 1);
 
-    const int firstPage = shownPages[(size_t) firstSlotIndex].load();
-    shownPages[(size_t) firstSlotIndex].store (shownPages[(size_t) secondSlotIndex].load());
-    shownPages[(size_t) secondSlotIndex].store (firstPage);
+    std::array<int, numSlots> newSlotOfOldSlot {};
+    for (int oldSlot = 0; oldSlot < numSlots; ++oldSlot)
+        newSlotOfOldSlot[(size_t) oldSlot] = oldSlot < slotIndex ? oldSlot : (oldSlot == slotIndex ? -1 : oldSlot - 1);
+    moveRouteTargets (newSlotOfOldSlot);
+
+    lastRemovedModule = removed;
+    ++moduleRemovalCount;
+}
+
+bool MidiForgeProcessor::canUndoModuleRemoval() const noexcept
+{
+    return lastRemovedModule.has_value() && getModuleType (numSlots - 1) == 0;
+}
+
+void MidiForgeProcessor::undoModuleRemoval()
+{
+    if (! canUndoModuleRemoval())
+        return;
+    const auto removed = *lastRemovedModule;
+    lastRemovedModule.reset();
+
+    // Make room again: the modules from the removed slot on move down one slot (the last slot is empty).
+    for (int targetSlot = numSlots - 1; targetSlot > removed.slotIndex; --targetSlot)
+        setSlotContents (targetSlot, copySlotContents (targetSlot - 1));
+    setSlotContents (removed.slotIndex, removed.contents);
+
+    std::array<int, numSlots> newSlotOfOldSlot {};
+    for (int oldSlot = 0; oldSlot < numSlots; ++oldSlot)
+        newSlotOfOldSlot[(size_t) oldSlot] =
+            oldSlot < removed.slotIndex ? oldSlot : (oldSlot == numSlots - 1 ? -1 : oldSlot + 1);
+    moveRouteTargets (newSlotOfOldSlot);
+
+    for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
+        if (removed.targetsOfRoutesToIt[(size_t) routeIndex] > 0)
+            setPlainParameterValue (ParameterIds::routeTarget (routeIndex),
+                                    (float) removed.targetsOfRoutesToIt[(size_t) routeIndex]);
+}
+
+juce::String MidiForgeProcessor::getLastRemovedModuleName() const
+{
+    if (! lastRemovedModule)
+        return {};
+    const auto* typeParameter = parameters.getParameter (ParameterIds::moduleType (0));
+    const int type = (int) std::lround (typeParameter->convertFrom0to1 (lastRemovedModule->contents.moduleTypeValue));
+    return getModuleDescription (type).name;
 }
 
 int MidiForgeProcessor::getShownPage (int slotIndex) const noexcept

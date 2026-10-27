@@ -36,10 +36,18 @@ public:
     /** Brings the visible page and the preset menu up to date with the processor. Called by the timer. */
     void refreshFromProcessor();
 
+    /** @return True while the "Removed … · Undo" strip is shown in the footer. */
+    bool isUndoStripVisible() const noexcept { return undoButton.isVisible(); }
+    /** How long the undo strip stays after a module was removed. */
+    static constexpr juce::uint32 undoStripMilliseconds = 8000;
+
 private:
     /** Keeps rows and the preset menu in sync with the processor (automation, presets, undo). */
     void timerCallback() override;
     void paintFooter (juce::Graphics& graphics);
+    /** Shows the undo strip after a removal and hides it when it expires or can no longer undo. */
+    void updateUndoStrip();
+    void showUndoStrip (bool shouldBeShown);
 
     static constexpr int refreshRateHz = 30;
 
@@ -53,6 +61,11 @@ private:
     std::vector<std::unique_ptr<SlotRow>> slotRows;
     ModulationPage modulationPage;
     Page shownPage = Page::chain;
+
+    juce::Label undoMessage;
+    juce::TextButton undoButton { "Undo" };
+    int seenModuleRemovalCount = 0;
+    juce::uint32 undoStripShownSince = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiForgeEditor)
 };

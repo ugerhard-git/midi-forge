@@ -152,6 +152,16 @@ hold 0 for such a knob (its value while unused), which can be a bad setting (Cha
 States without the property are from 0.7.0 (they have `shownPages` / `s1_e`) or older. When adding a knob to
 an existing module: mark it with `addedInLayout (n)` and raise `currentKnobLayoutVersion` to n.
 
+## Moving and removing modules
+
+`MidiForgeProcessor::swapSlots()` and `removeModule()` copy whole slots (`SlotContents`: module type,
+on/off, the eight knob values, the shown page) as host parameter gestures, then `moveRouteTargets()` points
+every route at the slot its module moved to (routes to a removed module get target 0). `removeModule()`
+keeps the removed slot's contents and the old targets of its routes (`RemovedModule`), so
+`undoModuleRemoval()` can move the modules back down and restore them exactly. Undo is possible while the
+last slot is still empty. The editor notices a removal through `getModuleRemovalCount()` and shows the undo
+strip in the footer for 8 seconds. Removal history is not saved in projects.
+
 ## Module browser and help texts
 
 - Every `ModuleDescription` carries a one-line `summary` (shown under the module menu), `details` (a few

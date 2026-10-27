@@ -112,6 +112,12 @@ SlotRow::SlotRow (MidiForgeProcessor& processorToControl, int slotIndexToShow)
     moduleInfoButton.onClick = [this] { openModuleInfo(); };
     addChildComponent (moduleInfoButton);
 
+    removeModuleButton.setButtonText (juce::String::fromUTF8 ("\xc3\x97")); // ×
+    removeModuleButton.setTooltip ("Remove this module. The modules below move up; you can undo it.");
+    removeModuleButton.setColour (juce::TextButton::buttonColourId, Theme::Colours::controlTrack.darker (0.2f));
+    removeModuleButton.onClick = [this] { processor.removeModule (slotIndex); };
+    addChildComponent (removeModuleButton);
+
     moduleSummary.setFont (Theme::font (11.0f));
     moduleSummary.setColour (juce::Label::textColourId, Theme::Colours::secondaryText);
     moduleSummary.setMinimumHorizontalScale (0.8f);
@@ -224,6 +230,7 @@ void SlotRow::showModule (int moduleType, int page)
     moduleMenu.setSelectedId (moduleType + 1, juce::dontSendNotification);
     moduleMenu.setTooltip ("Click to pick a module (you can search by typing)");
     moduleInfoButton.setVisible (moduleType != 0);
+    removeModuleButton.setVisible (moduleType != 0);
     moduleSummary.setTooltip (description.details);
     // The category is already shown by the colour; the full text is in the ⓘ pop-up and the tooltip.
     moduleSummary.setText (moduleType == 0 ? juce::String ("Choose a module") : juce::String (description.summary),
@@ -377,10 +384,12 @@ void SlotRow::resized()
     moveDownButton.setBounds (moveButtons.reduced (0, 1));
     area.removeFromRight (8);
 
-    auto moduleArea = area.removeFromLeft (228);
+    auto moduleArea = area.removeFromLeft (248);
     auto topLine = moduleArea.removeFromTop (28);
     powerSwitch.setBounds (topLine.removeFromLeft (40));
     topLine.removeFromLeft (4);
+    removeModuleButton.setBounds (topLine.removeFromRight (24).reduced (0, 2));
+    topLine.removeFromRight (3);
     moduleInfoButton.setBounds (topLine.removeFromRight (24).reduced (0, 2));
     topLine.removeFromRight (4);
     moduleMenu.setBounds (topLine);

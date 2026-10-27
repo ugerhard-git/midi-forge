@@ -76,7 +76,7 @@ public:
  * moves a knob on the page it leads to.
  *
  * The module menu opens the ModuleBrowser; the ⓘ button next to it shows the module's full description
- * and what every knob does.
+ * and what every knob does, and the × button removes the module (the editor then offers Undo).
  */
 class SlotRow final : public juce::Component
 {
@@ -121,6 +121,7 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> powerSwitchAttachment;
     ModuleMenu moduleMenu;
     juce::TextButton moduleInfoButton;
+    juce::TextButton removeModuleButton; ///< × : removes the module, the modules below move up
     juce::Label moduleSummary;
     juce::SharedResourcePointer<SharedRecentModuleList> recentModules;
     ParameterKnob parameterKnobs[numParametersPerPage];

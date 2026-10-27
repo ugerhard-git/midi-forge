@@ -1088,6 +1088,148 @@ TEST_CASE ("pitch slide: the host shows its knobs, and its pitch bends reach the
     }
 }
 
+//==============================================================================
+// Removing modules
+
+namespace
+{
+/** Sets a route (plain values: target number, amount -100..100). */
+void setRoute (MidiForgeProcessor& processor, int routeIndex, int targetIndex, float amountPercent = 50.0f)
+{
+    const auto setPlain = [&processor] (const juce::String& id, float plainValue)
+    {
+        auto* parameter = processor.parameters.getParameter (id);
+        parameter->setValueNotifyingHost (parameter->convertTo0to1 (plainValue));
+    };
+    setPlain (ParameterIds::routeTarget (routeIndex), (float) targetIndex);
+    setPlain (ParameterIds::routeAmount (routeIndex), amountPercent);
+}
+
+int routeTargetOf (MidiForgeProcessor& processor, int routeIndex)
+{
+    return (int) std::lround (
+        processor.parameters.getRawParameterValue (ParameterIds::routeTarget (routeIndex))->load());
+}
+
+/** Slot 1 Chord, slot 2 Repeater (switched off, on page 2, Swing changed), slot 3 Transpose; routes on all three. */
+void setUpThreeModules (MidiForgeProcessor& processor)
+{
+    processor.loadModule (0, (int) ModuleType::Chord);
+    processor.loadModule (1, (int) ModuleType::Repeater);
+    processor.loadModule (2, (int) ModuleType::Transpose);
+    processor.parameters.getParameter (ParameterIds::slotEnabled (1))->setValueNotifyingHost (0.0f);
+    processor.parameters.getParameter (ParameterIds::moduleParameter (1, 2))->setValueNotifyingHost (0.8f);
+    processor.setShownPage (1, 1);
+    setRoute (processor, 0, modulationTargetIndex (0, 1)); // Chord B
+    setRoute (processor, 1, modulationTargetIndex (1, 5)); // Repeater F (page 2)
+    setRoute (processor, 2, modulationTargetIndex (2, 0)); // Transpose A
+    setRoute (processor, 3, modulationTargetIndex (2, 4)); // Transpose E (unused knob, but a valid target)
+}
+} // namespace
+
+TEST_CASE ("remove module: the modules below move up, the empty slot goes to the end, routes follow")
+{
+    MidiForgeProcessor processor;
+    setUpThreeModules (processor);
+    const float transposeValue = processor.getParameterValue (2, 0);
+
+    processor.removeModule (1);
+    EXPECT (processor.getModuleType (0) == (int) ModuleType::Chord);
+    EXPECT (processor.getModuleType (1) == (int) ModuleType::Transpose);
+    EXPECT (std::abs (processor.getParameterValue (1, 0) - transposeValue) < 1.0e-6f);
+    for (int slotIndex = 2; slotIndex < numSlots; ++slotIndex)
+    {
+        EXPECT (processor.getModuleType (slotIndex) == 0);
+        EXPECT (processor.isSlotEnabled (slotIndex));
+    }
+
+    EXPECT (routeTargetOf (processor, 0) == modulationTargetIndex (0, 1)); // above: unchanged
+    EXPECT (routeTargetOf (processor, 1) == 0);                            // the removed module: None
+    EXPECT (routeTargetOf (processor, 2) == modulationTargetIndex (1, 0)); // moved up with Transpose
+    EXPECT (routeTargetOf (processor, 3) == modulationTargetIndex (1, 4)); // page-2 numbers move too
+
+    EXPECT (processor.getLastRemovedModuleName() == "Repeater");
+    EXPECT (processor.getLastRemovedSlotNumber() == 2);
+    EXPECT (processor.canUndoModuleRemoval());
+
+    // Removing an empty slot does nothing.
+    const int removals = processor.getModuleRemovalCount();
+    processor.removeModule (5);
+    processor.removeModule (-1);
+    EXPECT (processor.getModuleRemovalCount() == removals);
+}
+
+TEST_CASE ("remove module: undo puts it back with knobs, switch, page and routes")
+{
+    MidiForgeProcessor processor;
+    setUpThreeModules (processor);
+    juce::MemoryBlock before;
+    processor.getStateInformation (before);
+
+    processor.removeModule (1);
+    processor.undoModuleRemoval();
+    EXPECT (! processor.canUndoModuleRemoval()); // only once
+
+    EXPECT (processor.getModuleType (1) == (int) ModuleType::Repeater);
+    EXPECT (! processor.isSlotEnabled (1));
+    EXPECT (std::abs (processor.getParameterValue (1, 2) - 0.8f) < 1.0e-6f);
+    EXPECT (processor.getShownPage (1) == 1);
+    EXPECT (processor.getModuleType (2) == (int) ModuleType::Transpose);
+    EXPECT (routeTargetOf (processor, 0) == modulationTargetIndex (0, 1));
+    EXPECT (routeTargetOf (processor, 1) == modulationTargetIndex (1, 5));
+    EXPECT (routeTargetOf (processor, 2) == modulationTargetIndex (2, 0));
+    EXPECT (routeTargetOf (processor, 3) == modulationTargetIndex (2, 4));
+
+    // Everything is exactly as before.
+    juce::MemoryBlock after;
+    processor.getStateInformation (after);
+    EXPECT (before == after);
+}
+
+TEST_CASE ("remove module: undo is no longer possible once the last slot is used")
+{
+    MidiForgeProcessor processor;
+    for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
+        processor.loadModule (slotIndex, (int) ModuleType::Transpose);
+    processor.removeModule (7); // the last slot itself
+    EXPECT (processor.getModuleType (7) == 0 && processor.canUndoModuleRemoval());
+    processor.loadModule (7, (int) ModuleType::Chord);
+    EXPECT (! processor.canUndoModuleRemoval());
+    processor.undoModuleRemoval(); // ignored
+    EXPECT (processor.getModuleType (7) == (int) ModuleType::Chord);
+}
+
+TEST_CASE ("remove module: moving modules up and down takes their routes along")
+{
+    MidiForgeProcessor processor;
+    setUpThreeModules (processor);
+    processor.swapSlots (1, 2);
+    EXPECT (routeTargetOf (processor, 1) == modulationTargetIndex (2, 5)); // Repeater F, now in slot 3
+    EXPECT (routeTargetOf (processor, 2) == modulationTargetIndex (1, 0)); // Transpose A, now in slot 2
+    EXPECT (routeTargetOf (processor, 0) == modulationTargetIndex (0, 1));
+}
+
+TEST_CASE ("remove module: the editor shows the undo strip, and Undo hides it")
+{
+    MidiForgeProcessor processor;
+    setUpThreeModules (processor);
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditorAndMakeActive());
+    auto* forgeEditor = dynamic_cast<MidiForgeEditor*> (editor.get());
+    EXPECT (forgeEditor != nullptr);
+    if (forgeEditor == nullptr)
+        return;
+
+    EXPECT (! forgeEditor->isUndoStripVisible());
+    processor.removeModule (0);
+    forgeEditor->refreshFromProcessor();
+    EXPECT (forgeEditor->isUndoStripVisible());
+
+    // Using the last slot ends the chance to undo, and the strip goes away.
+    processor.loadModule (7, (int) ModuleType::Chord);
+    forgeEditor->refreshFromProcessor();
+    EXPECT (! forgeEditor->isUndoStripVisible());
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juceInitialiser;

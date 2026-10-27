@@ -11,6 +11,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <optional>
+
 namespace midiforge
 {
 
@@ -59,8 +61,26 @@ public:
 
     /** Loads a module into a slot and resets its four parameters to that module's defaults. */
     void loadModule (int slotIndex, int moduleType);
-    /** Exchanges everything (module, on/off, parameters) between two slots. */
+    /**
+     * Exchanges everything (module, on/off, parameters, shown page) between two slots. Modulation routes
+     * follow their modules.
+     */
     void swapSlots (int firstSlotIndex, int secondSlotIndex);
+    /**
+     * Removes the module of a slot: the modules below move up one slot and the empty slot goes to the end of
+     * the chain. Routes follow their modules; routes to the removed module are set to None. The removal can
+     * be undone with undoModuleRemoval() while the last slot is still empty.
+     */
+    void removeModule (int slotIndex);
+    /** @return True if the last removal can still be undone (there is one, and the last slot is empty). */
+    bool canUndoModuleRemoval() const noexcept;
+    /** Puts the last removed module back where it was, with its settings and routes. */
+    void undoModuleRemoval();
+    /** @return A number that grows with every removal, so the editor notices new ones. */
+    int getModuleRemovalCount() const noexcept { return moduleRemovalCount; }
+    /** @return The name of the last removed module and the slot (1-based) it was in. */
+    juce::String getLastRemovedModuleName() const;
+    int getLastRemovedSlotNumber() const noexcept { return lastRemovedModule ? lastRemovedModule->slotIndex + 1 : 0; }
     /** Empties a slot and switches it on. */
     void clearSlot (int slotIndex);
     /** @return The knob page (0 = A-D, 1 = E-H) the editor shows for a slot; always a page the module has. */
@@ -136,6 +156,32 @@ public:
     juce::AudioProcessorValueTreeState parameters;
 
 private:
+    /** Everything that makes up one slot, as normalised host parameter values plus the shown page. */
+    struct SlotContents
+    {
+        float moduleTypeValue = 0.0f;
+        float enabledValue = 1.0f;
+        std::array<float, numParametersPerSlot> parameterValues {};
+        int shownPage = 0;
+    };
+    /** A removed module, kept for undo. */
+    struct RemovedModule
+    {
+        int slotIndex = 0;
+        SlotContents contents;
+        std::array<int, numModulationRoutes> targetsOfRoutesToIt {}; ///< Old target per route, or 0
+    };
+
+    SlotContents copySlotContents (int slotIndex) const;
+    void setSlotContents (int slotIndex, const SlotContents& contents);
+    /** @return A route's target number (0 = none). */
+    int getRouteTarget (int routeIndex) const noexcept;
+    /**
+     * Moves route targets along with moved modules.
+     * @param newSlotOfOldSlot  For every slot, where its module went (-1: removed, the route gets None).
+     */
+    void moveRouteTargets (const std::array<int, numSlots>& newSlotOfOldSlot);
+
     juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     /** Sets a host parameter as one complete user gesture, so hosts record it as automation. */
     void setParameterAsGesture (const juce::String& parameterId, float normalisedValue);
@@ -236,6 +282,8 @@ private:
     std::array<std::atomic<int>, numSlots> shownPages {};
     static constexpr const char* shownPagesProperty = "shownPages";
     static constexpr const char* knobLayoutProperty = "knobLayout";
+    std::optional<RemovedModule> lastRemovedModule;
+    int moduleRemovalCount = 0;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiForgeProcessor)
 };

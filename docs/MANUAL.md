@@ -44,6 +44,10 @@ MIDI Forge does not process audio. Ableton Live cannot host MIDI-effect plug-ins
   - the **module menu** – click it to open the [module browser](#picking-a-module-the-module-browser) and pick
     what this slot does; picking a module resets its knobs to their defaults,
   - the **i** button – shows what the loaded module does and what each of its knobs means (both pages),
+  - the **×** button – removes the module with one click. The modules below move up one slot and the empty
+    slot goes to the end of the chain. For a few seconds the footer shows *Removed … from slot n* with an
+    **Undo** button that puts the module back exactly as it was (knobs, power switch, page and its
+    modulation routes). Undo is no longer offered once you load a module into the last slot,
   - a one-line **description** of the module (hover over it for the full text),
   - **four knobs** – drag up/down or left/right; **double-click** to reset a knob; hover over a knob to see
     what it does. Knobs with fixed steps
@@ -52,7 +56,8 @@ MIDI Forge does not process audio. Ableton Live cannot host MIDI-effect plug-ins
   - **◀ ▶** page arrows, only for modules with more than four knobs (e.g. the Repeater): they switch between
     page 1 (knobs A–D) and page 2 (E–H). The page you look at is saved with your project and presets.
     A yellow dot on an arrow means an LFO or Random modulator moves a knob on the other page,
-  - **▲ / ▼** buttons that move the module one slot up or down. To insert a module between two others, move
+  - **▲ / ▼** buttons that move the module one slot up or down (its modulation routes move with it). To insert
+    a module between two others, move
     an empty slot there and pick the module in it.
   - A knob that an LFO or Random modulator is moving gets a thin **yellow ring with a dot**: the knob shows your setting,
     the dot shows the value the module is using right now.
@@ -366,6 +371,8 @@ The eight routes connect a source to a slot knob:
 - Values are limited to the parameter's range. Several routes on the same knob add up. One source can drive
   several routes.
 - On knobs with fixed choices (scale, chord type, arpeggiator pattern …) the source steps through the choices.
+- Routes follow their module: when a module moves (▲ / ▼, or because a module above it was removed), its
+  routes keep pointing at it. Routes to a removed module are set to *None* (Undo restores them).
 - The module type and the slot's on/off switch cannot be modulated (switching them releases notes).
 - If you change the module in a slot, routes to that slot keep pointing at the same knob position (A … H),
   which now belongs to the new module. The target name shows what it controls.

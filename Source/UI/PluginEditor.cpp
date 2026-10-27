@@ -44,6 +44,19 @@ MidiForgeEditor::MidiForgeEditor (MidiForgeProcessor& processorToEdit)
     }
     chainTab.setTooltip ("The eight slots that MIDI flows through");
     modulationTab.setTooltip ("LFOs and the routes that let them move slot parameters");
+    // The undo strip in the footer, shown for a few seconds after a module was removed.
+    undoMessage.setFont (Theme::font (12.0f));
+    undoMessage.setColour (juce::Label::textColourId, Theme::Colours::primaryText);
+    undoButton.setTooltip ("Put the removed module back where it was, with its settings and routes");
+    undoButton.onClick = [this]
+    {
+        processor.undoModuleRemoval();
+        showUndoStrip (false);
+    };
+    addChildComponent (undoMessage);
+    addChildComponent (undoButton);
+    seenModuleRemovalCount = processor.getModuleRemovalCount();
+
     chainTab.onClick = [this] { showPage (Page::chain); };
     modulationTab.onClick = [this] { showPage (Page::modulation); };
     showPage (Page::chain);
@@ -79,8 +92,9 @@ void MidiForgeEditor::paintFooter (juce::Graphics& graphics)
 
     graphics.setFont (Theme::font (11.5f));
     graphics.setColour (Theme::Colours::secondaryText);
-    graphics.drawText ("Events flow from slot 1 to slot 8. Double-click a knob to reset it.", footer,
-                       juce::Justification::centredLeft);
+    if (! isUndoStripVisible())
+        graphics.drawText ("Events flow from slot 1 to slot 8. Double-click a knob to reset it.", footer,
+                           juce::Justification::centredLeft);
     graphics.drawText ("v" JucePlugin_VersionString, footer, juce::Justification::centredRight);
 
     // Colour legend of the module categories
@@ -111,7 +125,10 @@ void MidiForgeEditor::resized()
     header.removeFromRight (10);
     presetBar.setBounds (header.removeFromRight (juce::jmin (360, header.getWidth())));
 
-    area.removeFromBottom (footerHeight);
+    auto footer = area.removeFromBottom (footerHeight).reduced (outerMargin, 4);
+    undoButton.setBounds (footer.removeFromLeft (60));
+    footer.removeFromLeft (8);
+    undoMessage.setBounds (footer.removeFromLeft (300));
     area = area.reduced (outerMargin, 0);
     chainPage.setBounds (area);
     modulationPage.setBounds (area.withTrimmedBottom (gapBetweenSlots));
@@ -148,6 +165,36 @@ void MidiForgeEditor::refreshFromProcessor()
         modulationPage.refreshFromProcessor();
 
     presetBar.refreshFromProcessor();
+    updateUndoStrip();
+}
+
+void MidiForgeEditor::updateUndoStrip()
+{
+    const int removalCount = processor.getModuleRemovalCount();
+    if (removalCount != seenModuleRemovalCount)
+    {
+        seenModuleRemovalCount = removalCount;
+        undoMessage.setText ("Removed " + processor.getLastRemovedModuleName() + " from slot " +
+                                 juce::String (processor.getLastRemovedSlotNumber()),
+                             juce::dontSendNotification);
+        undoStripShownSince = juce::Time::getMillisecondCounter();
+        showUndoStrip (true);
+    }
+    else if (isUndoStripVisible())
+    {
+        const bool hasExpired = juce::Time::getMillisecondCounter() - undoStripShownSince > undoStripMilliseconds;
+        if (hasExpired || ! processor.canUndoModuleRemoval())
+            showUndoStrip (false);
+    }
+}
+
+void MidiForgeEditor::showUndoStrip (bool shouldBeShown)
+{
+    if (undoButton.isVisible() == shouldBeShown)
+        return;
+    undoButton.setVisible (shouldBeShown);
+    undoMessage.setVisible (shouldBeShown);
+    repaint (getLocalBounds().removeFromBottom (Theme::Layout::footerHeight));
 }
 
 } // namespace midiforge
