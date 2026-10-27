@@ -1063,6 +1063,31 @@ TEST_CASE ("module info: the knobs of every module get their help text as toolti
     EXPECT (numberOfKnobsWithHelp == 1);
 }
 
+//==============================================================================
+// Pitch Slide
+
+TEST_CASE ("pitch slide: the host shows its knobs, and its pitch bends reach the plug-in's output")
+{
+    MidiForgeProcessor processor;
+    processor.loadModule (0, (int) ModuleType::PitchSlide);
+    EXPECT (hostTextOf (processor, 0, 0) == "-2 st");
+    EXPECT (hostTextOf (processor, 0, 1) == "Slide In");
+    EXPECT (hostTextOf (processor, 0, 2) == "1/16");
+    EXPECT (hostTextOf (processor, 0, 5) == "2 st");
+    EXPECT (hostTextOf (processor, 0, 6) == "Off");
+
+    processor.prepareToPlay (testSampleRate, testBlockSize);
+    juce::MidiBuffer input;
+    input.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 10);
+    const auto messages = toMessages (processBlock (processor, input));
+    EXPECT (messages.size() >= 2);
+    if (messages.size() >= 2)
+    {
+        EXPECT (messages[0].isPitchWheel() && messages[0].getPitchWheelValue() == 0); // two semitones down
+        EXPECT (messages[1].isNoteOn() && messages[1].getNoteNumber() == 60);
+    }
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juceInitialiser;

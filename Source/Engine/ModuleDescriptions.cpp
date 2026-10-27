@@ -45,6 +45,11 @@ const char* const repeaterDivisionLabels[] = { "1/4D", "1/4",  "1/8D",  "1/4T", 
 const char* const repeaterVelocityLabels[] = { "Last Note", "Aftertouch" };
 const char* const noteSplitOctaveLabels[] = { "This octave", "Every octave" };
 const char* const repeaterAccentLabels[] = { "Off", "Every 2nd", "Every 3rd", "Every 4th", "On Beat" };
+const char* const slideModeLabels[] = { "Slide In", "Slide Out" };
+const char* const slideDivisionLabels[] = { "1/64", "1/32T", "1/32", "1/16T", "1/32D", "1/16", "1/8T", "1/16D", "1/8",
+                                            "1/4T", "1/8D",  "1/4",  "1/2T",  "1/4D",  "1/2",  "1/2D", "1 Bar" };
+const char* const slideDelayLabels[] = { "Off", "1/64", "1/32T", "1/32", "1/16T", "1/32D", "1/16", "1/8T", "1/16D",
+                                         "1/8", "1/4T", "1/8D",  "1/4",  "1/2T",  "1/4D",  "1/2",  "1/2D", "1 Bar" };
 const char* const echoDivisionLabels[] = { "1/32", "1/16T", "1/16", "1/16D", "1/8T", "1/8",
                                            "1/8D", "1/4T",  "1/4",  "1/4D",  "1/2",  "1 Bar" };
 const char* const arpeggiatorDivisionLabels[] = { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
@@ -277,6 +282,29 @@ const ModuleDescription* createModuleTable()
           "Splits the chain: notes in the selected range continue to the slots below; all other notes skip the "
           "rest of the chain and go straight to the DAW. Everything that is not a note continues down the "
           "chain. Example: select the hi-hat and put a Repeater below to ratchet only the hi-hat." },
+
+        // Added in 0.10.0 --------------------------------------------------------------------------
+        { "Pitch Slide",
+          ModuleCategory::Randomizer,
+          "Slides notes in from, or out to, another pitch (pitch bend).",
+          { integerParameter ("Offset", -24, 24, -2, " st")
+                .withHelp ("Where the slide starts (Slide In) or ends (Slide Out), relative to the note."),
+            choiceParameter ("Mode", slideModeLabels, 0)
+                .withHelp ("Slide In: from Offset to the note. Slide Out: from the note to Offset."),
+            choiceParameter ("Length", slideDivisionLabels, 5)
+                .withHelp ("How long the slide takes, synced to the tempo."),
+            percentParameter ("Chance", 0, 100, 100).withHelp ("Probability that a note (or chord) slides."),
+            // Page 2
+            integerParameter ("Curve", -100, 100, 0)
+                .withHelp ("0: even slide. Negative: fast start, slow end. Positive: slow start, fast end."),
+            integerParameter ("Bend Range", 1, 48, 2, " st")
+                .withHelp ("Set this to your synth's pitch bend range, so the slide hits the right pitch."),
+            choiceParameter ("Delay", slideDelayLabels, 0)
+                .withHelp ("When the slide starts after the note begins (Off = right away).") },
+          "Slides the pitch with pitch bend messages. Slide In starts the note at Offset and glides to its own "
+          "pitch; Slide Out starts at the note's pitch and glides to Offset. Pitch bend moves the whole channel, "
+          "so a chord slides together (notes within 30 ms count as one chord). Set Bend Range to your synth's "
+          "pitch bend range. Your own pitch bend is added to the slide." },
     };
     return table;
 }
@@ -304,6 +332,14 @@ const NoteDivision repeaterDivisions[] = {
     { "1/16T", 1.0 / 6.0 }, { "1/32", 0.125 },  { "1/32T", 1.0 / 12.0 }, { "1/64", 0.0625 },
 };
 const int numRepeaterDivisions = (int) std::size (repeaterDivisions);
+
+const NoteDivision slideDivisions[] = {
+    { "1/64", 0.0625 }, { "1/32T", 1.0 / 12.0 }, { "1/32", 0.125 },     { "1/16T", 1.0 / 6.0 }, { "1/32D", 0.1875 },
+    { "1/16", 0.25 },   { "1/8T", 1.0 / 3.0 },   { "1/16D", 0.375 },    { "1/8", 0.5 },         { "1/4T", 2.0 / 3.0 },
+    { "1/8D", 0.75 },   { "1/4", 1.0 },          { "1/2T", 4.0 / 3.0 }, { "1/4D", 1.5 },        { "1/2", 2.0 },
+    { "1/2D", 3.0 },    { "1 Bar", 4.0 },
+};
+const int numSlideDivisions = (int) std::size (slideDivisions);
 
 const Scale scales[] = {
     { "Major", makeSemitoneMask ({ 0, 2, 4, 5, 7, 9, 11 }) },
@@ -334,6 +370,8 @@ const int numChordShapes = (int) std::size (chordShapes);
 static_assert (std::size (echoDivisionLabels) == std::size (echoDivisions), "echo labels and table differ");
 static_assert (std::size (arpeggiatorDivisionLabels) == std::size (arpeggiatorDivisions), "arp labels differ");
 static_assert (std::size (repeaterDivisionLabels) == std::size (repeaterDivisions), "repeater labels differ");
+static_assert (std::size (slideDivisionLabels) == std::size (slideDivisions), "slide labels differ");
+static_assert (std::size (slideDelayLabels) == std::size (slideDivisions) + 1, "slide delay labels differ");
 static_assert (std::size (scaleLabels) == std::size (scales), "scale labels and table differ");
 static_assert (std::size (chordLabels) == std::size (chordShapes), "chord labels and table differ");
 

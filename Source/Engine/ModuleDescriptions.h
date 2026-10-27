@@ -44,6 +44,8 @@ enum class ModuleType : int
     Repeater, ///< Generator
     // Added in 0.5.0
     NoteSplit, ///< Filter
+    // Added in 0.10.0
+    PitchSlide, ///< Randomizer
 
     Count
 };
@@ -200,6 +202,9 @@ extern const NoteDivision arpeggiatorDivisions[];
 extern const int numArpeggiatorDivisions;
 extern const NoteDivision repeaterDivisions[];
 extern const int numRepeaterDivisions;
+/** Slide lengths of the Pitch Slide, short to long. Its Delay knob uses "Off" followed by the same lengths. */
+extern const NoteDivision slideDivisions[];
+extern const int numSlideDivisions;
 
 /** A scale as a bit mask: bit n is set if the scale contains the note n semitones above the root. */
 struct Scale

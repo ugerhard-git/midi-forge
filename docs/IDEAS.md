@@ -12,22 +12,7 @@ When a feature is implemented, remove it here and describe it in [MANUAL.md](MAN
 
 ## Planned
 
-### Pitch Slide module (Randomizer)
-
-Agreed with the owner, waiting for the go. Slides the pitch of incoming notes with pitch bend messages.
-
-- **Knobs:** A *Offset* (−24 … +24 semitones, fixed), B *Mode* (Slide In / Slide Out), C *Length*
-  (tempo-synced, 1/64 … 1 bar incl. triplets and dotted), D *Chance* (0 … 100 %, does a note slide at all),
-  page 2: E *Curve* (−100 … +100, 0 = linear; negative = fast start, positive = slow start),
-  F *Bend Range* (1 … 48 semitones, default 2, must match the synth's pitch bend range),
-  G *Delay* (Off, then 1/64 … 1 bar incl. triplets and dotted, like Length; tempo-synced).
-- **Slide In:** the note starts at Offset and glides to its own pitch. **Slide Out:** the note starts at its own
-  pitch and glides to Offset. *Delay* sets when the slide starts after the note-on (Off = right away); in
-  Slide In mode the note waits at Offset for that time, then glides.
-- Pitch bend acts on the whole channel, so a chord bends together; notes within 30 ms count as one chord and
-  get one slide. No MPE for now.
-- The player's own pitch bend is added to the slide. About one bend message per millisecond; the bend returns
-  to centre when the notes end. Offsets beyond the Bend Range are limited to it.
+(nothing at the moment)
 
 ## Ideas
 
@@ -42,3 +27,9 @@ Switched off in 0.9.0 because only the Windows VST3 is needed for now. CMake sti
 on macOS, and `-DMIDI_FORGE_BUILD_CLAP=ON` brings CLAP back. To return: add the macOS job to the CI matrix
 again (ad-hoc `codesign`, `ditto` zip), add the CLAP target and file to the build and collect steps, and put
 the install folders and the macOS quarantine note back into the manual and packaging/INSTALL.txt.
+
+### Pitch Slide: Fall Off on release and MPE
+
+Two follow-ups discussed while planning the Pitch Slide (0.10.0): a *Fall Off* mode that starts the slide when
+the key is released (keeping the note sounding for the slide length), and an MPE mode that gives every note
+its own channel so notes of a chord can slide individually.

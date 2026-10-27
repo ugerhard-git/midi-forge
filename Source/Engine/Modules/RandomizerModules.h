@@ -1,6 +1,6 @@
 /**
  * @file RandomizerModules.h
- * @brief Factory for the randomizer modules (Humanize, Probability, Random Pitch).
+ * @brief Factory for the randomizer modules (Humanize, Probability, Random Pitch, Pitch Slide).
  */
 #pragma once
 

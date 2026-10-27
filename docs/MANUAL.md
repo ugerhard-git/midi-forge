@@ -271,6 +271,33 @@ varied. The note-off is delayed by the same amount, so note lengths stay as play
 | Chance | 0 … 100 % | Share of notes that get shifted |
 | Mode | Any / Octaves / 5ths + Oct | Which intervals are used |
 
+**Pitch Slide** – slides notes in from another pitch, or out to another pitch, using **pitch bend**. The notes
+themselves play unchanged and on time.
+
+- *Slide In:* the note starts at *Offset* and glides to its own pitch (a "scoop").
+- *Slide Out:* the note starts at its own pitch and glides to *Offset* (a "fall" or "rise").
+- Pitch bend moves the whole MIDI channel, so **a chord slides together**: notes starting within 30 ms
+  count as one chord and get one slide (and one *Chance* decision). A note you add later starts a new slide,
+  and the notes you are holding bend along. When the last note ends, the pitch returns to normal.
+- **Set *Bend Range* to your synth's pitch bend range** (often 2 semitones; many synths let you raise it to
+  12 or 24). Only then does a slide of, say, 7 semitones land exactly on the fifth. Slides larger than the
+  bend range stop at its end.
+- Your own pitch bend wheel still works: it is added to the slide.
+
+The Pitch Slide has seven knobs on two pages (A–D, E–G):
+
+| Knob | Range | Meaning |
+|------|-------|---------|
+| Offset | −24 … +24 st | Where the slide starts (Slide In) or ends (Slide Out), relative to the note (default −2) |
+| Mode | Slide In / Slide Out | See above |
+| Length | 1/64 … 1 Bar (incl. triplets T and dotted D) | How long the slide takes, synced to the tempo (default 1/16) |
+| Chance | 0 … 100 % | Probability that a note (or chord) slides (default 100 %) |
+| Curve *(page 2)* | −100 … +100 | 0: even slide. Negative: fast start, slow end. Positive: slow start, fast end |
+| Bend Range *(page 2)* | 1 … 48 st | Your synth's pitch bend range (default 2) |
+| Delay *(page 2)* | Off, 1/64 … 1 Bar | When the slide starts after the note begins. With Slide In the note waits at Offset until then |
+
+Tip: Slide Out with a Delay of 1/8 and a negative Offset makes notes fall off after being held for a moment.
+
 ## Modulation (LFOs and Random)
 
 ![Modulation tab](images/modulation.png)
@@ -413,7 +440,8 @@ Automating **Slot n Module** works, but keep in mind that A … H keep their val
 ## Panic and stuck notes
 
 If a note ever hangs (for example because the instrument missed a message), press **Panic**. It releases
-every note MIDI Forge has sent and sends *All Notes Off* on all 16 channels.
+every note MIDI Forge has sent, sends *All Notes Off* on all 16 channels and resets the pitch bend
+(useful if a [Pitch Slide](#randomizers-purple) left a synth out of tune).
 
 ## Troubleshooting
 

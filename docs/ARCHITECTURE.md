@@ -123,12 +123,21 @@ test in `Tests/Engine/ModuleChainTests.cpp` checks them across hundreds of rando
    release what they made from them) and marks the notes held at the slot's input as *orphaned*. Their
    note-offs, arriving later, are swallowed. Panic does the same for every slot.
 
+The same idea keeps the synth in tune: `ModuleChain` tracks the last pitch bend per channel at every slot's
+input and output (`PitchBendTracker`). When a slot restarts and its output bend differs from its input
+bend (a Pitch Slide in the middle of a slide), it sends the input's bend. Panic sends a centred pitch bend
+on all channels. The stress test also checks that no channel is left bent.
+
 ## Module families
 
 - **`NoteMappingModule`** – decides everything at note-on time. Subclasses implement `createNoteOns()`
   and optionally `transformOtherEvent()`. Used by filters, transforms, Chord, Probability, Random Pitch.
 - **`SchedulingModule`** – sends events in the future using a queue of absolute sample times
   (`BlockContext::blockStartSample`). Used by Arpeggiator, Repeater, Note Echo and Humanize.
+- **Pitch Slide** derives from `MidiModule` directly: notes pass through on time, and the module adds pitch
+  bend messages per channel (about one per millisecond while a slide moves, only when the value changes).
+  It remembers the player's bend and adds the slide to it; when a channel's last held key ends, it sends the
+  player's bend again. Notes within 30 ms of a slide's first note share its slide (one Chance roll).
 
 New module types are appended to `ModuleType` (their numbers are stored in projects); the module browser
 groups modules by category, so a new Generator still appears under *Generators*.

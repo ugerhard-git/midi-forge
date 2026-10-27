@@ -84,7 +84,7 @@ TEST_CASE ("chain: panic releases every note and sends All Notes Off on all chan
  * Random chains, random parameter changes, random LFO modulation, random playing and random slot switching.
  * Once every key is released and the longest tail has finished, no note may still sound.
  */
-TEST_CASE ("chain: randomized stress test leaves no stuck notes")
+TEST_CASE ("chain: randomized stress test leaves no stuck notes and no pitch bend behind")
 {
     std::mt19937 random (1234);
     const auto randomInteger = [&] (int lowest, int highest)
@@ -140,6 +140,17 @@ TEST_CASE ("chain: randomized stress test leaves no stuck notes")
             }
         }
 
+        // Modules that block or move pitch bends may legitimately keep a slide's bend from being undone downstream.
+        bool chainMayHoldBackBends = false;
+        const auto noteModulesThatMoveOrBlockBends = [&]
+        {
+            for (const auto& slot : rig.slots)
+                chainMayHoldBackBends = chainMayHoldBackBends || slot.moduleType == (int) ModuleType::EventBlocker ||
+                                        slot.moduleType == (int) ModuleType::ChannelFilter ||
+                                        slot.moduleType == (int) ModuleType::ChannelRemap;
+        };
+        noteModulesThatMoveOrBlockBends();
+
         std::vector<std::pair<int, int>> heldKeys; // (channel, note)
         for (int block = 0; block < numBlocksPlayed; ++block)
         {
@@ -191,6 +202,7 @@ TEST_CASE ("chain: randomized stress test leaves no stuck notes")
                 rig.settings.routes[randomInteger (0, numModulationRoutes - 1)].targetIndex =
                     randomInteger (0, numModulationTargets - 1);
 
+            noteModulesThatMoveOrBlockBends();
             rig.processBlock (input);
         }
 
@@ -209,5 +221,21 @@ TEST_CASE ("chain: randomized stress test leaves no stuck notes")
             std::printf ("\n");
         }
         EXPECT (stuck.empty());
+
+        // Pitch Slides return every channel to the player's bend (here: none, so the centre).
+        if (! chainMayHoldBackBends)
+        {
+            int lastBend[numMidiChannels];
+            std::fill (std::begin (lastBend), std::end (lastBend), (int) MidiEvent::pitchBendCentre);
+            for (const auto& event : rig.everyOutputEvent)
+                if (event.isPitchBend())
+                    lastBend[event.channel()] = event.pitchBendValue();
+            for (int channel = 0; channel < numMidiChannels; ++channel)
+            {
+                if (lastBend[channel] != MidiEvent::pitchBendCentre)
+                    std::printf ("    run %d left channel %d bent to %d\n", run, channel + 1, lastBend[channel]);
+                EXPECT (lastBend[channel] == MidiEvent::pitchBendCentre);
+            }
+        }
     }
 }

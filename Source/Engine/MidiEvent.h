@@ -77,6 +77,13 @@ struct MidiEvent
     bool isChannelPressure() const noexcept { return messageType() == MidiStatus::channelPressure; }
     bool isPitchBend() const noexcept { return messageType() == MidiStatus::pitchBend; }
 
+    /** The centre (no bend) of the 14-bit pitch bend range 0..16383. */
+    static constexpr int pitchBendCentre = 8192;
+    static constexpr int maximumPitchBend = 16383;
+
+    /** @return The 14-bit value (0..16383, centre 8192) of a pitch bend message. */
+    int pitchBendValue() const noexcept { return (data1 & 0x7F) | ((data2 & 0x7F) << 7); }
+
     /** Moves a channel message to another zero based channel. */
     void setChannel (int newChannel) noexcept { status = (uint8_t) ((status & 0xF0) | (newChannel & 0x0F)); }
 
@@ -92,6 +99,14 @@ struct MidiEvent
     {
         return { samplePosition, (uint8_t) (MidiStatus::noteOff | (channel & 0x0F)), (uint8_t) (noteNumber & 0x7F),
                  (uint8_t) std::clamp (releaseVelocity, 0, 127), 3 };
+    }
+
+    /** Creates a pitch bend message. The value is clamped to 0..16383 (centre 8192). */
+    static MidiEvent pitchBend (int samplePosition, int channel, int value) noexcept
+    {
+        const int clamped = std::clamp (value, 0, maximumPitchBend);
+        return { samplePosition, (uint8_t) (MidiStatus::pitchBend | (channel & 0x0F)), (uint8_t) (clamped & 0x7F),
+                 (uint8_t) (clamped >> 7), 3 };
     }
 
     /** Creates a control change message. */

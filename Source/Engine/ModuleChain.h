@@ -50,6 +50,32 @@ private:
 };
 
 /**
+ * @brief The last pitch bend of every channel in a MIDI stream (centre until one arrives).
+ *
+ * Lets the chain undo a bend that a module (Pitch Slide) left behind when its slot restarts.
+ */
+class PitchBendTracker
+{
+public:
+    PitchBendTracker() noexcept { clear(); }
+    void clear() noexcept { lastBend.fill ((uint16_t) MidiEvent::pitchBendCentre); }
+
+    /** Updates the state with every pitch bend in the list. */
+    void track (const MidiEventList& events) noexcept
+    {
+        for (const auto& event : events)
+            if (event.isPitchBend())
+                lastBend[(size_t) event.channel()] = (uint16_t) event.pitchBendValue();
+    }
+
+    /** @return The last pitch bend (0..16383) on a channel. */
+    int bendOf (int channel) const noexcept { return lastBend[(size_t) (channel & 0x0F)]; }
+
+private:
+    std::array<uint16_t, numMidiChannels> lastBend {};
+};
+
+/**
  * @brief Runs MIDI through the eight slots and keeps notes consistent when slots change.
  *
  * When a slot changes (another module type, switched on or off) while notes are playing:
@@ -61,6 +87,9 @@ private:
  * A module may also send events past the rest of the chain (Note Split, see MidiModule::processWithBypass).
  * Those events skip all slots below it and are merged into the chain's output at the end. When such a
  * slot restarts, the notes it sent past the chain are released too.
+ *
+ * Likewise, if a restarting slot's output has a different pitch bend than its input (a Pitch Slide in the
+ * middle of a slide), the input's bend is sent, so the synth is not left out of tune.
  *
  * process() is real-time safe: all modules and buffers are allocated in the constructor.
  */
@@ -101,6 +130,7 @@ private:
     std::array<std::array<bool, numChannelNoteCombinations>, numSlots> isOrphanedAtSlotInput {};
     NoteStateTracker notesAtChainOutput;
     std::array<NoteStateTracker, numSlots> notesBypassedBySlot; ///< Notes each slot sent past the chain
+    std::array<PitchBendTracker, numSlots> bendsAtSlotInput, bendsAtSlotOutput;
 
     MidiEventList slotInput, slotOutput, moduleOutput, moduleBypassOutput, bypassedEvents, panicEvents;
     int64_t samplesProcessed = 0;

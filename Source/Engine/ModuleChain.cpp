@@ -42,6 +42,10 @@ void ModuleChain::reset()
         tracker.clear();
     for (auto& tracker : notesBypassedBySlot)
         tracker.clear();
+    for (auto& tracker : bendsAtSlotInput)
+        tracker.clear();
+    for (auto& tracker : bendsAtSlotOutput)
+        tracker.clear();
     for (auto& orphans : isOrphanedAtSlotInput)
         orphans.fill (false);
     notesAtChainOutput.clear();
@@ -64,10 +68,15 @@ void ModuleChain::handlePanic (MidiEventList& events)
         notesAtSlotInput[slot].clear();
         notesAtSlotOutput[slot].clear();
         notesBypassedBySlot[slot].clear();
+        bendsAtSlotInput[slot].clear();
+        bendsAtSlotOutput[slot].clear();
     }
 
     for (int channel = 0; channel < numMidiChannels; ++channel)
+    {
         events.push_back (MidiEvent::controlChange (0, channel, allNotesOffController, 0));
+        events.push_back (MidiEvent::pitchBend (0, channel, MidiEvent::pitchBendCentre)); // undo any slide
+    }
 
     // Also send explicit note-offs: not every synth honours All Notes Off.
     for (size_t key = 0; key < numChannelNoteCombinations; ++key)
@@ -92,6 +101,11 @@ void ModuleChain::restartSlot (int slotIndex, MidiEventList& output)
         if (notesBypassedBySlot[slot].isSounding (key))
             bypassedEvents.push_back (MidiEvent::noteOff (0, (int) key / numMidiNotes, (int) key % numMidiNotes));
     notesBypassedBySlot[slot].clear();
+
+    // A bend the slot added (Pitch Slide) is undone: the downstream slots get the bend of the slot's input.
+    for (int channel = 0; channel < numMidiChannels; ++channel)
+        if (bendsAtSlotOutput[slot].bendOf (channel) != bendsAtSlotInput[slot].bendOf (channel))
+            output.push_back (MidiEvent::pitchBend (0, channel, bendsAtSlotInput[slot].bendOf (channel)));
 
     // The notes held at the input have now been released; swallow their note-offs when they arrive.
     for (size_t key = 0; key < numChannelNoteCombinations; ++key)
@@ -149,6 +163,7 @@ void ModuleChain::process (MidiEventList& events, BlockContext context, const Sl
         }
 
         notesAtSlotInput[slot].track (*currentEvents);
+        bendsAtSlotInput[slot].track (*currentEvents);
         removeOrphanedNoteOffs (slotIndex, *currentEvents);
 
         if (wantedType > 0)
@@ -168,6 +183,7 @@ void ModuleChain::process (MidiEventList& events, BlockContext context, const Sl
 
         sortBySamplePosition (*nextEvents);
         notesAtSlotOutput[slot].track (*nextEvents);
+        bendsAtSlotOutput[slot].track (*nextEvents);
         std::swap (currentEvents, nextEvents);
     }
 
