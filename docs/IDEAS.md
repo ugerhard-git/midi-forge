@@ -32,6 +32,24 @@ Repeats 1 …) the lower half is cut off at the minimum, so half the LFO is wast
 
 ## Ideas
 
+### Note Random modulators (proposal sent to the owner, waiting for answers)
+
+Modulation sources that roll a random value (−1 … +1) on each new played note and hold it until the next
+one. They appear in the routes' Source menu after the LFOs (Random 1, Random 2) and can drive every knob
+the LFOs can, with the same amount and (once built) per-route polarity.
+
+- Chord window: the first note-on rolls a new value immediately (no latency) and already uses it; further
+  note-ons within the window (proposed 0 … 100 ms, default 30 ms) keep that value, so a slightly uneven
+  chord counts as one event.
+- Proposed settings per modulator: Chord window; New value on (Every note / First note of a phrase);
+  Steps (Smooth, 2 … 12).
+- Only notes played into the plug-in trigger; generated notes (arpeggio, repeats, echoes) use the current
+  value. The engine already splits blocks at every input event, so values apply exactly from that note.
+- Compatibility: the route Source parameter gets two more choices; project state stores the index, only
+  automation of a route's Source could shift.
+- Open questions: how many modulators? window range/default? phrase option? steps? generated notes
+  trigger or not?
+
 ### Knobs for discrete options snap to the options
 
 Knobs whose parameter has fixed steps (choices like Scale or Rate, whole numbers like Octaves or note
