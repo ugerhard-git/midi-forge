@@ -12,7 +12,17 @@ When a feature is implemented, remove it here and describe it in [MANUAL.md](MAN
 
 ## Planned
 
-(nothing at the moment)
+### Remove a module with one click
+
+Agreed with the owner, waiting for the go.
+
+- A small **✕** button next to the **i** button of every slot that holds a module (not on empty slots).
+- One click removes the module: the modules below move up one slot, the empty slot goes to the end of the
+  chain.
+- Modulation routes follow their modules when they move up; routes to the removed module are set to *None*.
+  The ▲ / ▼ buttons get the same behaviour (today routes stay with the slot number when modules move).
+- An **undo strip** ("Removed *Repeater* · Undo") shows for a few seconds; Undo puts the module back exactly
+  as it was: slot, knobs, power switch, shown page and its routes.
 
 ## Ideas
 
