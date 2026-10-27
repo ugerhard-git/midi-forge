@@ -155,7 +155,112 @@ private:
     }
 };
 
+/**
+ * Splits the chain: notes in the selected range continue to the slots below; all other notes skip the
+ * rest of the chain and go straight to the plug-in's output, unchanged. Everything that is not a note
+ * (controllers, pitch bend, channel aftertouch, program changes, system messages) continues down the chain.
+ *
+ * The path is decided at note-on and remembered per key, so the note-off and poly aftertouch always
+ * follow their note, even if the range changes (by hand or by an LFO) while the key is held.
+ */
+class NoteSplit final : public MidiModule
+{
+public:
+    NoteSplit() : MidiModule (ModuleType::NoteSplit) {}
+
+    void reset() override { pathOfHeldKey.fill (Path::none); }
+
+    void process (const MidiEventList& input, MidiEventList& output, const BlockContext& context,
+                  const float* parameterValues) override
+    {
+        // Only reached if someone calls process() directly: then nothing can bypass, everything continues.
+        static_cast<void> (context);
+        static_cast<void> (parameterValues);
+        output.insert (output.end(), input.begin(), input.end());
+    }
+
+    void processWithBypass (const MidiEventList& input, MidiEventList& output, MidiEventList& bypassOutput,
+                            const BlockContext& /*context*/, const float* parameterValues) override
+    {
+        const int lowNote = integerParameter (parameterValues, lowNoteParameter);
+        const int highNote = integerParameter (parameterValues, highNoteParameter);
+        const bool everyOctave = integerParameter (parameterValues, octavesParameter) == everyOctaveChoice;
+
+        for (const auto& event : input)
+        {
+            if (! event.isNoteOnOrOff() && ! event.isPolyPressure())
+            {
+                output.push_back (event); // non-note messages always continue down the chain
+                continue;
+            }
+
+            auto& path = pathOfHeldKey[channelNoteIndex (event.channel(), event.noteNumber())];
+
+            if (event.isNoteOn())
+            {
+                // Retriggered while held, and the key now goes the other way: end the old note first.
+                const Path newPath = isNoteSelectedByNoteSplit (event.noteNumber(), lowNote, highNote, everyOctave)
+                                         ? Path::chain
+                                         : Path::bypass;
+                if (path != Path::none && path != newPath)
+                    sendNoteOff (path, MidiEvent::noteOff (event.samplePosition, event.channel(), event.noteNumber()),
+                                 output, bypassOutput);
+                path = newPath;
+                (path == Path::chain ? output : bypassOutput).push_back (event);
+            }
+            else if (event.isNoteOff())
+            {
+                // Unknown keys (pressed before this module was active) continue down the chain (rule 1).
+                sendNoteOff (path == Path::none ? Path::chain : path, event, output, bypassOutput);
+                path = Path::none;
+            }
+            else // poly aftertouch follows its note
+            {
+                (path == Path::bypass ? bypassOutput : output).push_back (event);
+            }
+        }
+    }
+
+private:
+    enum Parameter
+    {
+        lowNoteParameter,
+        highNoteParameter,
+        octavesParameter
+    };
+    static constexpr int everyOctaveChoice = 1;
+
+    enum class Path : uint8_t
+    {
+        none,
+        chain,
+        bypass
+    };
+
+    /** Bypassed notes pass exactly as played, so their note-offs pass unchanged too (no counting). */
+    static void sendNoteOff (Path path, const MidiEvent& noteOff, MidiEventList& output, MidiEventList& bypassOutput)
+    {
+        (path == Path::bypass ? bypassOutput : output).push_back (noteOff);
+    }
+
+    std::array<Path, numChannelNoteCombinations> pathOfHeldKey {};
+};
+
 } // namespace
+
+bool isNoteSelectedByNoteSplit (int noteNumber, int lowNote, int highNote, bool everyOctave) noexcept
+{
+    const int low = std::min (lowNote, highNote);
+    const int high = std::max (lowNote, highNote);
+    if (! everyOctave)
+        return noteNumber >= low && noteNumber <= high;
+
+    const int span = high - low;
+    if (span >= 11)
+        return true; // the range covers a whole octave
+    const int semitonesAboveLow = ((noteNumber - low) % 12 + 12) % 12;
+    return semitonesAboveLow <= span;
+}
 
 std::unique_ptr<MidiModule> createFilterModule (ModuleType type)
 {
@@ -165,6 +270,7 @@ std::unique_ptr<MidiModule> createFilterModule (ModuleType type)
         case ModuleType::VelocityRange: return std::make_unique<VelocityRangeFilter>();
         case ModuleType::ChannelFilter: return std::make_unique<ChannelFilter>();
         case ModuleType::EventBlocker: return std::make_unique<EventBlocker>();
+        case ModuleType::NoteSplit: return std::make_unique<NoteSplit>();
         default: return nullptr;
     }
 }

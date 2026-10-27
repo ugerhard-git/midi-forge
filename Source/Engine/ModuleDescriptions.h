@@ -41,6 +41,8 @@ enum class ModuleType : int
     RandomPitch,
     // Added in 0.4.0 (appended: the numbers are stored in projects)
     Repeater, ///< Generator
+    // Added in 0.5.0
+    NoteSplit, ///< Filter
 
     Count
 };

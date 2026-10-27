@@ -18,7 +18,7 @@ This document explains how the code is organised and why. It is kept true with e
  Source/Engine/ModuleChain         8 slots, note-consistency rules
    │  per slot
    ▼
- Source/Engine/Modules/*           the 15 modules (all derived from MidiModule)
+ Source/Engine/Modules/*           the 16 modules (all derived from MidiModule)
 ```
 
 The **engine** (`Source/Engine`) is plain C++17 without JUCE. It can be built and tested on any
@@ -80,6 +80,18 @@ A route's target is a number: 0 = none, then slot 1 A … slot 8 D (`modulationT
 Everything on this path is **real-time safe**: no allocation, no locks, no I/O. All modules of all
 types are created up front (every slot owns one instance of every module type), all buffers are
 reserved in constructors, and queues have hard caps.
+
+## Note Split: the bypass path
+
+`MidiModule::processWithBypass()` lets a module send events past the remaining slots; only Note Split
+uses it (all other modules inherit the default, which calls `process()`). `ModuleChain` collects these
+events per block, tracks the notes each slot sent past the chain (`notesBypassedBySlot`) and merges them
+into the chain's output at the end (sorted by position). When the slot restarts (other module, switched
+off) it releases those notes on the bypass path too; panic clears everything as before.
+
+Note Split decides the path at note-on and remembers it per key, so note-offs and poly aftertouch follow
+their note even if the range changes. Bypassed notes pass exactly as played (including repeated note-ons
+of a held key), so their note-offs are not counted. Non-note messages always continue down the chain.
 
 ## No stuck notes: the rules
 

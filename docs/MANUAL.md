@@ -67,7 +67,8 @@ Note names follow the convention **C3 = MIDI note 60** (as in Bitwig and Cubase;
 
 ## How the chain works
 
-Every MIDI event enters slot 1, then goes to slot 2, and so on to slot 8. Each module only sees what
+Every MIDI event enters slot 1, then goes to slot 2, and so on to slot 8 (a *Note Split* can send notes
+past the remaining slots). Each module only sees what
 the slots above it let through, so **order matters**: *Chord → Arpeggiator* arpeggiates chords, while
 *Arpeggiator → Chord* plays a chord on every arpeggio step.
 
@@ -117,6 +118,25 @@ on the module loaded in the slot.
 | CC | Pass / Block | Control changes (mod wheel, sustain pedal …) |
 | Pitch Bend | Pass / Block | Pitch bend |
 | AT / Prog | Pass / Block | Channel aftertouch, poly aftertouch and program changes |
+
+**Note Split** – splits the chain. Notes in the selected range continue to the slots *below* the Note
+Split; all other notes **skip the rest of the chain** and go straight to your DAW, exactly as they arrived
+at the Note Split. Slots *above* it still act on every note, so you usually put it in slot 1.
+
+Example (drums): Note Split on the closed hi-hat → Repeater → Humanize ratchets and humanizes only the hi-hat,
+while kick and snare play exactly as recorded (preset *Hi-Hat Ratchet (Drums)*).
+
+| Knob | Range | Meaning |
+|------|-------|---------|
+| Low | C-2 … G8 | Lowest selected note |
+| High | C-2 … G8 | Highest selected note. Set it to the same note as *Low* to select exactly one note (the default) |
+| Octaves | This octave / Every octave | *Every octave:* the selected notes count in every octave, e.g. Low = High = C3 selects every C; A2 … C3 selects every A, A#, B and C. A range of 12 notes or more selects everything |
+
+- Everything that is not a note (controllers, pitch bend, channel aftertouch, program changes) continues
+  down the chain.
+- A note's note-off and polyphonic aftertouch always take the same way as the note itself, even if you
+  change the range (or an LFO moves it) while the key is held.
+- You can use several Note Splits: one further down splits again what the first one let through.
 
 ### Transforms (green)
 
@@ -324,6 +344,7 @@ than 256 KB are refused, and values outside a parameter's range are limited to t
 | Breathing Arp | Chord (Maj7) → Arpeggiator (1/16, Up/Down, 2 octaves); LFO 1 (triangle, 2 bars) moves the gate, LFO 2 (S&H, 1 bar) picks a new chord inversion every bar |
 | Wandering Echo | Note Echo (1/8 dotted, 5 repeats) → Scale Quantize (C minor pentatonic); LFO 1 (smooth random, 1 bar) lets the echo pitch step drift |
 | Ratchet Chords | Chord (Min7, open voicing) → Repeater (1/16, swing 58 %, accents on the beat); LFO 1 (S&H, 1/2 bar) switches the ratchet speed between 1/8T, 1/16 and 1/16T |
+| Hi-Hat Ratchet (Drums) | Note Split (F#1, the General MIDI closed hi-hat) → Repeater (1/16, swing 56 %, accents on the beat) → Humanize; kick, snare and everything else pass untouched |
 
 Your current settings are also saved with your DAW project, together with the name of the loaded preset.
 Your DAW's own program list shows only the factory presets; your DAW's preset functions keep working too.

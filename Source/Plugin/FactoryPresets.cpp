@@ -38,6 +38,7 @@ const std::vector<FactoryPreset>& getFactoryPresets()
     constexpr int chordInversion = 1, arpeggiatorGate = 3, echoPitch = 3, repeaterRate = 0;
     constexpr float repeaterSixteenth = 7, repeaterLastNote = 0, repeaterOnTheBeat = 4;
     constexpr int halfBar = 4;
+    constexpr float closedHiHat = 42, thisOctave = 0; // General MIDI closed hi-hat: F#1
 
     static const std::vector<FactoryPreset> presets = {
         { "Init", {}, {}, {} },
@@ -97,6 +98,14 @@ const std::vector<FactoryPreset>& getFactoryPresets()
             { ModuleType::Repeater, { repeaterSixteenth, repeaterLastNote, 58, repeaterOnTheBeat } } },
           { { 0, syncedLfo (LfoWaveform::SampleAndHold, halfBar) } },
           { { 0, 1, repeaterRate, 12.0f } } }, // the ratchet speed jumps every half bar
+
+        // Added in 0.5.0 -------------------------------------------------------------------------
+        { "Hi-Hat Ratchet (Drums)",
+          { { ModuleType::NoteSplit, { closedHiHat, closedHiHat, thisOctave, keep } }, // F#1: closed hi-hat
+            { ModuleType::Repeater, { repeaterSixteenth, repeaterLastNote, 56, repeaterOnTheBeat } },
+            { ModuleType::Humanize, { 3, 10, keep, keep } } },
+          {},
+          {} }, // kick, snare and everything else pass untouched
     };
     return presets;
 }

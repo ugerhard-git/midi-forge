@@ -98,6 +98,18 @@ public:
     virtual void process (const MidiEventList& input, MidiEventList& output, const BlockContext& context,
                           const float* parameterValues) = 0;
 
+    /**
+     * Like process(), but the module may also send events past the rest of the chain, straight to the
+     * plug-in's output (used by Note Split). By default everything goes to @p output.
+     * @param bypassOutput  Receives events that skip all slots below this one. Does not need to be sorted.
+     */
+    virtual void processWithBypass (const MidiEventList& input, MidiEventList& output, MidiEventList& bypassOutput,
+                                    const BlockContext& context, const float* parameterValues)
+    {
+        static_cast<void> (bypassOutput);
+        process (input, output, context, parameterValues);
+    }
+
     /** @return The description (name, parameters) of this module's type. */
     const ModuleDescription& getDescription() const noexcept { return description; }
 

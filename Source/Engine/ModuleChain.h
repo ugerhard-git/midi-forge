@@ -58,6 +58,10 @@ private:
  *  - note-offs that arrive later for notes that were sounding at the slot's input are swallowed,
  *    because those notes have already been released ("orphaned" notes).
  *
+ * A module may also send events past the rest of the chain (Note Split, see MidiModule::processWithBypass).
+ * Those events skip all slots below it and are merged into the chain's output at the end. When such a
+ * slot restarts, the notes it sent past the chain are released too.
+ *
  * process() is real-time safe: all modules and buffers are allocated in the constructor.
  */
 class ModuleChain
@@ -96,8 +100,9 @@ private:
     std::array<NoteStateTracker, numSlots> notesAtSlotOutput;
     std::array<std::array<bool, numChannelNoteCombinations>, numSlots> isOrphanedAtSlotInput {};
     NoteStateTracker notesAtChainOutput;
+    std::array<NoteStateTracker, numSlots> notesBypassedBySlot; ///< Notes each slot sent past the chain
 
-    MidiEventList slotInput, slotOutput, moduleOutput, panicEvents;
+    MidiEventList slotInput, slotOutput, moduleOutput, moduleBypassOutput, bypassedEvents, panicEvents;
     int64_t samplesProcessed = 0;
     std::atomic<bool> isPanicRequested { false };
 };

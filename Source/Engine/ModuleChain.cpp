@@ -19,7 +19,7 @@ ModuleChain::ModuleChain()
         for (int type = 1; type < numModuleTypes; ++type) // index 0 (Empty) stays nullptr
             modules[(size_t) type] = createModule ((ModuleType) type);
 
-    for (auto* buffer : { &slotInput, &slotOutput, &moduleOutput, &panicEvents })
+    for (auto* buffer : { &slotInput, &slotOutput, &moduleOutput, &moduleBypassOutput, &bypassedEvents, &panicEvents })
         buffer->reserve (reservedEventsPerBuffer);
 }
 
@@ -39,6 +39,8 @@ void ModuleChain::reset()
     for (auto& tracker : notesAtSlotInput)
         tracker.clear();
     for (auto& tracker : notesAtSlotOutput)
+        tracker.clear();
+    for (auto& tracker : notesBypassedBySlot)
         tracker.clear();
     for (auto& orphans : isOrphanedAtSlotInput)
         orphans.fill (false);
@@ -61,6 +63,7 @@ void ModuleChain::handlePanic (MidiEventList& events)
 
         notesAtSlotInput[slot].clear();
         notesAtSlotOutput[slot].clear();
+        notesBypassedBySlot[slot].clear();
     }
 
     for (int channel = 0; channel < numMidiChannels; ++channel)
@@ -83,6 +86,12 @@ void ModuleChain::restartSlot (int slotIndex, MidiEventList& output)
     for (size_t key = 0; key < numChannelNoteCombinations; ++key)
         if (notesAtSlotOutput[slot].isSounding (key))
             output.push_back (MidiEvent::noteOff (0, (int) key / numMidiNotes, (int) key % numMidiNotes));
+
+    // Notes the slot sent past the chain are released on that same path, straight to the output.
+    for (size_t key = 0; key < numChannelNoteCombinations; ++key)
+        if (notesBypassedBySlot[slot].isSounding (key))
+            bypassedEvents.push_back (MidiEvent::noteOff (0, (int) key / numMidiNotes, (int) key % numMidiNotes));
+    notesBypassedBySlot[slot].clear();
 
     // The notes held at the input have now been released; swallow their note-offs when they arrive.
     for (size_t key = 0; key < numChannelNoteCombinations; ++key)
@@ -119,6 +128,7 @@ void ModuleChain::process (MidiEventList& events, BlockContext context, const Sl
     if (isPanicRequested.exchange (false))
         handlePanic (panicEvents);
 
+    bypassedEvents.clear();
     slotInput.assign (events.begin(), events.end());
     MidiEventList* currentEvents = &slotInput;
     MidiEventList* nextEvents = &slotOutput;
@@ -144,9 +154,12 @@ void ModuleChain::process (MidiEventList& events, BlockContext context, const Sl
         if (wantedType > 0)
         {
             moduleOutput.clear();
-            modulesBySlot[slot][(size_t) wantedType]->process (*currentEvents, moduleOutput, context,
-                                                               settings.parameterValues);
+            moduleBypassOutput.clear();
+            modulesBySlot[slot][(size_t) wantedType]->processWithBypass (
+                *currentEvents, moduleOutput, moduleBypassOutput, context, settings.parameterValues);
             nextEvents->insert (nextEvents->end(), moduleOutput.begin(), moduleOutput.end());
+            notesBypassedBySlot[slot].track (moduleBypassOutput);
+            bypassedEvents.insert (bypassedEvents.end(), moduleBypassOutput.begin(), moduleBypassOutput.end());
         }
         else
         {
@@ -156,6 +169,13 @@ void ModuleChain::process (MidiEventList& events, BlockContext context, const Sl
         sortBySamplePosition (*nextEvents);
         notesAtSlotOutput[slot].track (*nextEvents);
         std::swap (currentEvents, nextEvents);
+    }
+
+    // Merge the events that skipped part of the chain back in.
+    if (! bypassedEvents.empty())
+    {
+        currentEvents->insert (currentEvents->end(), bypassedEvents.begin(), bypassedEvents.end());
+        sortBySamplePosition (*currentEvents);
     }
 
     notesAtChainOutput.track (*currentEvents);

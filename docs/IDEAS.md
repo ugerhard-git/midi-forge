@@ -16,21 +16,22 @@ When a feature is implemented, remove it here and describe it in [MANUAL.md](MAN
 
 ## Ideas
 
-### Note Split module (proposal sent to the owner, waiting for answers)
+### Knobs for discrete options snap to the options
 
-A Filter that splits the chain: selected notes continue through the slots below it, all other notes skip
-the rest of the chain and go straight to the DAW unchanged. Example: only the hi-hat (F#1) goes on to a
-Repeater, kick and snare pass through untouched.
+Knobs whose parameter has fixed steps (choices like Scale or Rate, whole numbers like Octaves or note
+numbers) should jump from step to step while dragging, instead of moving smoothly with the text jumping.
+Applies to the slot knobs (A–D) and the LFO knobs (Rate in Tempo mode, Phase steps). Things to decide:
+whether host automation should also be stepped (it can stay continuous; the module rounds anyway), and
+how mouse-wheel and fine-drag (Shift) behave on stepped knobs.
 
-- Proposed knobs: Low, High (same note = exactly one note, the default), Octaves (This octave / Every
-  octave), Mode (Selected → chain / Selected → DAW).
-- A note-off always takes the same path as its note-on (also after knob changes or LFO modulation); poly
-  aftertouch follows its note. Several Note Splits can be chained. Panic and slot changes also release
-  notes that skipped the chain.
-- Engine: the chain needs a bypass path that merges into the final output and is tracked by the
-  stuck-note logic.
-- Open questions: one note or a range? "Every octave" and invert mode wanted? Non-note messages down the
-  chain or straight to the DAW (or a knob)? Name?
+### LFO polarity: bipolar or unipolar
+
+The owner asked for LFOs that affect values both positively and negatively ("through zero"). Today every
+LFO is already bipolar: it swings the parameter above *and* below the knob's position (output −1 … +1,
+and a negative amount inverts it). Open question for the owner: is the bipolar behaviour what was meant,
+or is the wish an LFO **polarity switch** per LFO (Bipolar −1 … +1 / Unipolar 0 … +1, so the LFO only pushes
+the value up from the knob position, or only down with a negative amount)? A switch would be one new
+host parameter per LFO (appended) plus a toggle in each LFO panel.
 
 ### Six knobs per slot (A–F)
 

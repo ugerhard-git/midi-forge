@@ -41,6 +41,7 @@ const char* const randomPitchModeLabels[] = { "Any", "Octaves", "5ths + Oct" };
 const char* const repeaterDivisionLabels[] = { "1/4D", "1/4",  "1/8D",  "1/4T", "1/8",   "1/16D",
                                                "1/8T", "1/16", "1/16T", "1/32", "1/32T", "1/64" };
 const char* const repeaterVelocityLabels[] = { "Last Note", "Aftertouch" };
+const char* const noteSplitOctaveLabels[] = { "This octave", "Every octave" };
 const char* const repeaterAccentLabels[] = { "Off", "Every 2nd", "Every 3rd", "Every 4th", "On the Beat" };
 const char* const echoDivisionLabels[] = { "1/32", "1/16T", "1/16", "1/16D", "1/8T", "1/8",
                                            "1/8D", "1/4T",  "1/4",  "1/4D",  "1/2",  "1 Bar" };
@@ -182,6 +183,13 @@ const ModuleDescription* createModuleTable()
           { choiceParameter ("Rate", repeaterDivisionLabels, 7),
             choiceParameter ("Velocity", repeaterVelocityLabels, 0), percentParameter ("Swing", 50, 75, 50),
             choiceParameter ("Accent", repeaterAccentLabels, 0) } },
+
+        // Added in 0.5.0 ---------------------------------------------------------------------------
+        { "Note Split",
+          ModuleCategory::Filter,
+          "Selected notes continue down the chain; all others go straight out.",
+          { noteParameter ("Low", 60), noteParameter ("High", 60),
+            choiceParameter ("Octaves", noteSplitOctaveLabels, 0), unusedParameter() } },
     };
     return table;
 }

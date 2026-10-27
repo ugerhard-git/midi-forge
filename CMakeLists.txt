@@ -10,7 +10,7 @@
 
 cmake_minimum_required(VERSION 3.28)
 
-project(MidiForge VERSION 0.4.0 LANGUAGES C CXX)
+project(MidiForge VERSION 0.5.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -91,7 +91,8 @@ if(MIDI_FORGE_BUILD_ENGINE_TESTS)
         Tests/Engine/GeneratorAndRandomizerTests.cpp
         Tests/Engine/ModuleChainTests.cpp
         Tests/Engine/ModulationTests.cpp
-        Tests/Engine/RepeaterTests.cpp)
+        Tests/Engine/RepeaterTests.cpp
+        Tests/Engine/NoteSplitTests.cpp)
     target_link_libraries(midi_forge_engine_tests PRIVATE midi_forge_engine midi_forge_warnings)
     add_test(NAME engine COMMAND midi_forge_engine_tests)
 endif()
