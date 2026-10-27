@@ -321,3 +321,45 @@ TEST_CASE ("repeater: accent boost sets how much louder accented repeats are")
     for (size_t step = 1; step < hits.size(); ++step)
         EXPECT (hits[step].velocity == (step % 2 == 0 ? 110 : 70));
 }
+
+TEST_CASE ("repeater: chance 100 % plays every repeat, 0 % only the key's first hit")
+{
+    for (const float chance : { 100.0f, 0.0f })
+    {
+        ChainTestRig rig;
+        setUpRepeater (rig, RepeaterRate::sixteenth, RepeaterVelocity::lastNote, 50, RepeaterAccent::off, false);
+        rig.setParameter (0, 6, chance);
+        rig.processBlock ({ noteOnAt (100, 60, 90) });
+        rig.processSeconds (1.0); // 8 sixteenths
+        rig.processBlock ({ noteOffAt (0, 60) });
+        rig.processSeconds (0.2);
+
+        const auto hits = noteOnsOf (rig);
+        EXPECT (chance > 50 ? hits.size() >= 8 : hits.size() == 1); // the first hit always sounds
+        EXPECT (rig.notesStillSounding().empty());
+    }
+}
+
+TEST_CASE ("repeater: with a chance, a held chord plays or rests as a whole, and about as often as set")
+{
+    ChainTestRig rig;
+    setUpRepeater (rig, RepeaterRate::sixteenth, RepeaterVelocity::lastNote, 50, RepeaterAccent::off, false);
+    rig.setParameter (0, 6, 50);
+    rig.processBlock ({ noteOnAt (0, 60), noteOnAt (0, 64), noteOnAt (0, 67) });
+    rig.processSeconds (30.0); // 240 steps
+    rig.processBlock ({ noteOffAt (0, 60), noteOffAt (0, 64), noteOffAt (0, 67) });
+    rig.processSeconds (0.2);
+
+    const auto hits = noteOnsOf (rig);
+    EXPECT (hits.size() % 3 == 0);
+    for (size_t index = 0; index + 2 < hits.size(); index += 3)
+        EXPECT (hits[index].time == hits[index + 1].time && hits[index].time == hits[index + 2].time);
+
+    const auto stepsPlayed = (int) hits.size() / 3 - 1; // without the first hit
+    EXPECT (stepsPlayed > 90 && stepsPlayed < 150);     // 50 % of 240, with room for chance
+
+    // Rests leave gaps of whole steps; the grid itself stays in place.
+    for (size_t index = 3; index < hits.size(); index += 3)
+        EXPECT ((hits[index].time - hits[0].time) % sixteenthAt120Bpm == 0);
+    EXPECT (rig.notesStillSounding().empty());
+}

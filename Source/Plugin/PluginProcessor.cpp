@@ -636,7 +636,33 @@ juce::ValueTree MidiForgeProcessor::copyStateWithPages()
 {
     auto state = parameters.copyState();
     state.setProperty (shownPagesProperty, pagesToText (shownPages), nullptr);
+    state.setProperty (knobLayoutProperty, currentKnobLayoutVersion, nullptr);
     return state;
+}
+
+int MidiForgeProcessor::getKnobLayoutVersionOf (const juce::ValueTree& state)
+{
+    if (state.hasProperty (knobLayoutProperty))
+        return juce::jlimit (0, currentKnobLayoutVersion, (int) state.getProperty (knobLayoutProperty));
+    // 0.7.0 stored the shown pages and the parameters E-H, but no layout version yet.
+    const bool isFrom070 = state.hasProperty (shownPagesProperty) ||
+                           state.getChildWithProperty ("id", ParameterIds::moduleParameter (0, 4)).isValid();
+    return isFrom070 ? 1 : 0;
+}
+
+void MidiForgeProcessor::resetKnobsAddedAfter (int savedKnobLayoutVersion)
+{
+    for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
+    {
+        const auto& description = getModuleDescription (getModuleType (slotIndex));
+        for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
+        {
+            const auto& parameter = description.parameters[parameterIndex];
+            if (parameter.isUsed() && parameter.addedInKnobLayout > savedKnobLayoutVersion)
+                setParameterAsGesture (ParameterIds::moduleParameter (slotIndex, parameterIndex),
+                                       getNormalisedDefault (parameter));
+        }
+    }
 }
 
 void MidiForgeProcessor::clearSlot (int slotIndex)
@@ -782,7 +808,10 @@ void MidiForgeProcessor::setStateInformation (const void* data, int sizeInBytes)
     currentUserPresetName = UserPresetLibrary::cleanName (state.getProperty ("userPresetName").toString());
     if (currentPresetKind == PresetKind::user && currentUserPresetName.isEmpty())
         currentPresetKind = PresetKind::none;
+    // Read before replaceState(), which adds the missing parameters to the (shared) tree.
+    const int savedKnobLayoutVersion = getKnobLayoutVersionOf (state);
     parameters.replaceState (state);
+    resetKnobsAddedAfter (savedKnobLayoutVersion);
     restoreShownPages (state);
     rememberValuesOfCurrentPreset();
 }
@@ -850,6 +879,7 @@ bool MidiForgeProcessor::loadUserPreset (const juce::String& name)
         return false;
 
     applyStateValues (*state);
+    resetKnobsAddedAfter (getKnobLayoutVersionOf (*state));
     restoreShownPages (*state);
     currentPresetKind = PresetKind::user;
     currentUserPresetName = UserPresetLibrary::cleanName (name);

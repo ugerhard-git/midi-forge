@@ -29,7 +29,8 @@ Read first: [CONTRIBUTING.md](CONTRIBUTING.md) (all ground rules apply to you), 
 - [ ] `docs/MANUAL.md` updated for anything a user can see or hear.
 - [ ] `docs/ARCHITECTURE.md` updated for structural, build or CI changes.
 - [ ] Audio-thread code stays real-time safe (no allocation, locks or I/O).
-- [ ] Parameter IDs, `ModuleType` order and choice label order unchanged (append only).
+- [ ] Parameter IDs, `ModuleType` order and choice label order unchanged (append only); knobs added to an
+      existing module marked with `addedInLayout()` and `currentKnobLayoutVersion` raised.
 - [ ] `clang-format` applied; engine tests pass locally if a compiler is available.
 - [ ] After pushing, check that the GitHub Actions run is green.
 

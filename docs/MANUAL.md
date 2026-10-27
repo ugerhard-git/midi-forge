@@ -242,7 +242,7 @@ project tempo, counting from your first key press. Releasing a key stops its rep
 the set *Length*, but always ends before the next repeat. If you press a key less than half a step before
 a grid step, that step is skipped for this key, so it never double-triggers.
 
-The Repeater has six knobs: use the **◀ ▶** arrows in its slot to switch between page 1 (A–D) and page 2 (E–F).
+The Repeater has seven knobs: use the **◀ ▶** arrows in its slot to switch between page 1 (A–D) and page 2 (E–G).
 
 | Knob | Range | Meaning |
 |------|-------|---------|
@@ -252,8 +252,12 @@ The Repeater has six knobs: use the **◀ ▶** arrows in its slot to switch bet
 | Accent | Off, Every 2nd, Every 3rd, Every 4th, On Beat | Which repeats are accented (made louder by *Accent Boost*). Steps are counted on the grid (from your first key press when the transport is stopped). *On Beat* accents repeats that fall on a quarter note |
 | Accent Boost *(page 2)* | 0 … 64 | How many velocity steps louder accented repeats are (default 25) |
 | Length *(page 2)* | 10 … 100 % | How long each repeat lasts, as a share of a step (default 50 %). At 100 % repeats join up; with swing, a repeat before a short gap is shortened so repeats never overlap |
+| Chance *(page 2)* | 0 … 100 % | Probability that a repeat plays (default 100 %). Below 100 % some repeats rest, so the ratchet gets gaps. The key you press always sounds; a held chord plays or rests as a whole; accented repeats can rest too |
 
-Tip: an LFO on *Rate* makes the ratchet speed change on its own (see the *Ratchet Chords* preset).
+Tip: an LFO on *Rate* makes the ratchet speed change on its own (see the *Ratchet Chords* preset). A Random
+modulator on *Chance* makes some phrases busy and others sparse.
+
+Projects and presets from older versions open with *Chance* at 100 %, so they sound as before.
 
 ### Randomizers (purple)
 

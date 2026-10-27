@@ -16,13 +16,6 @@ When a feature is implemented, remove it here and describe it in [MANUAL.md](MAN
 
 ## Ideas
 
-### Repeater: Chance knob
-
-A *Chance* knob for the Repeater: each repeat plays only with this probability (0 … 100 %), so ratchets get
-gaps and feel less mechanical. Paged knobs exist since 0.7.0; it would be the Repeater's seventh knob
-(page 2, knob G). To discuss: does the first, immediate hit always play (suggested) or is it subject to the chance
-as well? Should accented steps have their own chance?
-
 ### Modulating the modulation
 
 Let routes target another LFO's rate or another route's amount (e.g. a slow LFO that speeds up a fast one).

@@ -54,6 +54,14 @@ constexpr int numParametersPerSlot = 8;
 constexpr int numParametersPerPage = 4;
 constexpr int numParameterPages = numParametersPerSlot / numParametersPerPage;
 
+/**
+ * Knob layout versions: projects and presets store the version they were saved with, so knobs that a
+ * module gained later can be set to their defaults when an older state is loaded (an older state holds
+ * 0 for them, which may be a bad value, e.g. a Chance of 0 %).
+ * 0 = up to 0.6.0, 1 = 0.7.0 (Repeater page 2: Accent Boost, Length), 2 = 0.9.0 (Repeater: Chance).
+ */
+constexpr int currentKnobLayoutVersion = 2;
+
 /** How a parameter's normalised value is turned into a plain value and displayed. */
 enum class ParameterKind
 {
@@ -88,6 +96,8 @@ struct ParameterDescription
     const char* labelForMinimum = nullptr;     ///< Optional text shown at the minimum, e.g. "Off".
     /** One line explaining what the knob does, shown in the module info, the module browser and as tooltip. */
     const char* helpText = "";
+    /** The knob layout version that added this knob to its module (0 = it was there from the start). */
+    int addedInKnobLayout = 0;
 
     bool isUsed() const noexcept { return kind != ParameterKind::Unused; }
 
@@ -96,6 +106,14 @@ struct ParameterDescription
     {
         auto copy = *this;
         copy.helpText = text;
+        return copy;
+    }
+
+    /** @return A copy of this description marked as added in the given knob layout version. */
+    ParameterDescription addedInLayout (int knobLayoutVersion) const noexcept
+    {
+        auto copy = *this;
+        copy.addedInKnobLayout = knobLayoutVersion;
         return copy;
     }
 };

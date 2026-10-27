@@ -252,11 +252,18 @@ const ModuleDescription* createModuleTable()
                 .withHelp ("Which repeats are made louder by Accent Boost."),
             // Page 2 (added in 0.7.0)
             integerParameter ("Accent Boost", 0, 64, 25)
-                .withHelp ("How many velocity steps louder accented repeats are."),
-            percentParameter ("Length", 10, 100, 50).withHelp ("How long each repeat lasts, as a share of a step.") },
+                .withHelp ("How many velocity steps louder accented repeats are.")
+                .addedInLayout (1),
+            percentParameter ("Length", 10, 100, 50)
+                .withHelp ("How long each repeat lasts, as a share of a step.")
+                .addedInLayout (1),
+            // Added in 0.9.0
+            percentParameter ("Chance", 0, 100, 100)
+                .withHelp ("Probability that a repeat plays; the key you press always sounds.")
+                .addedInLayout (2) },
           "Ratchets: every held note is played again and again on the tempo grid, a held chord repeats as a "
           "chord. The key you press sounds immediately, the repeats follow on the grid. Releasing a key stops "
-          "its repeats." },
+          "its repeats. Below 100 % Chance, some repeats rest, so the ratchet gets gaps." },
 
         // Added in 0.5.0 ---------------------------------------------------------------------------
         { "Note Split",

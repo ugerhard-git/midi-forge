@@ -4,6 +4,7 @@
  */
 #include "GeneratorModules.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -561,8 +562,9 @@ private:
         velocitySource,
         swingPercent,
         accentPattern,
-        accentBoost,      ///< page 2
-        noteLengthPercent ///< page 2
+        accentBoost,       ///< page 2
+        noteLengthPercent, ///< page 2
+        chancePercent      ///< page 2 (added in 0.9.0)
     };
     enum VelocitySource
     {
@@ -688,6 +690,14 @@ private:
         const bool isAccented =
             isAccentedStep (stepNumber, stepLength, integerParameter (parameterValues, accentPattern));
         const bool usesAftertouch = integerParameter (parameterValues, velocitySource) == aftertouch;
+
+        // Chance: one decision per step for all held keys, so a chord plays or rests as a whole.
+        // Only when a key is due, so the random sequence doesn't depend on steps without notes.
+        const int chance = integerParameter (parameterValues, chancePercent);
+        const bool anyKeyIsDue = std::any_of (heldNotes.begin(), heldNotes.end(), [stepTime] (const HeldNote& held)
+                                              { return stepTime >= held.stepsBlockedUntil; });
+        if (anyKeyIsDue && chance < 100 && randomUnitValue() * 100.0f >= (float) chance)
+            return; // this step rests
 
         for (auto& held : heldNotes)
         {

@@ -5,6 +5,7 @@
 #include "../TestFramework.h"
 #include "ChainTestRig.h"
 
+#include <algorithm>
 #include <cmath>
 
 using namespace testing;
@@ -125,4 +126,16 @@ TEST_CASE (
     EXPECT (getSearchRelevance (repeater, "") == SearchRelevance::inName);
 
     EXPECT (moduleMatchesSearch (getModuleDescription (ModuleType::Empty), "clear"));
+}
+
+TEST_CASE ("descriptions: knobs added later name a knob layout version that exists")
+{
+    int newestVersionUsed = 0;
+    for (int type = 0; type < numModuleTypes; ++type)
+        for (const auto& parameter : getModuleDescription (type).parameters)
+        {
+            EXPECT (parameter.addedInKnobLayout >= 0 && parameter.addedInKnobLayout <= currentKnobLayoutVersion);
+            newestVersionUsed = std::max (newestVersionUsed, parameter.addedInKnobLayout);
+        }
+    EXPECT (newestVersionUsed == currentKnobLayoutVersion);
 }

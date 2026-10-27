@@ -147,9 +147,22 @@ private:
     /** Added in 0.7.0, after all older parameters: slot parameters E-H. */
     void addSecondPageSlotParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
     std::unique_ptr<juce::AudioParameterFloat> createModuleParameter (int slotIndex, int parameterIndex, int version);
-    /** The parameter state plus the shown knob pages, as saved in projects and user presets. */
+    /**
+     * The parameter state plus the shown knob pages and the knob layout version, as saved in projects and
+     * user presets.
+     */
     juce::ValueTree copyStateWithPages();
     void restoreShownPages (const juce::ValueTree& state);
+    /**
+     * @return The knob layout version a saved state was written with (see currentKnobLayoutVersion).
+     *         States from before the version was stored are recognised by what they contain.
+     */
+    static int getKnobLayoutVersionOf (const juce::ValueTree& state);
+    /**
+     * After loading a state saved with an older knob layout: sets the knobs that the loaded modules gained
+     * since then to their defaults (the state holds meaningless values for them).
+     */
+    void resetKnobsAddedAfter (int savedKnobLayoutVersion);
     void readEngineSettings();
     BlockContext readBlockContext (int numSamples);
     void publishReadoutsForEditor();
@@ -222,6 +235,7 @@ private:
     UserPresetLibrary userPresets;
     std::array<std::atomic<int>, numSlots> shownPages {};
     static constexpr const char* shownPagesProperty = "shownPages";
+    static constexpr const char* knobLayoutProperty = "knobLayout";
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiForgeProcessor)
 };

@@ -32,7 +32,9 @@ These rules apply to every change, by people and by AI assistants alike. AI-spec
    `MidiModule::process`) must be real-time safe: no memory allocation, no locks, no file or network
    access, no unbounded loops. Reserve memory in constructors and cap queue sizes.
 9. **Compatibility.** Parameter IDs, `ModuleType` values and choice label order are stored in user
-   projects: never rename, reorder or remove them – only append.
+   projects: never rename, reorder or remove them – only append. A knob added to an existing module is
+   marked with `addedInLayout (n)` and raises `currentKnobLayoutVersion`, so old projects get its default
+   (see docs/ARCHITECTURE.md, "Knobs added to existing modules").
 10. **New features are discussed first.** When the owner asks about a possible feature, discuss and plan
     it, then wait for an explicit go before writing code or building. Discussed features that are not
     built yet are recorded in [docs/IDEAS.md](docs/IDEAS.md).

@@ -133,6 +133,16 @@ test in `Tests/Engine/ModuleChainTests.cpp` checks them across hundreds of rando
 New module types are appended to `ModuleType` (their numbers are stored in projects); the module browser
 groups modules by category, so a new Generator still appears under *Generators*.
 
+### Knobs added to existing modules
+
+A module may gain knobs in a later version (Repeater: E and F in 0.7.0, G in 0.9.0). Old projects and presets
+hold 0 for such a knob (its value while unused), which can be a bad setting (Chance 0 %). So every
+`ParameterDescription` names the knob layout version that added it (`addedInKnobLayout`), states store
+`knobLayout` (= `currentKnobLayoutVersion`), and after loading a project or user preset
+`MidiForgeProcessor::resetKnobsAddedAfter()` sets newer knobs of the loaded modules to their defaults.
+States without the property are from 0.7.0 (they have `shownPages` / `s1_e`) or older. When adding a knob to
+an existing module: mark it with `addedInLayout (n)` and raise `currentKnobLayoutVersion` to n.
+
 ## Module browser and help texts
 
 - Every `ModuleDescription` carries a one-line `summary` (shown under the module menu), `details` (a few

@@ -705,9 +705,10 @@ TEST_CASE ("pages: the Repeater's page-2 knobs exist on the host with their own 
 {
     MidiForgeProcessor processor;
     processor.loadModule (0, (int) ModuleType::Repeater);
-    EXPECT (processor.parameters.getParameter ("s1_e")->getCurrentValueAsText() == "25");  // accent boost
-    EXPECT (processor.parameters.getParameter ("s1_f")->getCurrentValueAsText() == "50%"); // note length
-    EXPECT (processor.parameters.getParameter ("s1_g")->getCurrentValueAsText() == "-");   // unused
+    EXPECT (processor.parameters.getParameter ("s1_e")->getCurrentValueAsText() == "25");   // accent boost
+    EXPECT (processor.parameters.getParameter ("s1_f")->getCurrentValueAsText() == "50%");  // note length
+    EXPECT (processor.parameters.getParameter ("s1_g")->getCurrentValueAsText() == "100%"); // chance
+    EXPECT (processor.parameters.getParameter ("s1_h")->getCurrentValueAsText() == "-");    // unused
 
     // Factory presets with a Repeater keep the module defaults on page 2.
     const auto& presets = getFactoryPresets();
@@ -772,6 +773,16 @@ TEST_CASE ("stepped knobs: knobs snap to the steps of choice and whole-number pa
     EXPECT (std::abs (rateKnob.knob.getValue() * 11.0 - std::round (rateKnob.knob.getValue() * 11.0)) < 1.0e-9);
 }
 
+namespace
+{
+/** @return The text the host shows for a slot parameter, in the units of the loaded module. */
+juce::String hostTextOf (MidiForgeProcessor& processor, int slotIndex, int parameterIndex)
+{
+    return processor.parameters.getParameter (ParameterIds::moduleParameter (slotIndex, parameterIndex))
+        ->getCurrentValueAsText();
+}
+} // namespace
+
 TEST_CASE ("pages: projects from 0.6.0 load with page-2 defaults and keep their route targets")
 {
     // A 0.6.0 project: slot 8 holds a Repeater, route 1 targets "Slot 8 D" (target number 32).
@@ -795,6 +806,70 @@ TEST_CASE ("pages: projects from 0.6.0 load with page-2 defaults and keep their 
     EXPECT (processor.getModulationTargetName (32) == juce::String::fromUTF8 ("Slot 8 \xc2\xb7 Accent"));
     EXPECT (processor.getModulationTargetName (modulationTargetIndex (7, 5)) ==
             juce::String::fromUTF8 ("Slot 8 \xc2\xb7 Length"));
+    // The knobs the Repeater gained later start at their defaults, not at the 0 an old project implies.
+    EXPECT (hostTextOf (processor, 7, 4) == "25");
+    EXPECT (hostTextOf (processor, 7, 5) == "50%");
+    EXPECT (hostTextOf (processor, 7, 6) == "100%");
+}
+
+namespace
+{
+/** A Repeater project as 0.7.0 saved it: pages and E-H stored, but no knob layout version. */
+juce::MemoryBlock createRepeaterProjectFrom070()
+{
+    juce::XmlElement oldState ("MidiForge");
+    oldState.setAttribute ("shownPages", "1,0,0,0,0,0,0,0");
+    const auto addParameter = [&oldState] (const juce::String& id, double value)
+    {
+        auto* parameter = oldState.createNewChildElement ("PARAM");
+        parameter->setAttribute ("id", id);
+        parameter->setAttribute ("value", value);
+    };
+    addParameter ("s1_type", (double) ModuleType::Repeater);
+    addParameter ("s1_e", 40.0 / 64.0); // Accent Boost 40
+    addParameter ("s1_f", 0.5);         // Length 55 %
+    addParameter ("s1_g", 0.0);         // unused in 0.7.0
+    juce::MemoryBlock project;
+    juce::AudioProcessor::copyXmlToBinary (oldState, project);
+    return project;
+}
+} // namespace
+
+TEST_CASE ("repeater chance: 0.7.0 projects keep page 2 and get Chance 100 %; new projects keep their Chance")
+{
+    const auto oldProject = createRepeaterProjectFrom070();
+    MidiForgeProcessor processor;
+    processor.setStateInformation (oldProject.getData(), (int) oldProject.getSize());
+    EXPECT (processor.getModuleType (0) == (int) ModuleType::Repeater);
+    EXPECT (hostTextOf (processor, 0, 4) == "40");
+    EXPECT (hostTextOf (processor, 0, 5) == "55%");
+    EXPECT (hostTextOf (processor, 0, 6) == "100%");
+    EXPECT (processor.getShownPage (0) == 1);
+
+    // Saved now, a Chance of 30 % survives.
+    processor.parameters.getParameter (ParameterIds::moduleParameter (0, 6))->setValueNotifyingHost (0.3f);
+    juce::MemoryBlock newProject;
+    processor.getStateInformation (newProject);
+    MidiForgeProcessor reloaded;
+    reloaded.setStateInformation (newProject.getData(), (int) newProject.getSize());
+    EXPECT (hostTextOf (reloaded, 0, 6) == "30%");
+}
+
+TEST_CASE ("repeater chance: user presets from 0.7.0 get Chance 100 %")
+{
+    TemporaryPresetFolder temporaryFolder;
+    temporaryFolder.folder.createDirectory();
+    const auto oldProject = createRepeaterProjectFrom070();
+    const auto oldState = juce::ValueTree::fromXml (
+        *juce::AudioProcessor::getXmlFromBinary (oldProject.getData(), (int) oldProject.getSize()));
+    UserPresetLibrary library (temporaryFolder.folder);
+    EXPECT (library.save ("Old Ratchet", oldState).isEmpty());
+
+    MidiForgeProcessor processor;
+    processor.setUserPresetFolder (temporaryFolder.folder);
+    EXPECT (processor.loadUserPreset ("Old Ratchet"));
+    EXPECT (hostTextOf (processor, 0, 4) == "40");
+    EXPECT (hostTextOf (processor, 0, 6) == "100%");
 }
 
 //==============================================================================
@@ -929,7 +1004,8 @@ TEST_CASE ("module info: shows the details and one line per knob, with page hint
     EXPECT (text.contains (juce::String ("A  Rate")));
     EXPECT (text.contains (juce::String ("E  Accent Boost (page 2)")));
     EXPECT (text.contains (repeater.parameters[5].helpText));
-    EXPECT (! text.contains ("G  "));
+    EXPECT (text.contains (juce::String ("G  Chance (page 2)")));
+    EXPECT (! text.contains ("H  "));
     EXPECT (info.getHeightForWidth (380) > info.getHeightForWidth (2000));
 
     info.showModule (-5); // out of range shows the Empty slot
