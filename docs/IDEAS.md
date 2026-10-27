@@ -24,14 +24,18 @@ Applies to the slot knobs (A–D) and the LFO knobs (Rate in Tempo mode, Phase s
 whether host automation should also be stepped (it can stay continuous; the module rounds anyway), and
 how mouse-wheel and fine-drag (Shift) behave on stepped knobs.
 
-### LFO polarity: bipolar or unipolar
+### LFO polarity switch (Bipolar / Unipolar)
 
-The owner asked for LFOs that affect values both positively and negatively ("through zero"). Today every
-LFO is already bipolar: it swings the parameter above *and* below the knob's position (output −1 … +1,
-and a negative amount inverts it). Open question for the owner: is the bipolar behaviour what was meant,
-or is the wish an LFO **polarity switch** per LFO (Bipolar −1 … +1 / Unipolar 0 … +1, so the LFO only pushes
-the value up from the knob position, or only down with a negative amount)? A switch would be one new
-host parameter per LFO (appended) plus a toggle in each LFO panel.
+Agreed direction with the owner; details to discuss before building. Background: LFOs are bipolar today
+(−1 … +1, swinging the value below *and* above the knob position). For knobs at the bottom of their range
+(Inversion 0, Octaves 1, Repeats 1 …) the lower half is cut off at the minimum, so half the LFO is wasted.
+
+- A **Polarity** switch per LFO: *Bipolar* (−1 … +1, today's behaviour, the default) or *Unipolar* (0 … +1):
+  the LFO only pushes the value up from the knob position, or only down with a negative amount.
+- One new automatable host parameter per LFO (appended, so existing projects keep bipolar LFOs) and a
+  toggle in each LFO panel; the waveform preview shows the 0 … +1 range when unipolar.
+- Open points: per LFO or per route? Should "Restart on key" plus Unipolar start at 0 (e.g. Saw Up, Sine
+  starting at its lowest point)?
 
 ### Six knobs per slot (A–F)
 
