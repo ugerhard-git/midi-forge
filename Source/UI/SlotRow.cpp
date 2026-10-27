@@ -126,17 +126,16 @@ SlotRow::SlotRow (MidiForgeProcessor& processorToControl, int slotIndexToShow)
 void SlotRow::fillModuleMenu()
 {
     // Menu item IDs are module type + 1, because JUCE reserves ID 0 for "nothing selected".
+    // Modules are grouped by category; within a category they keep their ModuleType order, so modules
+    // added in later versions (appended to ModuleType) still appear under their own category.
     moduleMenu.addItem (getModuleDescription (ModuleType::Empty).name, 1);
-    auto previousCategory = ModuleCategory::None;
-    for (int type = 1; type < numModuleTypes; ++type)
+    for (auto category :
+         { ModuleCategory::Filter, ModuleCategory::Transform, ModuleCategory::Generator, ModuleCategory::Randomizer })
     {
-        const auto& description = getModuleDescription (type);
-        if (description.category != previousCategory)
-        {
-            moduleMenu.addSectionHeading (getCategoryName (description.category));
-            previousCategory = description.category;
-        }
-        moduleMenu.addItem (description.name, type + 1);
+        moduleMenu.addSectionHeading (getCategoryName (category));
+        for (int type = 1; type < numModuleTypes; ++type)
+            if (getModuleDescription (type).category == category)
+                moduleMenu.addItem (getModuleDescription (type).name, type + 1);
     }
 }
 

@@ -38,6 +38,10 @@ const char* const snapDirectionLabels[] = { "Nearest", "Up", "Down" };
 const char* const arpeggiatorPatternLabels[] = { "Up", "Down", "Up/Down", "Random", "As Played" };
 const char* const chordVoicingLabels[] = { "Close", "Open", "Bass -1 Oct" };
 const char* const randomPitchModeLabels[] = { "Any", "Octaves", "5ths + Oct" };
+const char* const repeaterDivisionLabels[] = { "1/4D", "1/4",  "1/8D",  "1/4T", "1/8",   "1/16D",
+                                               "1/8T", "1/16", "1/16T", "1/32", "1/32T", "1/64" };
+const char* const repeaterVelocityLabels[] = { "Last Note", "Aftertouch" };
+const char* const repeaterAccentLabels[] = { "Off", "Every 2nd", "Every 3rd", "Every 4th", "On the Beat" };
 const char* const echoDivisionLabels[] = { "1/32", "1/16T", "1/16", "1/16D", "1/8T", "1/8",
                                            "1/8D", "1/4T",  "1/4",  "1/4D",  "1/2",  "1 Bar" };
 const char* const arpeggiatorDivisionLabels[] = { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
@@ -170,6 +174,14 @@ const ModuleDescription* createModuleTable()
           "Randomly shifts some of the notes.",
           { integerParameter ("Range", 0, 24, 12, " st"), percentParameter ("Chance", 0, 100, 50),
             choiceParameter ("Mode", randomPitchModeLabels, 1), unusedParameter() } },
+
+        // Added in 0.4.0 ---------------------------------------------------------------------------
+        { "Repeater",
+          ModuleCategory::Generator,
+          "Retriggers held notes on the tempo grid (ratchets).",
+          { choiceParameter ("Rate", repeaterDivisionLabels, 7),
+            choiceParameter ("Velocity", repeaterVelocityLabels, 0), percentParameter ("Swing", 50, 75, 50),
+            choiceParameter ("Accent", repeaterAccentLabels, 0) } },
     };
     return table;
 }
@@ -189,6 +201,14 @@ const NoteDivision arpeggiatorDivisions[] = {
     { "1/4", 1.0 }, { "1/8", 0.5 }, { "1/8T", 1.0 / 3.0 }, { "1/16", 0.25 }, { "1/16T", 1.0 / 6.0 }, { "1/32", 0.125 },
 };
 const int numArpeggiatorDivisions = (int) std::size (arpeggiatorDivisions);
+
+// Ordered from slow to fast, so turning the knob to the right speeds up the ratchet.
+const NoteDivision repeaterDivisions[] = {
+    { "1/4D", 1.5 },        { "1/4", 1.0 },     { "1/8D", 0.75 },        { "1/4T", 2.0 / 3.0 },
+    { "1/8", 0.5 },         { "1/16D", 0.375 }, { "1/8T", 1.0 / 3.0 },   { "1/16", 0.25 },
+    { "1/16T", 1.0 / 6.0 }, { "1/32", 0.125 },  { "1/32T", 1.0 / 12.0 }, { "1/64", 0.0625 },
+};
+const int numRepeaterDivisions = (int) std::size (repeaterDivisions);
 
 const Scale scales[] = {
     { "Major", makeSemitoneMask ({ 0, 2, 4, 5, 7, 9, 11 }) },
@@ -218,6 +238,7 @@ const int numChordShapes = (int) std::size (chordShapes);
 
 static_assert (std::size (echoDivisionLabels) == std::size (echoDivisions), "echo labels and table differ");
 static_assert (std::size (arpeggiatorDivisionLabels) == std::size (arpeggiatorDivisions), "arp labels differ");
+static_assert (std::size (repeaterDivisionLabels) == std::size (repeaterDivisions), "repeater labels differ");
 static_assert (std::size (scaleLabels) == std::size (scales), "scale labels and table differ");
 static_assert (std::size (chordLabels) == std::size (chordShapes), "chord labels and table differ");
 

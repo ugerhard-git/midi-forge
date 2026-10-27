@@ -7,10 +7,11 @@ and randomizers – in front of any instrument.
 
 - **Formats:** VST3 and CLAP · **Systems:** Windows, macOS (Apple Silicon + Intel)
 - **Made for:** Reaper and Bitwig Studio (any host that supports MIDI-effect plug-ins should work)
-- **14 modules:** Note Range, Velocity Range, Channel Filter, Event Blocker, Transpose, Scale Quantize,
-  Velocity Curve, Channel Remap, Arpeggiator, Chord, Note Echo, Humanize, Probability, Random Pitch
+- **15 modules:** Note Range, Velocity Range, Channel Filter, Event Blocker, Transpose, Scale Quantize,
+  Velocity Curve, Channel Remap, Arpeggiator, Chord, Note Echo, Repeater (ratchets), Humanize,
+  Probability, Random Pitch
 - **4 LFOs and 8 modulation routes** move any module setting: tempo-synced or free, 7 waveforms incl. random
-- **Your own presets**, saved as files you can back up and share, plus 8 factory presets
+- **Your own presets**, saved as files you can back up and share, plus 9 factory presets
 - No stuck notes, even when you change modules while playing
 
 ## Download

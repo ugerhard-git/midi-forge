@@ -18,7 +18,7 @@ This document explains how the code is organised and why. It is kept true with e
  Source/Engine/ModuleChain         8 slots, note-consistency rules
    │  per slot
    ▼
- Source/Engine/Modules/*           the 14 modules (all derived from MidiModule)
+ Source/Engine/Modules/*           the 15 modules (all derived from MidiModule)
 ```
 
 The **engine** (`Source/Engine`) is plain C++17 without JUCE. It can be built and tested on any
@@ -101,13 +101,18 @@ test in `Tests/Engine/ModuleChainTests.cpp` checks them across hundreds of rando
 - **`NoteMappingModule`** – decides everything at note-on time. Subclasses implement `createNoteOns()`
   and optionally `transformOtherEvent()`. Used by filters, transforms, Chord, Probability, Random Pitch.
 - **`SchedulingModule`** – sends events in the future using a queue of absolute sample times
-  (`BlockContext::blockStartSample`). Used by Arpeggiator, Note Echo and Humanize.
+  (`BlockContext::blockStartSample`). Used by Arpeggiator, Repeater, Note Echo and Humanize.
+
+New module types are appended to `ModuleType` (their numbers are stored in projects); the editor's
+module menu groups modules by category, so a new Generator still appears under *Generators*.
 
 ### Timing
 
 - The chain counts samples since `prepare()`; scheduled events use that absolute time.
-- The Arpeggiator follows the host's quarter-note position (`ppqPositionAtBlockStart`) while the
-  transport runs, and its own clock otherwise. Gate lengths are capped one sample short of the step so
+- The Arpeggiator and the Repeater follow the host's quarter-note position (`ppqPositionAtBlockStart`)
+  while the transport runs, and their own clock otherwise. The Repeater numbers its grid steps (swing
+  delays odd steps, accents are chosen by step number) and re-synchronises after transport jumps or a
+  switch between host and own clock, so steps are never replayed or fired in a burst. Gate lengths are capped one sample short of the step so
   a note always ends before the next starts.
 - Note Echo computes its delay from the tempo at note-on.
 

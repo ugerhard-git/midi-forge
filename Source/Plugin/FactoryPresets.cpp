@@ -35,7 +35,9 @@ const std::vector<FactoryPreset>& getFactoryPresets()
     const float keep = keepDefault;
 
     // Parameter positions (A..D) used by the routes
-    constexpr int chordInversion = 1, arpeggiatorGate = 3, echoPitch = 3;
+    constexpr int chordInversion = 1, arpeggiatorGate = 3, echoPitch = 3, repeaterRate = 0;
+    constexpr float repeaterSixteenth = 7, repeaterLastNote = 0, repeaterOnTheBeat = 4;
+    constexpr int halfBar = 4;
 
     static const std::vector<FactoryPreset> presets = {
         { "Init", {}, {}, {} },
@@ -88,6 +90,13 @@ const std::vector<FactoryPreset>& getFactoryPresets()
             { ModuleType::ScaleQuantize, { rootC, minorPentatonicScale, 0, keep } } },
           { { 0, syncedLfo (LfoWaveform::SmoothRandom, oneBar) } },
           { { 0, 0, echoPitch, 25.0f } } }, // echo pitch step drifts up and down
+
+        // Added in 0.4.0 -------------------------------------------------------------------------
+        { "Ratchet Chords",
+          { { ModuleType::Chord, { minor7Chord, 0, 1, 80 } },
+            { ModuleType::Repeater, { repeaterSixteenth, repeaterLastNote, 58, repeaterOnTheBeat } } },
+          { { 0, syncedLfo (LfoWaveform::SampleAndHold, halfBar) } },
+          { { 0, 1, repeaterRate, 12.0f } } }, // the ratchet speed jumps every half bar
     };
     return presets;
 }

@@ -12,32 +12,13 @@ When a feature is implemented, remove it here and describe it in [MANUAL.md](MAN
 
 ## Planned
 
-### Repeater (ratchet) module
-
-A Generator module that retriggers every held note on a tempo grid, for ratchet effects. Design agreed;
-waiting for the go.
-
-- **All held notes repeat together** on each step (a held chord ratchets as a chord).
-- The **first hit plays immediately** when a key is pressed; the repeats are **quantized** to the grid.
-  The grid follows the host while the transport runs and runs at project tempo when it is stopped
-  (like the Arpeggiator). Releasing a key stops its repeats cleanly.
-- **Four knobs:**
-  - *Rate*: 1/4 … 1/64, incl. triplets (T) and dotted (D)
-  - *Velocity*: *Last Note* (all repeats use the velocity of the most recently pressed key) or *Aftertouch*
-    (poly pressure per note if the keyboard sends it, otherwise channel pressure; the note's velocity until
-    pressure arrives). Aftertouch messages still pass through.
-  - *Swing*: delays every second step, 50 % (straight) … 75 % (heavy shuffle)
-  - *Accent*: Off, every 2nd step, every 3rd step, every 4th step, On the beat
-- Fixed for now: accent strength +25 velocity, note length 50 % of a step (see "Six knobs per slot").
-- Tests: grid lock and free running, immediate first hit, chord repeats, release stops repeats without
-  stuck notes, both velocity sources incl. poly and channel pressure, swing timing, every accent pattern,
-  stress test includes the module.
+(nothing at the moment)
 
 ## Ideas
 
 ### Six knobs per slot (A–F)
 
-Inspired by the Repeater, which would like adjustable **accent strength** and **note length** besides
+Inspired by the Repeater (0.4.0), which would like adjustable **accent strength** and **note length** besides
 rate, velocity source, swing and accent pattern. Other modules could use the extra knobs later too
 (e.g. Arpeggiator swing, Note Echo note length).
 

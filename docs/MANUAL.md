@@ -187,6 +187,22 @@ quieter, and optionally transposed. Every echo is as long as the original note.
 | Feedback | 10 … 100 % | Each echo's velocity as a share of the previous one. Echoes stop when they get too quiet |
 | Pitch | −12 … +12 st | Transposition added with every echo (e.g. +7 makes a rising cascade of fifths) |
 
+**Repeater** – ratchets: while you hold keys, every held note is played again and again on the tempo grid.
+A held chord repeats as a chord. The key you press sounds **immediately**; the repeats then follow on the
+grid. While your DAW plays, the grid is locked to its bars; when it is stopped, the Repeater runs at the
+project tempo, counting from your first key press. Releasing a key stops its repeats. Each repeat lasts
+half a step. If you press a key just before a grid step, that step is skipped for this key, so it never
+double-triggers.
+
+| Knob | Range | Meaning |
+|------|-------|---------|
+| Rate | 1/4D, 1/4, 1/8D, 1/4T, 1/8, 1/16D, 1/8T, 1/16, 1/16T, 1/32, 1/32T, 1/64 | Distance between repeats (D = dotted, T = triplet); turning right makes it faster |
+| Velocity | Last Note / Aftertouch | *Last Note:* all repeats use the velocity of the key you pressed last. *Aftertouch:* how hard you press sets the velocity, live – per note if your keyboard sends polyphonic aftertouch, otherwise channel aftertouch; until you press, each note uses its own velocity. Aftertouch also still reaches your synth |
+| Swing | 50 … 75 % | Delays every second repeat. 50 % is straight, 66 % is a triplet feel, 75 % a heavy shuffle |
+| Accent | Off, Every 2nd, Every 3rd, Every 4th, On the Beat | Makes these repeats 25 velocity steps louder. Steps are counted on the grid (from your first key press when the transport is stopped). *On the Beat* accents repeats that fall on a quarter note |
+
+Tip: an LFO on *Rate* makes the ratchet speed change on its own (see the *Ratchet Chords* preset).
+
 ### Randomizers (purple)
 
 **Humanize** – makes playing less mechanical. Each note is delayed by a random amount and its velocity
@@ -307,6 +323,7 @@ than 256 KB are refused, and values outside a parameter's range are limited to t
 | Bass Split to Ch 2 | Note Range (up to B2) → Channel Remap (to channel 2) → Velocity Curve (fixed 100) |
 | Breathing Arp | Chord (Maj7) → Arpeggiator (1/16, Up/Down, 2 octaves); LFO 1 (triangle, 2 bars) moves the gate, LFO 2 (S&H, 1 bar) picks a new chord inversion every bar |
 | Wandering Echo | Note Echo (1/8 dotted, 5 repeats) → Scale Quantize (C minor pentatonic); LFO 1 (smooth random, 1 bar) lets the echo pitch step drift |
+| Ratchet Chords | Chord (Min7, open voicing) → Repeater (1/16, swing 58 %, accents on the beat); LFO 1 (S&H, 1/2 bar) switches the ratchet speed between 1/8T, 1/16 and 1/16T |
 
 Your current settings are also saved with your DAW project, together with the name of the loaded preset.
 Your DAW's own program list shows only the factory presets; your DAW's preset functions keep working too.

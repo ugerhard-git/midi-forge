@@ -39,6 +39,8 @@ enum class ModuleType : int
     Humanize,
     Probability,
     RandomPitch,
+    // Added in 0.4.0 (appended: the numbers are stored in projects)
+    Repeater, ///< Generator
 
     Count
 };
@@ -134,6 +136,8 @@ extern const NoteDivision echoDivisions[];
 extern const int numEchoDivisions;
 extern const NoteDivision arpeggiatorDivisions[];
 extern const int numArpeggiatorDivisions;
+extern const NoteDivision repeaterDivisions[];
+extern const int numRepeaterDivisions;
 
 /** A scale as a bit mask: bit n is set if the scale contains the note n semitones above the root. */
 struct Scale
