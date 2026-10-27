@@ -1,11 +1,12 @@
 /**
  * @file SlotRow.h
- * @brief One row of the editor: power switch, module menu, four knobs (with page arrows for modules that have
- *        more than four parameters) and move buttons for one slot.
+ * @brief One row of the editor: power switch, module menu with ⓘ button, four knobs (with page arrows for
+ *        modules that have more than four parameters) and move buttons for one slot.
  */
 #pragma once
 
 #include "Plugin/PluginProcessor.h"
+#include "Plugin/RecentModuleList.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -48,12 +49,30 @@ private:
 };
 
 /**
+ * Looks like a drop-down menu, but opens the searchable ModuleBrowser instead of a plain menu
+ * (by mouse click or by pressing Return / Space while it has the focus).
+ */
+class ModuleMenu final : public juce::ComboBox
+{
+public:
+    std::function<void()> onOpenBrowser;
+    void showPopup() override
+    {
+        if (onOpenBrowser != nullptr)
+            onOpenBrowser();
+    }
+};
+
+/**
  * Shows and edits one slot. The row polls the processor (refreshFromProcessor) instead of listening,
  * so changes from host automation, presets and other rows all show up the same way.
  *
  * Four knobs are visible at a time. Modules with more than four parameters show ◀ ▶ arrows to switch
  * between page 1 (A-D) and page 2 (E-H); a yellow dot on an arrow means an LFO or Random modulator
  * moves a knob on the page it leads to.
+ *
+ * The module menu opens the ModuleBrowser; the ⓘ button next to it shows the module's full description
+ * and what every knob does.
  */
 class SlotRow final : public juce::Component
 {
@@ -67,8 +86,17 @@ public:
     /** Updates the row from the processor's current parameter values. Call regularly from a timer. */
     void refreshFromProcessor();
 
+    /** Opens the module browser below the module menu. */
+    void openModuleBrowser();
+    /** Opens the info pop-up of the loaded module next to the ⓘ button. */
+    void openModuleInfo();
+    /** Loads a module picked in the module browser and remembers it as recently used. */
+    void moduleChosenInBrowser (int moduleType);
+
 private:
     void fillModuleMenu();
+    /** @return The editor this row is in (call-out boxes are shown inside it), or nullptr. */
+    juce::Component* findCallOutParent() const;
     void showModule (int moduleType, int page);
     void updateValueTexts();
     void updateModulationRings();
@@ -87,8 +115,10 @@ private:
 
     juce::ToggleButton powerSwitch;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> powerSwitchAttachment;
-    juce::ComboBox moduleMenu;
+    ModuleMenu moduleMenu;
+    juce::TextButton moduleInfoButton;
     juce::Label moduleSummary;
+    juce::SharedResourcePointer<SharedRecentModuleList> recentModules;
     ParameterKnob parameterKnobs[numParametersPerPage];
     juce::TextButton previousPageButton, nextPageButton;
     juce::Label pageLabel;

@@ -13,6 +13,7 @@ and randomizers – in front of any instrument.
 - **4 LFOs, 4 Random modulators and 8 modulation routes** move any module setting: LFOs tempo-synced or
   free with 7 waveforms; Random modulators pick a new value per played note or chord; bipolar or unipolar per route
 - **Your own presets**, saved as files you can back up and share, plus 11 factory presets
+- **Module browser with search** and built-in help for every module and knob
 - No stuck notes, even when you change modules while playing
 
 ## Download

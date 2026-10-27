@@ -43,10 +43,10 @@ from `clap-juce-extensions`.
 | `Source/Plugin/ParameterIds.h` | Host parameter IDs (stored in projects – never rename) |
 | `Source/Plugin/FactoryPresets.*` | The factory presets (JUCE-free, so the engine tests can check them too) |
 | `Source/Plugin/UserPresetLibrary.*` | User preset files: folder, save/load/rename/delete/import, validation, name cleaning |
-| `Source/UI/*` | Editor: `MidiForgeEditor` (tabs), `SlotRow` + `ParameterKnob` (Chain tab), `ModulationPage` with `LfoPanel`, `WaveformPreview`, `NoteRandomPanel`, `RouteRow`, `CompactKnob` (Modulation tab), `PresetBar` (◀ menu ▶, Save, ⋯ menu with async dialogs). `ParameterKnob::attachTo()` sets the knob's
-step interval from the parameter description, so stepped parameters snap while dragging, `ForgeLookAndFeel`, `Theme` |
+| `Source/Plugin/RecentModuleList.*` | The recently used modules of the module browser, shared by all instances via `juce::SharedResourcePointer`, saved in `Documents/MIDI Forge/Settings.xml` |
+| `Source/UI/*` | Editor: `MidiForgeEditor` (tabs), `SlotRow` + `ParameterKnob` (Chain tab), `ModuleBrowser` + `ModuleInfoView` (pop-ups of the module menu and the ⓘ button), `ModulationPage` with `LfoPanel`, `WaveformPreview`, `NoteRandomPanel`, `RouteRow`, `CompactKnob` (Modulation tab), `PresetBar` (◀ menu ▶, Save, ⋯ menu with async dialogs), `ForgeLookAndFeel`, `Theme`. `ParameterKnob::attachTo()` sets the knob's step interval from the parameter description, so stepped parameters snap while dragging |
 | `Tests/Engine/*` | Engine tests (no JUCE) |
-| `Tests/Plugin/*` | Tests of the JUCE layer; can also render both editor pages to PNGs |
+| `Tests/Plugin/*` | Tests of the JUCE layer; can also render both editor pages and the module pop-ups to PNGs |
 | `docs/` | This document, the user manual, images |
 | `packaging/` | Files that go into the release zips |
 
@@ -130,8 +130,25 @@ test in `Tests/Engine/ModuleChainTests.cpp` checks them across hundreds of rando
 - **`SchedulingModule`** – sends events in the future using a queue of absolute sample times
   (`BlockContext::blockStartSample`). Used by Arpeggiator, Repeater, Note Echo and Humanize.
 
-New module types are appended to `ModuleType` (their numbers are stored in projects); the editor's
-module menu groups modules by category, so a new Generator still appears under *Generators*.
+New module types are appended to `ModuleType` (their numbers are stored in projects); the module browser
+groups modules by category, so a new Generator still appears under *Generators*.
+
+## Module browser and help texts
+
+- Every `ModuleDescription` carries a one-line `summary` (shown under the module menu), `details` (a few
+  sentences) and, per parameter, a one-line `helpText` (added with `ParameterDescription::withHelp()`).
+  `ModuleInfoView` shows details and help texts in the ⓘ pop-up and inside the browser; the knobs use the
+  help text as tooltip. An engine test makes sure no module or used knob lacks its text.
+- The module menu is a `ModuleMenu` (a `juce::ComboBox` whose `showPopup()` opens the `ModuleBrowser` in a
+  `juce::CallOutBox` inside the editor, so keyboard focus stays in the plug-in window). The combo box items
+  only provide the text of the closed menu.
+- Search: `getSearchRelevance()` (engine, JUCE-free) splits the text into words that must all appear,
+  ignoring case; it rates a match by where it was found (name > category/summary > details/knob names).
+  The browser lists every match by category and highlights the first best-rated one.
+- `RecentModuleList` keeps the last five modules picked in the browser (not those loaded by presets or
+  automation), newest first. The file `Documents/MIDI Forge/Settings.xml` (`<MidiForgeSettings>`) is read
+  defensively (64 KB limit, own root tag, unknown or repeated module numbers skipped); saving keeps other
+  elements in the file and re-reads it first, so several plug-in instances don't overwrite each other.
 
 ### Timing
 

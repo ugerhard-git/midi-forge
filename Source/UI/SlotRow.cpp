@@ -4,6 +4,7 @@
  */
 #include "SlotRow.h"
 
+#include "ModuleBrowser.h"
 #include "Plugin/ParameterIds.h"
 #include "Theme.h"
 
@@ -100,15 +101,16 @@ SlotRow::SlotRow (MidiForgeProcessor& processorToControl, int slotIndexToShow)
         processor.parameters, ParameterIds::slotEnabled (slotIndex), powerSwitch);
     addAndMakeVisible (powerSwitch);
 
+    // The menu items only provide the text shown in the closed menu; picking happens in the module browser.
     fillModuleMenu();
-    moduleMenu.onChange = [this]
-    {
-        const int chosenType = moduleMenu.getSelectedId() - 1; // menu IDs are module type + 1
-        if (chosenType >= 0 && chosenType != processor.getModuleType (slotIndex))
-            processor.loadModule (slotIndex, chosenType);
-        refreshFromProcessor();
-    };
+    moduleMenu.onOpenBrowser = [this] { openModuleBrowser(); };
     addAndMakeVisible (moduleMenu);
+
+    moduleInfoButton.setButtonText ("i");
+    moduleInfoButton.setTooltip ("What this module does and what each knob means");
+    moduleInfoButton.setColour (juce::TextButton::buttonColourId, Theme::Colours::controlTrack.darker (0.2f));
+    moduleInfoButton.onClick = [this] { openModuleInfo(); };
+    addChildComponent (moduleInfoButton);
 
     moduleSummary.setFont (Theme::font (11.0f));
     moduleSummary.setColour (juce::Label::textColourId, Theme::Colours::secondaryText);
@@ -168,6 +170,50 @@ void SlotRow::fillModuleMenu()
     }
 }
 
+juce::Component* SlotRow::findCallOutParent() const
+{
+    if (auto* editor = findParentComponentOfClass<juce::AudioProcessorEditor>())
+        return editor;
+    return getTopLevelComponent();
+}
+
+void SlotRow::openModuleBrowser()
+{
+    auto browser =
+        std::make_unique<ModuleBrowser> (processor.getModuleType (slotIndex), recentModules->list.getModuleTypes(),
+                                         [safeThis = juce::Component::SafePointer<SlotRow> (this)] (int type)
+                                         {
+                                             if (safeThis != nullptr)
+                                                 safeThis->moduleChosenInBrowser (type);
+                                         });
+    auto* parent = findCallOutParent();
+    const auto pointAt =
+        parent != nullptr ? parent->getLocalArea (this, moduleMenu.getBounds()) : moduleMenu.getScreenBounds();
+    juce::CallOutBox::launchAsynchronously (std::move (browser), pointAt, parent);
+}
+
+void SlotRow::openModuleInfo()
+{
+    auto info = std::make_unique<ModuleInfoView>();
+    info->showModule (processor.getModuleType (slotIndex));
+    constexpr int infoWidth = 380;
+    info->setSize (infoWidth, info->getHeightForWidth (infoWidth));
+    auto* parent = findCallOutParent();
+    const auto pointAt = parent != nullptr ? parent->getLocalArea (this, moduleInfoButton.getBounds())
+                                           : moduleInfoButton.getScreenBounds();
+    juce::CallOutBox::launchAsynchronously (std::move (info), pointAt, parent);
+}
+
+void SlotRow::moduleChosenInBrowser (int moduleType)
+{
+    if (moduleType < 0 || moduleType >= numModuleTypes)
+        return;
+    if (moduleType != processor.getModuleType (slotIndex))
+        processor.loadModule (slotIndex, moduleType);
+    recentModules->list.moduleWasPicked (moduleType);
+    refreshFromProcessor();
+}
+
 void SlotRow::showModule (int moduleType, int page)
 {
     displayedModuleType = moduleType;
@@ -176,10 +222,11 @@ void SlotRow::showModule (int moduleType, int page)
     const auto accentColour = Theme::accentColourFor (description.category);
 
     moduleMenu.setSelectedId (moduleType + 1, juce::dontSendNotification);
-    moduleMenu.setTooltip (description.summary);
-    moduleSummary.setText (moduleType == 0 ? juce::String ("Choose a module")
-                                           : juce::String (getCategoryName (description.category)) +
-                                                 juce::String::fromUTF8 ("  \xc2\xb7  ") + description.summary,
+    moduleMenu.setTooltip ("Click to pick a module (you can search by typing)");
+    moduleInfoButton.setVisible (moduleType != 0);
+    moduleSummary.setTooltip (description.details);
+    // The category is already shown by the colour; the full text is in the ⓘ pop-up and the tooltip.
+    moduleSummary.setText (moduleType == 0 ? juce::String ("Choose a module") : juce::String (description.summary),
                            juce::dontSendNotification);
     powerSwitch.setColour (juce::ToggleButton::tickColourId, accentColour);
 
@@ -200,6 +247,7 @@ void SlotRow::showModule (int moduleType, int page)
                                 parameter);
         parameterKnob.setVisible (parameter.isUsed());
         parameterKnob.nameLabel.setText (parameter.name, juce::dontSendNotification);
+        parameterKnob.knob.setTooltip (parameter.helpText);
         parameterKnob.knob.setColour (juce::Slider::rotarySliderFillColourId, accentColour);
         parameterKnob.knob.setDoubleClickReturnValue (parameter.isUsed(), getNormalisedDefault (parameter));
         parameterKnob.valueLabel.setText ({}, juce::dontSendNotification);
@@ -333,8 +381,10 @@ void SlotRow::resized()
     auto topLine = moduleArea.removeFromTop (28);
     powerSwitch.setBounds (topLine.removeFromLeft (40));
     topLine.removeFromLeft (4);
+    moduleInfoButton.setBounds (topLine.removeFromRight (24).reduced (0, 2));
+    topLine.removeFromRight (4);
     moduleMenu.setBounds (topLine);
-    moduleSummary.setBounds (moduleArea.withTrimmedLeft (40).withTrimmedTop (2));
+    moduleSummary.setBounds (moduleArea.withTrimmedLeft (2).withTrimmedTop (2));
 
     // Page arrows (only shown for modules with two pages), left of the move buttons
     auto pageArea = area.removeFromRight (48);

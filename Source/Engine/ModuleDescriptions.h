@@ -1,6 +1,6 @@
 /**
  * @file ModuleDescriptions.h
- * @brief Static description of every module type: its name, category and (up to four) parameters.
+ * @brief Static description of every module type: its name, category, help texts and (up to eight) parameters.
  *
  * Every slot of the chain exposes eight generic host parameters, called A to H, each normalised to 0..1.
  * The editor shows them in pages of four (A-D, E-H); most modules only use A-D.
@@ -75,7 +75,7 @@ enum class ModuleCategory
     Randomizer
 };
 
-/** Describes one of the four parameters of a module. */
+/** Describes one of the (up to eight) parameters of a module. */
 struct ParameterDescription
 {
     const char* name = "";
@@ -86,8 +86,18 @@ struct ParameterDescription
     const char* const* choiceLabels = nullptr; ///< Labels for ParameterKind::Choice.
     const char* unitSuffix = "";               ///< Appended to the displayed number, e.g. " st".
     const char* labelForMinimum = nullptr;     ///< Optional text shown at the minimum, e.g. "Off".
+    /** One line explaining what the knob does, shown in the module info, the module browser and as tooltip. */
+    const char* helpText = "";
 
     bool isUsed() const noexcept { return kind != ParameterKind::Unused; }
+
+    /** @return A copy of this description with the given help text. Keeps the module table readable. */
+    ParameterDescription withHelp (const char* text) const noexcept
+    {
+        auto copy = *this;
+        copy.helpText = text;
+        return copy;
+    }
 };
 
 /** @return How many of a module's parameters are in use (index of the last used one + 1). */
@@ -100,8 +110,10 @@ struct ModuleDescription
 {
     const char* name;
     ModuleCategory category;
-    const char* summary; ///< One sentence shown in the editor and the manual.
+    const char* summary; ///< One short sentence, shown under the module menu.
     ParameterDescription parameters[numParametersPerSlot];
+    /** A few sentences explaining how the module works, shown in the module info and the module browser. */
+    const char* details;
 };
 
 /** @return The description of a module type. Out-of-range values return the Empty module. */
@@ -110,6 +122,27 @@ const ModuleDescription& getModuleDescription (int typeIndex) noexcept;
 
 /** @return The display name of a category, e.g. "Filters". */
 const char* getCategoryName (ModuleCategory category) noexcept;
+
+/** How well a module matches the search text of the module browser; higher is better. */
+enum class SearchRelevance
+{
+    noMatch = 0,
+    inDetails = 1, ///< Every word appears somewhere: name, category, summary, details or knob names.
+    inSummary = 2, ///< Every word appears in the name, the category or the summary.
+    inName = 3     ///< Every word appears in the module's name.
+};
+
+/**
+ * Rates a module against the search text of the module browser. The text is split into words, and every
+ * word must appear (ignoring case) for a match. An empty search text matches every module by name.
+ */
+SearchRelevance getSearchRelevance (const ModuleDescription& description, const std::string& searchText);
+
+/** @return True if the module is found by the search text at all. @see getSearchRelevance */
+inline bool moduleMatchesSearch (const ModuleDescription& description, const std::string& searchText)
+{
+    return getSearchRelevance (description, searchText) != SearchRelevance::noMatch;
+}
 
 /** @return The number of distinct values of an Integer, Choice, NoteNumber or Percent parameter. */
 int getNumberOfSteps (const ParameterDescription& parameter) noexcept;

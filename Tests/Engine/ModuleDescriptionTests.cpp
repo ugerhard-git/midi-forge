@@ -85,3 +85,44 @@ TEST_CASE ("descriptions: out-of-range module types fall back to Empty")
     EXPECT (std::string (getModuleDescription (-1).name) == "Empty");
     EXPECT (std::string (getModuleDescription (numModuleTypes + 5).name) == "Empty");
 }
+
+TEST_CASE ("descriptions: every module has details and every used knob a help text")
+{
+    for (int type = 0; type < numModuleTypes; ++type)
+    {
+        const auto& description = getModuleDescription (type);
+        EXPECT (description.details != nullptr && std::string (description.details).size() > 20);
+        for (const auto& parameter : description.parameters)
+            if (parameter.isUsed())
+                EXPECT (std::string (parameter.helpText).size() > 5);
+    }
+}
+
+TEST_CASE (
+    "descriptions: module search matches names, categories, details and knob names, ignoring case, and rates matches")
+{
+    const auto& repeater = getModuleDescription (ModuleType::Repeater);
+    const auto& chord = getModuleDescription (ModuleType::Chord);
+    const auto& arpeggiator = getModuleDescription (ModuleType::Arpeggiator);
+
+    EXPECT (moduleMatchesSearch (repeater, ""));
+    EXPECT (moduleMatchesSearch (repeater, "   "));
+    EXPECT (moduleMatchesSearch (repeater, "REPEAT"));
+    EXPECT (moduleMatchesSearch (repeater, "ratchet"));    // summary
+    EXPECT (moduleMatchesSearch (repeater, "swing"));      // knob name
+    EXPECT (moduleMatchesSearch (repeater, "generator"));  // category
+    EXPECT (moduleMatchesSearch (repeater, "grid tempo")); // all words, in any order
+    EXPECT (! moduleMatchesSearch (repeater, "grid scale"));
+    EXPECT (! moduleMatchesSearch (repeater, "xyz"));
+
+    EXPECT (moduleMatchesSearch (chord, "chord"));
+    EXPECT (moduleMatchesSearch (arpeggiator, "chord")); // mentioned in its details
+    EXPECT (getSearchRelevance (chord, "Cho") == SearchRelevance::inName);
+    EXPECT (getSearchRelevance (arpeggiator, "chord") == SearchRelevance::inDetails);
+    EXPECT (getSearchRelevance (repeater, "ratchet") == SearchRelevance::inSummary);
+    EXPECT (getSearchRelevance (repeater, "generators ratchets") == SearchRelevance::inSummary);
+    EXPECT (getSearchRelevance (repeater, "repeat swing") == SearchRelevance::inDetails);
+    EXPECT (getSearchRelevance (repeater, "") == SearchRelevance::inName);
+
+    EXPECT (moduleMatchesSearch (getModuleDescription (ModuleType::Empty), "clear"));
+}

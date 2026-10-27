@@ -54,9 +54,12 @@ MIDI Forge does not process audio. Ableton Live cannot host MIDI-effect plug-ins
 - The **Chain** tab shows the **eight slot rows**, each with:
   - the **slot number** and a coloured strip showing the module's category,
   - a **power switch** – a switched-off slot passes everything through unchanged,
-  - the **module menu** – pick what this slot does; picking a module resets its knobs to their defaults,
-  - a one-line **description** of the module,
-  - **four knobs** – drag up/down or left/right; **double-click** to reset a knob. Knobs with fixed steps
+  - the **module menu** – click it to open the [module browser](#picking-a-module-the-module-browser) and pick
+    what this slot does; picking a module resets its knobs to their defaults,
+  - the **i** button – shows what the loaded module does and what each of its knobs means (both pages),
+  - a one-line **description** of the module (hover over it for the full text),
+  - **four knobs** – drag up/down or left/right; **double-click** to reset a knob; hover over a knob to see
+    what it does. Knobs with fixed steps
     (choices like *Scale*, whole numbers like *Octaves*) jump from step to step; the mouse wheel moves one
     step per notch,
   - **◀ ▶** page arrows, only for modules with more than four knobs (e.g. the Repeater): they switch between
@@ -67,6 +70,26 @@ MIDI Forge does not process audio. Ableton Live cannot host MIDI-effect plug-ins
     the dot shows the value the module is using right now.
 - The **Modulation** tab holds the LFOs, the Random modulators and the modulation routes, see [Modulation (LFOs and Random)](#modulation-lfos-and-random).
 - **Footer:** the colour legend: blue = filters, green = transforms, orange = generators, purple = randomizers.
+
+### Picking a module: the module browser
+
+![Module browser](images/module-browser.png)
+
+Click a slot's module menu (or press Return while it has the keyboard focus) to open the module browser:
+
+- **Just start typing** to search: the list shows only the modules that match. The search looks at the
+  names, the categories, the descriptions and the knob names, so *ratchet* finds the Repeater and *chord*
+  finds the Chord and the modules that work with chords. Several words must all match.
+- The best match is highlighted: **Return** picks it, **↑ / ↓** move through the list, **Esc** closes the browser
+  without changing anything. You can of course also click a module.
+- On the right you see what the highlighted module does and what each of its knobs means.
+- **Empty slot** clears the slot.
+- **Recently used** lists the last five modules you picked, in every project and DAW (hidden while you search).
+  The list is stored in `Documents/MIDI Forge/Settings.xml`.
+
+The **i** button next to the module menu shows the same information for the module that is loaded:
+
+![Module info](images/module-info.png)
 
 Note names follow the convention **C3 = MIDI note 60** (as in Bitwig and Cubase; Reaper calls it C4 by default).
 

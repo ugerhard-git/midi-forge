@@ -27,6 +27,7 @@ ForgeLookAndFeel::ForgeLookAndFeel()
     setColour (juce::TooltipWindow::backgroundColourId, popupBackground.brighter (0.05f));
     setColour (juce::TooltipWindow::textColourId, primaryText);
     setColour (juce::TooltipWindow::outlineColourId, slotOutline);
+    setColour (juce::ScrollBar::thumbColourId, controlTrack.brighter (0.25f));
 }
 
 void ForgeLookAndFeel::drawRotarySlider (juce::Graphics& graphics, int x, int y, int width, int height,
@@ -134,6 +135,23 @@ void ForgeLookAndFeel::drawButtonBackground (juce::Graphics& graphics, juce::But
 
     graphics.setColour (colour);
     graphics.fillRoundedRectangle (button.getLocalBounds().toFloat().reduced (1.0f), 5.0f);
+}
+
+void ForgeLookAndFeel::drawCallOutBoxBackground (juce::CallOutBox& box, juce::Graphics& graphics,
+                                                 const juce::Path& outline, juce::Image& cachedShadow)
+{
+    if (cachedShadow.isNull())
+    {
+        cachedShadow = juce::Image (juce::Image::ARGB, box.getWidth(), box.getHeight(), true);
+        juce::Graphics shadowGraphics (cachedShadow);
+        juce::DropShadow (juce::Colours::black.withAlpha (0.6f), 10, { 0, 3 }).drawForPath (shadowGraphics, outline);
+    }
+    graphics.drawImageAt (cachedShadow, 0, 0);
+
+    graphics.setColour (Theme::Colours::popupBackground);
+    graphics.fillPath (outline);
+    graphics.setColour (Theme::Colours::slotOutline.brighter (0.3f));
+    graphics.strokePath (outline, juce::PathStrokeType (1.0f));
 }
 
 } // namespace midiforge

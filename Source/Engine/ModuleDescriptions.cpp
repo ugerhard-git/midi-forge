@@ -7,11 +7,13 @@
 #include "ModuleDescriptions.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <initializer_list>
 #include <iterator>
+#include <sstream>
 
 namespace midiforge
 {
@@ -88,110 +90,186 @@ ParameterDescription choiceParameter (const char* name, const char* const (&labe
     return { name, ParameterKind::Choice, 0, (float) (NumLabels - 1), (float) defaultIndex, labels, "", nullptr };
 }
 
-/** The module table, indexed by ModuleType. */
+/** The module table, indexed by ModuleType. Keep the help texts in step with docs/MANUAL.md. */
 const ModuleDescription* createModuleTable()
 {
     static const ModuleDescription table[numModuleTypes] = {
         { "Empty",
           ModuleCategory::None,
           "Empty slot: events pass through unchanged.",
-          { unusedParameter(), unusedParameter(), unusedParameter(), unusedParameter() } },
+          { unusedParameter(), unusedParameter(), unusedParameter(), unusedParameter() },
+          "Clears the slot. Every event passes through it unchanged." },
 
         // Filters ------------------------------------------------------------------------------------
         { "Note Range",
           ModuleCategory::Filter,
           "Passes or blocks notes inside a key range.",
-          { noteParameter ("Low", 0), noteParameter ("High", 127), choiceParameter ("Mode", passOrBlockInsideLabels, 0),
-            unusedParameter() } },
+          { noteParameter ("Low", 0).withHelp ("Lowest key of the range."),
+            noteParameter ("High", 127).withHelp ("Highest key of the range. Low and High may be swapped."),
+            choiceParameter ("Mode", passOrBlockInsideLabels, 0)
+                .withHelp ("Keep only the notes inside the range, or remove them."),
+            unusedParameter() },
+          "Lets only notes in a key range through, or removes exactly those notes. Everything that is not a note "
+          "passes unchanged." },
         { "Velocity Range",
           ModuleCategory::Filter,
           "Passes or blocks notes inside a velocity range.",
-          { integerParameter ("Min", 1, 127, 1), integerParameter ("Max", 1, 127, 127),
-            choiceParameter ("Mode", passOrBlockInsideLabels, 0), unusedParameter() } },
+          { integerParameter ("Min", 1, 127, 1).withHelp ("Lowest velocity of the range."),
+            integerParameter ("Max", 1, 127, 127).withHelp ("Highest velocity of the range."),
+            choiceParameter ("Mode", passOrBlockInsideLabels, 0)
+                .withHelp ("Keep only the notes inside the range, or remove them."),
+            unusedParameter() },
+          "Filters notes by how hard they were played: keeps only the notes inside a velocity range, or removes "
+          "them. Everything that is not a note passes unchanged." },
         { "Channel Filter",
           ModuleCategory::Filter,
           "Keeps only one MIDI channel, or removes it.",
-          { integerParameter ("Channel", 1, 16, 1), choiceParameter ("Mode", onlyOrExceptLabels, 0), unusedParameter(),
-            unusedParameter() } },
+          { integerParameter ("Channel", 1, 16, 1).withHelp ("The MIDI channel."),
+            choiceParameter ("Mode", onlyOrExceptLabels, 0)
+                .withHelp ("Keep only this channel, or remove it and keep all others."),
+            unusedParameter(), unusedParameter() },
+          "Keeps the messages of one MIDI channel, or removes them. Applies to every channel message: notes, "
+          "controllers, pitch bend, aftertouch and program changes." },
         { "Event Blocker",
           ModuleCategory::Filter,
           "Blocks whole classes of MIDI events.",
-          { choiceParameter ("Notes", passOrBlockLabels, 0), choiceParameter ("CC", passOrBlockLabels, 0),
-            choiceParameter ("Pitch Bend", passOrBlockLabels, 0),
-            choiceParameter ("AT / Prog", passOrBlockLabels, 0) } },
+          { choiceParameter ("Notes", passOrBlockLabels, 0).withHelp ("Notes and their polyphonic aftertouch."),
+            choiceParameter ("CC", passOrBlockLabels, 0).withHelp ("Control changes (mod wheel, sustain pedal ...)."),
+            choiceParameter ("Pitch Bend", passOrBlockLabels, 0).withHelp ("Pitch bend."),
+            choiceParameter ("AT / Prog", passOrBlockLabels, 0)
+                .withHelp ("Channel aftertouch, polyphonic aftertouch and program changes.") },
+          "Removes whole kinds of MIDI events, for example to keep a synth from receiving the sustain pedal or "
+          "pitch bend." },
 
         // Transforms ---------------------------------------------------------------------------------
         { "Transpose",
           ModuleCategory::Transform,
           "Shifts notes by semitones and octaves.",
-          { integerParameter ("Semitones", -24, 24, 0, " st"), integerParameter ("Octave", -4, 4, 0, " oct"),
-            unusedParameter(), unusedParameter() } },
+          { integerParameter ("Semitones", -24, 24, 0, " st").withHelp ("Shift in semitones."),
+            integerParameter ("Octave", -4, 4, 0, " oct").withHelp ("Additional shift in octaves."), unusedParameter(),
+            unusedParameter() },
+          "Moves every note up or down. Notes pushed outside the MIDI range are dropped. A note always ends at "
+          "the pitch it started on, even if you turn the knobs while holding it." },
         { "Scale Quantize",
           ModuleCategory::Transform,
           "Forces notes into a key and scale.",
-          { choiceParameter ("Root", pitchClassLabels, 0), choiceParameter ("Scale", scaleLabels, 0),
-            choiceParameter ("Snap", snapDirectionLabels, 0), unusedParameter() } },
+          { choiceParameter ("Root", pitchClassLabels, 0).withHelp ("Key of the scale."),
+            choiceParameter ("Scale", scaleLabels, 0).withHelp ("The scale."),
+            choiceParameter ("Snap", snapDirectionLabels, 0)
+                .withHelp ("Where wrong notes go. Nearest picks the lower note when both are equally close."),
+            unusedParameter() },
+          "Moves every note that is not in the scale to a note that is. If two keys land on the same scale note, "
+          "it keeps sounding until both keys are released." },
         { "Velocity Curve",
           ModuleCategory::Transform,
           "Reshapes, compresses or fixes note velocities.",
-          { integerParameter ("Curve", -100, 100, 0), integerParameter ("Out Min", 1, 127, 1),
-            integerParameter ("Out Max", 1, 127, 127), integerParameter ("Fixed", 0, 127, 0, "", "Off") } },
+          { integerParameter ("Curve", -100, 100, 0)
+                .withHelp ("Negative: soft playing gets louder. Positive: you have to play harder. 0: linear."),
+            integerParameter ("Out Min", 1, 127, 1).withHelp ("Velocity of the softest possible note."),
+            integerParameter ("Out Max", 1, 127, 127).withHelp ("Velocity of the hardest possible note."),
+            integerParameter ("Fixed", 0, 127, 0, "", "Off")
+                .withHelp ("If not Off, every note gets exactly this velocity.") },
+          "Changes how hard notes are played: bends the velocity response, squeezes it into a range, or gives "
+          "every note the same velocity." },
         { "Channel Remap",
           ModuleCategory::Transform,
           "Moves events from one channel to another.",
-          { integerParameter ("From", 0, 16, 0, "", "All"), integerParameter ("To", 1, 16, 1), unusedParameter(),
-            unusedParameter() } },
+          { integerParameter ("From", 0, 16, 0, "", "All").withHelp ("Which channel to move (All = every channel)."),
+            integerParameter ("To", 1, 16, 1).withHelp ("Target channel."), unusedParameter(), unusedParameter() },
+          "Moves the messages of one channel (or of all channels) to another channel. Applies to every channel "
+          "message." },
 
         // Generators ---------------------------------------------------------------------------------
         { "Arpeggiator",
           ModuleCategory::Generator,
           "Turns held notes into a tempo-synced pattern.",
-          { choiceParameter ("Rate", arpeggiatorDivisionLabels, 3),
-            choiceParameter ("Pattern", arpeggiatorPatternLabels, 0), integerParameter ("Octaves", 1, 4, 1),
-            percentParameter ("Gate", 5, 100, 50) } },
+          { choiceParameter ("Rate", arpeggiatorDivisionLabels, 3).withHelp ("Step length (T = triplet)."),
+            choiceParameter ("Pattern", arpeggiatorPatternLabels, 0).withHelp ("Order in which the notes play."),
+            integerParameter ("Octaves", 1, 4, 1).withHelp ("How many octaves the pattern spans."),
+            percentParameter ("Gate", 5, 100, 50).withHelp ("Note length as a share of the step.") },
+          "Plays the keys you hold (a chord, say) one after another. While the DAW plays, the steps lock to its bars; "
+          "when it is "
+          "stopped, the arpeggiator runs at the project tempo from your first key. Only the arpeggio is passed "
+          "on, not the held keys." },
         { "Chord",
           ModuleCategory::Generator,
           "Builds a chord on every incoming note.",
-          { choiceParameter ("Type", chordLabels, 0), integerParameter ("Inversion", 0, 3, 0),
-            choiceParameter ("Voicing", chordVoicingLabels, 0), percentParameter ("Added Vel", 0, 100, 100) } },
+          { choiceParameter ("Type", chordLabels, 0).withHelp ("The chord, built upwards from the played note."),
+            integerParameter ("Inversion", 0, 3, 0).withHelp ("Each step moves the lowest chord note up an octave."),
+            choiceParameter ("Voicing", chordVoicingLabels, 0)
+                .withHelp ("Open raises the second-lowest note an octave; Bass -1 Oct adds a lower bass note."),
+            percentParameter ("Added Vel", 0, 100, 100)
+                .withHelp ("Velocity of the added notes relative to the played note.") },
+          "Plays a whole chord for every key you press. Put an Arpeggiator after it to arpeggiate the chords." },
         { "Note Echo",
           ModuleCategory::Generator,
           "Tempo-synced MIDI delay with pitch shift.",
-          { choiceParameter ("Time", echoDivisionLabels, 5), integerParameter ("Repeats", 1, 16, 3),
-            percentParameter ("Feedback", 10, 100, 70), integerParameter ("Pitch", -12, 12, 0, " st") } },
+          { choiceParameter ("Time", echoDivisionLabels, 5).withHelp ("Distance between echoes, synced to the tempo."),
+            integerParameter ("Repeats", 1, 16, 3).withHelp ("Maximum number of echoes."),
+            percentParameter ("Feedback", 10, 100, 70)
+                .withHelp ("Each echo's velocity as a share of the previous one."),
+            integerParameter ("Pitch", -12, 12, 0, " st").withHelp ("Transposition added with every echo.") },
+          "A MIDI delay: the note plays immediately, then each echo follows one Time later, quieter and "
+          "optionally transposed. Every echo is as long as the original note; echoes stop when they get too "
+          "quiet." },
 
         // Randomizers --------------------------------------------------------------------------------
         { "Humanize",
           ModuleCategory::Randomizer,
           "Adds random timing delay and velocity variation.",
-          { continuousParameter ("Timing", 0, 50, 10, " ms"), integerParameter ("Velocity", 0, 64, 10),
-            unusedParameter(), unusedParameter() } },
+          { continuousParameter ("Timing", 0, 50, 10, " ms")
+                .withHelp ("Maximum delay. Notes are only ever delayed, never moved earlier."),
+            integerParameter ("Velocity", 0, 64, 10).withHelp ("Maximum velocity change up or down."),
+            unusedParameter(), unusedParameter() },
+          "Makes playing less mechanical: each note is delayed by a random amount and its velocity varied. The "
+          "note-off is delayed by the same amount, so note lengths stay as played." },
         { "Probability",
           ModuleCategory::Randomizer,
           "Lets each note through with a given chance.",
-          { percentParameter ("Chance", 0, 100, 75), unusedParameter(), unusedParameter(), unusedParameter() } },
+          { percentParameter ("Chance", 0, 100, 75).withHelp ("Probability that a note plays."), unusedParameter(),
+            unusedParameter(), unusedParameter() },
+          "Each note plays only with the given chance; the others are skipped. Good for thinning out patterns." },
         { "Random Pitch",
           ModuleCategory::Randomizer,
           "Randomly shifts some of the notes.",
-          { integerParameter ("Range", 0, 24, 12, " st"), percentParameter ("Chance", 0, 100, 50),
-            choiceParameter ("Mode", randomPitchModeLabels, 1), unusedParameter() } },
+          { integerParameter ("Range", 0, 24, 12, " st").withHelp ("Largest possible shift."),
+            percentParameter ("Chance", 0, 100, 50).withHelp ("Share of notes that get shifted."),
+            choiceParameter ("Mode", randomPitchModeLabels, 1).withHelp ("Which intervals are used."),
+            unusedParameter() },
+          "Randomly transposes some of the notes up or down. Put a Scale Quantize after it to stay in key." },
 
         // Added in 0.4.0 ---------------------------------------------------------------------------
         { "Repeater",
           ModuleCategory::Generator,
           "Retriggers held notes on the tempo grid (ratchets).",
-          { choiceParameter ("Rate", repeaterDivisionLabels, 7),
-            choiceParameter ("Velocity", repeaterVelocityLabels, 0), percentParameter ("Swing", 50, 75, 50),
-            choiceParameter ("Accent", repeaterAccentLabels, 0),
+          { choiceParameter ("Rate", repeaterDivisionLabels, 7)
+                .withHelp ("Distance between repeats (D = dotted, T = triplet); turning right is faster."),
+            choiceParameter ("Velocity", repeaterVelocityLabels, 0)
+                .withHelp ("Repeats use the velocity of the last key pressed, or follow aftertouch live."),
+            percentParameter ("Swing", 50, 75, 50)
+                .withHelp ("Delays every second repeat. 50% is straight, 66% a triplet feel."),
+            choiceParameter ("Accent", repeaterAccentLabels, 0)
+                .withHelp ("Which repeats are made louder by Accent Boost."),
             // Page 2 (added in 0.7.0)
-            integerParameter ("Accent Boost", 0, 64, 25), percentParameter ("Length", 10, 100, 50) } },
+            integerParameter ("Accent Boost", 0, 64, 25)
+                .withHelp ("How many velocity steps louder accented repeats are."),
+            percentParameter ("Length", 10, 100, 50).withHelp ("How long each repeat lasts, as a share of a step.") },
+          "Ratchets: every held note is played again and again on the tempo grid, a held chord repeats as a "
+          "chord. The key you press sounds immediately, the repeats follow on the grid. Releasing a key stops "
+          "its repeats." },
 
         // Added in 0.5.0 ---------------------------------------------------------------------------
         { "Note Split",
           ModuleCategory::Filter,
           "Selected notes continue down the chain; all others go straight out.",
-          { noteParameter ("Low", 60), noteParameter ("High", 60),
-            choiceParameter ("Octaves", noteSplitOctaveLabels, 0), unusedParameter() } },
+          { noteParameter ("Low", 60).withHelp ("Lowest selected note."),
+            noteParameter ("High", 60).withHelp ("Highest selected note. Same as Low selects exactly one note."),
+            choiceParameter ("Octaves", noteSplitOctaveLabels, 0)
+                .withHelp ("Every octave: the selected notes count in every octave (e.g. every C)."),
+            unusedParameter() },
+          "Splits the chain: notes in the selected range continue to the slots below; all other notes skip the "
+          "rest of the chain and go straight to the DAW. Everything that is not a note continues down the "
+          "chain. Example: select the hi-hat and put a Repeater below to ratchet only the hi-hat." },
     };
     return table;
 }
@@ -278,6 +356,45 @@ const char* getCategoryName (ModuleCategory category) noexcept
         case ModuleCategory::None: break;
     }
     return "";
+}
+
+namespace
+{
+/** @return The text in lower case (ASCII), for searches that ignore case. */
+std::string toLowerCase (std::string text)
+{
+    for (char& character : text)
+        character = (char) std::tolower ((unsigned char) character);
+    return text;
+}
+
+/** @return True if every whitespace-separated word of searchText appears in haystack (both lower case). */
+bool containsEveryWord (const std::string& lowerCaseHaystack, const std::string& searchText)
+{
+    std::istringstream words (toLowerCase (searchText));
+    std::string word;
+    while (words >> word)
+        if (lowerCaseHaystack.find (word) == std::string::npos)
+            return false;
+    return true;
+}
+} // namespace
+
+SearchRelevance getSearchRelevance (const ModuleDescription& description, const std::string& searchText)
+{
+    std::string text = toLowerCase (description.name);
+    if (containsEveryWord (text, searchText))
+        return SearchRelevance::inName;
+
+    text += ' ' + toLowerCase (std::string (getCategoryName (description.category)) + ' ' + description.summary);
+    if (containsEveryWord (text, searchText))
+        return SearchRelevance::inSummary;
+
+    text += ' ' + toLowerCase (description.details);
+    for (const auto& parameter : description.parameters)
+        if (parameter.isUsed())
+            text += ' ' + toLowerCase (parameter.name);
+    return containsEveryWord (text, searchText) ? SearchRelevance::inDetails : SearchRelevance::noMatch;
 }
 
 int getNumberOfUsedParameters (const ModuleDescription& description) noexcept

@@ -1,6 +1,6 @@
 /**
  * @file ForgeLookAndFeel.h
- * @brief Custom drawing for knobs, power switches, buttons and menus.
+ * @brief Custom drawing for knobs, power switches, buttons, menus and pop-ups (call-out boxes).
  */
 #pragma once
 
@@ -31,6 +31,10 @@ public:
 
     void drawButtonBackground (juce::Graphics& graphics, juce::Button& button, const juce::Colour& backgroundColour,
                                bool isHighlighted, bool isDown) override;
+
+    /** The pop-ups of the module browser and the module info: dark panel with a thin outline. */
+    void drawCallOutBoxBackground (juce::CallOutBox& box, juce::Graphics& graphics, const juce::Path& outline,
+                                   juce::Image& cachedShadow) override;
 };
 
 } // namespace midiforge

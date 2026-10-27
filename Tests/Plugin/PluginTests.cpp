@@ -4,19 +4,25 @@
  *
  * Usage: midi_forge_plugin_tests [name filter] [--snapshot-dir folder]
  * With --snapshot-dir both editor pages are rendered to editor.png and modulation.png in that folder,
- * which CI publishes for visual review and which are used in the manual.
+ * plus the module browser (module-browser.png) and the module info pop-up (module-info.png). CI publishes
+ * them for visual review and they are used in the manual.
  */
 #include "../TestFramework.h"
 
 #include "Plugin/FactoryPresets.h"
 #include "Plugin/ParameterIds.h"
 #include "Plugin/PluginProcessor.h"
+#include "Plugin/RecentModuleList.h"
 #include "Plugin/UserPresetLibrary.h"
+#include "UI/ModuleBrowser.h"
 #include "UI/PluginEditor.h"
+#include "UI/Theme.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <algorithm>
 #include <cmath>
+#include <functional>
 #include <set>
 
 using namespace midiforge;
@@ -642,6 +648,42 @@ void writeEditorSnapshots (MidiForgeProcessor& processor, const juce::File& dire
     }
 }
 
+/** Renders a pop-up component the way it looks inside the editor (dark panel, editor look and feel). */
+void writeComponentSnapshot (juce::Component& component, const juce::File& file)
+{
+    ForgeLookAndFeel lookAndFeel;
+    component.setLookAndFeel (&lookAndFeel);
+    juce::Image image (juce::Image::ARGB, component.getWidth() * 2, component.getHeight() * 2, true);
+    {
+        juce::Graphics graphics (image);
+        graphics.addTransform (juce::AffineTransform::scale (2.0f));
+        graphics.fillAll (Theme::Colours::popupBackground);
+        component.paintEntireComponent (graphics, true);
+        graphics.setColour (Theme::Colours::slotOutline.brighter (0.3f));
+        graphics.drawRect (component.getLocalBounds());
+    }
+    component.setLookAndFeel (nullptr);
+    file.deleteFile();
+    juce::FileOutputStream stream (file);
+    juce::PNGImageFormat().writeImageToStream (image, stream);
+    std::printf ("Snapshot written to %s\n", file.getFullPathName().toRawUTF8());
+}
+
+/** The module browser (as opened on an empty slot) and the Repeater's info pop-up. */
+void writePopupSnapshots (const juce::File& directory)
+{
+    ModuleBrowser browser ((int) ModuleType::Empty, { (int) ModuleType::Repeater, (int) ModuleType::Chord },
+                           [] (int) {});
+    browser.setBounds (0, 0, ModuleBrowser::preferredWidth, ModuleBrowser::preferredHeight);
+    browser.moveHighlight (1); // as if the mouse rested on the Repeater
+    writeComponentSnapshot (browser, directory.getChildFile ("module-browser.png"));
+
+    ModuleInfoView info;
+    info.showModule ((int) ModuleType::Repeater);
+    info.setSize (380, info.getHeightForWidth (380));
+    writeComponentSnapshot (info, directory.getChildFile ("module-info.png"));
+}
+
 /** Loads a preset with LFOs and runs the engine for a moment, so the snapshots show modulation. */
 void prepareProcessorForSnapshots (MidiForgeProcessor& processor)
 {
@@ -755,6 +797,165 @@ TEST_CASE ("pages: projects from 0.6.0 load with page-2 defaults and keep their 
             juce::String::fromUTF8 ("Slot 8 \xc2\xb7 Length"));
 }
 
+//==============================================================================
+// Module browser, module info and the recently used modules
+
+TEST_CASE ("recent modules: newest first, no duplicates, no Empty, at most five, saved for the next session")
+{
+    TemporaryPresetFolder temporaryFolder;
+    const auto settingsFile = temporaryFolder.folder.getChildFile ("Settings.xml");
+    {
+        RecentModuleList recent (settingsFile);
+        EXPECT (recent.getModuleTypes().empty());
+        recent.moduleWasPicked (3);
+        recent.moduleWasPicked (5);
+        recent.moduleWasPicked (3);
+        recent.moduleWasPicked (0);              // Empty is not remembered
+        recent.moduleWasPicked (numModuleTypes); // nor unknown modules
+        EXPECT (recent.getModuleTypes() == std::vector<int> ({ 3, 5 }));
+        for (int type : { 7, 8, 9, 10, 11 })
+            recent.moduleWasPicked (type);
+        EXPECT (recent.getModuleTypes() == std::vector<int> ({ 11, 10, 9, 8, 7 }));
+    }
+    RecentModuleList reloaded (settingsFile);
+    EXPECT (reloaded.getModuleTypes() == std::vector<int> ({ 11, 10, 9, 8, 7 }));
+
+    // Two instances share the file: a pick in one is seen by the next pick in the other.
+    RecentModuleList otherInstance (settingsFile);
+    reloaded.moduleWasPicked (2);
+    otherInstance.moduleWasPicked (4);
+    EXPECT (otherInstance.getModuleTypes() == std::vector<int> ({ 4, 2, 11, 10, 9 }));
+}
+
+TEST_CASE ("recent modules: hand-edited, damaged and oversized settings files are handled safely")
+{
+    TemporaryPresetFolder temporaryFolder;
+    temporaryFolder.folder.createDirectory();
+    const auto settingsFile = temporaryFolder.folder.getChildFile ("Settings.xml");
+
+    settingsFile.replaceWithText ("<MidiForgeSettings><Other keep=\"yes\"/><RecentModules>"
+                                  "<Module type=\"5\"/><Module type=\"-3\"/><Module type=\"5\"/>"
+                                  "<Module type=\"999\"/><Module type=\"abc\"/><Module type=\"6\"/>"
+                                  "</RecentModules></MidiForgeSettings>");
+    RecentModuleList recent (settingsFile);
+    EXPECT (recent.getModuleTypes() == std::vector<int> ({ 5, 6 }));
+    recent.moduleWasPicked (7);
+    const auto saved = juce::parseXML (settingsFile);
+    EXPECT (saved != nullptr && saved->getChildByName ("Other") != nullptr); // other settings are kept
+
+    settingsFile.replaceWithText ("<NotOurs><RecentModules><Module type=\"5\"/></RecentModules></NotOurs>");
+    EXPECT (RecentModuleList (settingsFile).getModuleTypes().empty());
+    settingsFile.replaceWithText ("not xml at all <<<");
+    EXPECT (RecentModuleList (settingsFile).getModuleTypes().empty());
+    settingsFile.replaceWithText ("<MidiForgeSettings><RecentModules><Module type=\"5\"/></RecentModules>" +
+                                  juce::String::repeatedString (" ", (int) RecentModuleList::maximumFileSizeInBytes) +
+                                  "</MidiForgeSettings>");
+    EXPECT (RecentModuleList (settingsFile).getModuleTypes().empty());
+}
+
+TEST_CASE ("module browser: lists Empty, the recent modules and all categories; highlights the slot's module")
+{
+    int chosenType = -1;
+    ModuleBrowser browser ((int) ModuleType::Chord, { (int) ModuleType::Repeater, (int) ModuleType::Chord },
+                           [&] (int type) { chosenType = type; });
+    browser.setBounds (0, 0, ModuleBrowser::preferredWidth, ModuleBrowser::preferredHeight);
+
+    const auto listed = browser.getListedModuleTypes();
+    EXPECT ((int) listed.size() == numModuleTypes + 2); // every module once, plus the two recent ones
+    EXPECT (listed[0] == 0 && listed[1] == (int) ModuleType::Repeater && listed[2] == (int) ModuleType::Chord);
+    EXPECT (std::set<int> (listed.begin(), listed.end()).size() == (size_t) numModuleTypes);
+    EXPECT (browser.getHighlightedModuleType() == (int) ModuleType::Chord);
+
+    // The arrow keys walk through the modules, skipping headings, and stop at the ends.
+    browser.moveHighlight (-100);
+    EXPECT (browser.getHighlightedModuleType() == 0);
+    browser.moveHighlight (1);
+    EXPECT (browser.getHighlightedModuleType() == (int) ModuleType::Repeater);
+    browser.moveHighlight (2); // over the "Filters" heading
+    EXPECT (browser.getHighlightedModuleType() == (int) ModuleType::NoteRange);
+    browser.moveHighlight (100);
+    EXPECT (browser.getHighlightedModuleType() == listed.back());
+
+    browser.chooseHighlightedModule();
+    EXPECT (chosenType == listed.back());
+}
+
+TEST_CASE ("module browser: the search filters the list and highlights the best name match")
+{
+    int chosenType = -1;
+    ModuleBrowser browser ((int) ModuleType::Empty, { (int) ModuleType::Transpose },
+                           [&] (int type) { chosenType = type; });
+    browser.setBounds (0, 0, ModuleBrowser::preferredWidth, ModuleBrowser::preferredHeight);
+
+    browser.setSearchText ("RATCH");
+    const auto ratchetResults = browser.getListedModuleTypes();
+    EXPECT (std::count (ratchetResults.begin(), ratchetResults.end(), (int) ModuleType::Repeater) == 1);
+    EXPECT (std::count (ratchetResults.begin(), ratchetResults.end(), (int) ModuleType::Chord) == 0);
+    EXPECT (browser.getHighlightedModuleType() == (int) ModuleType::Repeater);
+
+    // "chord" finds the Arpeggiator (it mentions chords) before the Chord, but highlights the Chord.
+    browser.setSearchText ("chord");
+    const auto chordResults = browser.getListedModuleTypes();
+    EXPECT (std::find (chordResults.begin(), chordResults.end(), (int) ModuleType::Arpeggiator) != chordResults.end());
+    EXPECT (browser.getHighlightedModuleType() == (int) ModuleType::Chord);
+    browser.chooseHighlightedModule();
+    EXPECT (chosenType == (int) ModuleType::Chord);
+
+    // Recently used modules are hidden while searching, so no module is listed twice.
+    browser.setSearchText ("transpose");
+    const auto transposeResults = browser.getListedModuleTypes();
+    EXPECT (std::count (transposeResults.begin(), transposeResults.end(), (int) ModuleType::Transpose) == 1);
+    EXPECT (browser.getHighlightedModuleType() == (int) ModuleType::Transpose);
+
+    chosenType = -1;
+    browser.setSearchText ("no such module");
+    EXPECT (browser.getListedModuleTypes().empty());
+    EXPECT (browser.getHighlightedModuleType() == -1);
+    browser.moveHighlight (1);
+    browser.chooseHighlightedModule();
+    EXPECT (chosenType == -1);
+
+    browser.setSearchText ("");
+    EXPECT ((int) browser.getListedModuleTypes().size() == numModuleTypes + 1);
+}
+
+TEST_CASE ("module info: shows the details and one line per knob, with page hints for page 2")
+{
+    ModuleInfoView info;
+    info.showModule ((int) ModuleType::Repeater);
+    const auto text = info.getPlainText();
+    const auto& repeater = getModuleDescription (ModuleType::Repeater);
+    EXPECT (text.contains (repeater.details));
+    EXPECT (text.contains (juce::String ("A  Rate")));
+    EXPECT (text.contains (juce::String ("E  Accent Boost (page 2)")));
+    EXPECT (text.contains (repeater.parameters[5].helpText));
+    EXPECT (! text.contains ("G  "));
+    EXPECT (info.getHeightForWidth (380) > info.getHeightForWidth (2000));
+
+    info.showModule (-5); // out of range shows the Empty slot
+    EXPECT (info.getPlainText().startsWith ("Empty slot"));
+    EXPECT (! info.getPlainText().contains ("KNOBS"));
+}
+
+TEST_CASE ("module info: the knobs of every module get their help text as tooltip")
+{
+    MidiForgeProcessor processor;
+    processor.loadModule (0, (int) ModuleType::Repeater);
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditorAndMakeActive());
+    int numberOfKnobsWithHelp = 0;
+    std::function<void (juce::Component&)> visit = [&] (juce::Component& component)
+    {
+        if (auto* slider = dynamic_cast<juce::Slider*> (&component))
+            if (slider->getTooltip() ==
+                juce::String (getModuleDescription (ModuleType::Repeater).parameters[0].helpText))
+                ++numberOfKnobsWithHelp;
+        for (auto* child : component.getChildren())
+            visit (*child);
+    };
+    visit (*editor);
+    EXPECT (numberOfKnobsWithHelp == 1);
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juceInitialiser;
@@ -778,6 +979,7 @@ int main (int argc, char** argv)
         MidiForgeProcessor processor;
         prepareProcessorForSnapshots (processor);
         writeEditorSnapshots (processor, snapshotDirectory);
+        writePopupSnapshots (snapshotDirectory);
     }
     return result;
 }
