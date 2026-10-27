@@ -16,6 +16,42 @@ When a feature is implemented, remove it here and describe it in [MANUAL.md](MAN
 
 ## Ideas
 
+### Step modulator (being designed)
+
+A new modulation source: a sequence of 4 … 16 steps, each with its own value, played in time with the song
+and routed like an LFO (knobs and On/Off switches), e.g. for fills, phrase endings and uneven rhythms.
+Design in progress, see the discussion of 27 Oct 2026.
+
+### Groove
+
+Pushes notes towards a groove template (MPC-style swing 54–75 %, laid-back snare …) with a *Feel* amount,
+so straight programming gets a pocket instead of random wobble. Needs: which templates, how far notes may
+move (a plug-in can only delay notes, so "early" means delaying everything else).
+
+### Strum
+
+Plays chords as strums: the notes one after another instead of together. Speed (ms or tempo-synced),
+direction (up, down, alternating, random) and a velocity tilt across the strum.
+
+### Beat-aware thinning
+
+Like Probability, but each position in the bar has a weight: downbeats almost always play, off-beat
+sixteenths drop out more often. Variation without losing the backbone of the groove.
+
+### Mutate
+
+Now and then replaces a note with a neighbouring note of the scale, so a melody evolves slowly but stays
+recognisable. Needs: scale source (own Root/Scale knobs or "follow Scale Quantize"), how often, how far.
+
+### Ghost Notes
+
+Adds quiet extra hits shortly before or after notes, with a chance, mainly for drums (hi-hats, snares).
+
+### Diatonic Harmonizer
+
+Adds a harmony note (third, fifth, sixth … above or below) that stays in key, unlike the fixed intervals of
+Chord. Needs: Root/Scale knobs, interval in scale steps, one or two voices.
+
 ### Modulating the modulation
 
 Let routes target another LFO's rate or another route's amount (e.g. a slow LFO that speeds up a fast one).
