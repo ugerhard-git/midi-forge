@@ -12,34 +12,39 @@ When a feature is implemented, remove it here and describe it in [MANUAL.md](MAN
 
 ## Planned
 
-(nothing at the moment)
+### Paged knobs (up to 8 per slot), Repeater page 2, stepped knobs
 
-## Ideas
+Design agreed; waiting for the go. Built together because all three change the knob code.
 
-### Knobs for discrete options snap to the options
-
-Knobs whose parameter has fixed steps (choices like Scale or Rate, whole numbers like Octaves or note
-numbers) should jump from step to step while dragging, instead of moving smoothly with the text jumping.
-Applies to the slot knobs (A–D) and the LFO knobs (Rate in Tempo mode, Phase steps). Things to decide:
-whether host automation should also be stepped (it can stay continuous; the module rounds anyway), and
-how mouse-wheel and fine-drag (Shift) behave on stepped knobs.
-
-### Paged knobs: up to 8 per slot (proposal sent to the owner, waiting for answers)
-
-Replaces the earlier "six knobs per slot" idea. Inspired by the Repeater (0.4.0), which would like
-adjustable **accent strength** and **note length**.
-
-- Four knobs stay on screen; modules with more than four parameters get a second page (proposed: a small
-  "1 | 2" switch next to the knobs, shown only for such modules). The window size does not change.
+**Paged knobs**
+- Four knobs stay on screen; modules with more than four parameters show **◀ ▶ arrows** and a small "1/2"
+  indicator next to the knobs. The window size does not change.
 - Every slot gets host parameters E–H (32 in total, appended); modules declare up to 8 parameters,
   existing modules keep A–D.
 - Route targets for E–H get new numbers after the existing ones, so stored routes keep their knobs; the
-  target menu still lists everything sorted by slot. Presets and user preset files without E–H get defaults.
-- Switching the module goes back to page 1; a dot on the page switch marks a modulated knob on the hidden page.
-- Candidates for page 2: Repeater accent strength and note length; Arpeggiator swing; Chord strum; Note Echo
-  note length (each to be discussed on its own).
-- Open questions: "1 | 2" or arrows? Remember the page in projects/presets? First build = infrastructure +
-  Repeater accent strength and note length? Dot for modulated hidden knobs?
+  target menu lists everything sorted by slot. Presets and user preset files without E–H get defaults.
+- The page shown per slot is remembered in projects and presets; switching the module goes back to page 1.
+- A yellow dot on the arrows marks a knob on the hidden page that an LFO or Random modulator moves.
+
+**Repeater page 2:** *Accent strength* (replaces the fixed +25 velocity) and *Note length* (replaces the
+fixed 50 % of a step).
+
+**Stepped knobs:** knobs whose parameter has fixed steps (choices, whole numbers) jump from step to step
+while dragging; the mouse wheel moves one step per notch. Applies to the slot knobs and to the LFO and
+Random knobs with steps. Host automation is unchanged (the modules round anyway).
+
+**Tests:** E–H parameters and their position at the end, target numbering compatibility (stored routes),
+loading 0.6.0 projects and user presets, page memory in state and presets, Repeater accent strength and
+note length incl. the stress test, slider step intervals for every parameter kind.
+
+## Ideas
+
+### Repeater: Chance knob
+
+A *Chance* knob for the Repeater: each repeat plays only with this probability (0 … 100 %), so ratchets get
+gaps and feel less mechanical. Needs a fifth knob, so it fits on the Repeater's page 2 once paged knobs
+exist. To discuss: does the first, immediate hit always play (suggested) or is it subject to the chance
+as well? Should accented steps have their own chance?
 
 ### Modulating the modulation
 
