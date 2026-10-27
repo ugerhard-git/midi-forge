@@ -464,6 +464,36 @@ TEST_CASE ("plugin: presets set up their LFOs and routes and clear them again")
     EXPECT (processor.getLfoSettings (0).waveform == LfoWaveform::Sine);
 }
 
+TEST_CASE ("plugin: the modulated value shown on a knob swings below and above the knob position")
+{
+    MidiForgeProcessor processor;
+    processor.prepareToPlay (testSampleRate, testBlockSize);
+    processor.loadModule (0, (int) ModuleType::Transpose); // Semitones knob sits in the middle (0 st)
+
+    auto setPlain = [&] (const juce::String& id, float plainValue)
+    {
+        auto* parameter = processor.parameters.getParameter (id);
+        parameter->setValueNotifyingHost (parameter->convertTo0to1 (plainValue));
+    };
+    setPlain (ParameterIds::lfoWaveform (0), (float) LfoWaveform::Sine);
+    setPlain (ParameterIds::lfoSyncMode (0), 0.0f); // free
+    setPlain (ParameterIds::lfoRate (0), 2.0f);     // 0.5 s per cycle
+    setPlain (ParameterIds::routeTarget (0), (float) modulationTargetIndex (0, 0));
+    setPlain (ParameterIds::routeAmount (0), 40.0f);
+
+    const float knobValue = processor.getParameterValue (0, 0);
+    float lowest = 1.0f, highest = 0.0f;
+    const int blocksPerCycle = (int) (0.5 * testSampleRate / testBlockSize) + 1;
+    for (int block = 0; block < blocksPerCycle; ++block)
+    {
+        processBlock (processor, {});
+        lowest = std::min (lowest, processor.getModulatedParameterValue (0, 0));
+        highest = std::max (highest, processor.getModulatedParameterValue (0, 0));
+    }
+    EXPECT (lowest < knobValue - 0.35f);  // 40 % below ...
+    EXPECT (highest > knobValue + 0.35f); // ... and above the knob position
+}
+
 TEST_CASE ("plugin: an LFO route changes what the chain plays, the knob itself stays put")
 {
     MidiForgeProcessor processor;
