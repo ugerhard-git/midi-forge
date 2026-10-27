@@ -5,7 +5,7 @@ and randomizers – in front of any instrument.
 
 ![MIDI Forge](docs/images/editor.png)
 
-- **Formats:** VST3 and CLAP · **Systems:** Windows, macOS (Apple Silicon + Intel)
+- **Format:** VST3 · **System:** Windows
 - **Made for:** Reaper and Bitwig Studio (any host that supports MIDI-effect plug-ins should work)
 - **16 modules:** Note Range, Velocity Range, Channel Filter, Event Blocker, Note Split, Transpose, Scale Quantize,
   Velocity Curve, Channel Remap, Arpeggiator, Chord, Note Echo, Repeater (ratchets), Humanize,
@@ -19,7 +19,7 @@ and randomizers – in front of any instrument.
 ## Download
 
 - **Releases:** the *Releases* section of this repository.
-- **Latest build:** *Actions* tab → latest green *Build* run → *Artifacts* → `MIDI-Forge-Windows` or `MIDI-Forge-macOS`.
+- **Latest build:** *Actions* tab → latest green *Build* run → *Artifacts* → `MIDI-Forge-Windows`.
 
 Installation and usage: **[User manual](docs/MANUAL.md)**.
 
@@ -32,4 +32,4 @@ The plug-in is built entirely by GitHub Actions – nothing needs to be built lo
 - [docs/IDEAS.md](docs/IDEAS.md) – planned features and ideas
 - [SECURITY.md](SECURITY.md) – reporting vulnerabilities
 
-Built with [JUCE](https://juce.com) and [clap-juce-extensions](https://github.com/free-audio/clap-juce-extensions).
+Built with [JUCE](https://juce.com).

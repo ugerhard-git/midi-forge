@@ -51,15 +51,15 @@ cmake -S . -B build -DMIDI_FORGE_BUILD_PLUGIN=OFF -DMIDI_FORGE_WARNINGS_AS_ERROR
 cmake --build build
 ctest --test-dir build --output-on-failure
 
-# Plug-in (VST3 + CLAP) and the plug-in layer tests
+# Plug-in (VST3) and the plug-in layer tests (add -DMIDI_FORGE_BUILD_CLAP=ON and MidiForge_CLAP for CLAP)
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DMIDI_FORGE_BUILD_PLUGIN_TESTS=ON
-cmake --build build --config Release --target MidiForge_VST3 MidiForge_CLAP midi_forge_plugin_tests
+cmake --build build --config Release --target MidiForge_VST3 midi_forge_plugin_tests
 ```
 
 On Linux the plug-in needs the JUCE dependencies, e.g. on Ubuntu:
 `libasound2-dev libfreetype-dev libfontconfig1-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxext-dev libxi-dev libxcomposite-dev libxrender-dev libgl1-mesa-dev`.
 
-Results land in `build/MidiForge_artefacts/Release/VST3` and `.../CLAP`.
+Results land in `build/MidiForge_artefacts/Release/VST3`.
 
 ## Checks to run before pushing
 

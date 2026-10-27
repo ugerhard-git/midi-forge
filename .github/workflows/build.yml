@@ -103,10 +103,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Windows only for now. A macOS job (macos-latest, ad-hoc codesign, ditto zip) can be added back:
+          # CMake still builds a universal binary on macOS.
           - name: Windows
             os: windows-latest
-          - name: macOS
-            os: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -124,27 +124,14 @@ jobs:
 
       - name: Build
         shell: bash
-        run: cmake --build build --config Release --target MidiForge_VST3 MidiForge_CLAP --parallel 4
+        run: cmake --build build --config Release --target MidiForge_VST3 --parallel 4
 
       - name: Collect plug-ins
         shell: bash
         run: |
           mkdir -p dist
           cp -R "build/MidiForge_artefacts/Release/VST3/MIDI Forge.vst3" dist/
-          cp -R "build/MidiForge_artefacts/Release/CLAP/MIDI Forge.clap" dist/
           cp packaging/INSTALL.txt dist/
-
-      - name: Ad-hoc sign and verify (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          codesign --force --deep --sign - "dist/MIDI Forge.vst3"
-          codesign --force --deep --sign - "dist/MIDI Forge.clap"
-          codesign --verify --deep --verbose=2 "dist/MIDI Forge.vst3"
-          lipo -info "dist/MIDI Forge.vst3/Contents/MacOS/MIDI Forge"
-
-      - name: Zip (macOS)
-        if: runner.os == 'macOS'
-        run: cd dist && ditto -c -k --sequesterRsrc . "../MIDI-Forge-macOS.zip"
 
       - name: Zip (Windows)
         if: runner.os == 'Windows'

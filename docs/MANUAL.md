@@ -1,6 +1,6 @@
 # MIDI Forge – User Manual
 
-MIDI Forge is a MIDI effect plug-in (VST3 and CLAP) for Windows and macOS. It sits in front of an
+MIDI Forge is a MIDI effect plug-in (VST3) for Windows. It sits in front of an
 instrument and changes the MIDI on its way there: it can filter notes out, transform them, generate
 new ones and add controlled randomness. You build the effect from up to eight **modules** that you
 stack in **slots**.
@@ -20,22 +20,9 @@ stack in **slots**.
 
 ## Installation
 
-Download the zip for your system from the project's **Releases** page on GitHub (or, for test builds,
-from the **Actions** tab → latest successful run → *Artifacts*). Each zip contains both formats; install
-whichever your DAW prefers. Bitwig works best with CLAP; Reaper loads both.
-
-| System  | VST3 folder                                   | CLAP folder                                   |
-|---------|-----------------------------------------------|-----------------------------------------------|
-| Windows | `C:\Program Files\Common Files\VST3\`         | `C:\Program Files\Common Files\CLAP\`         |
-| macOS   | `~/Library/Audio/Plug-Ins/VST3/`              | `~/Library/Audio/Plug-Ins/CLAP/`              |
-
-**macOS only:** the plug-in is not notarized by Apple, so macOS blocks it after downloading. Run this
-once in Terminal after copying the files:
-
-```sh
-xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/"MIDI Forge.vst3"
-xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/CLAP/"MIDI Forge.clap"
-```
+Download `MIDI-Forge-Windows.zip` from the project's **Releases** page on GitHub (or, for test builds,
+from the **Actions** tab → latest successful run → *Artifacts*) and copy `MIDI Forge.vst3` to
+`C:\Program Files\Common Files\VST3\`.
 
 Then let your DAW rescan its plug-ins.
 
@@ -380,10 +367,7 @@ Factory presets cannot be changed or deleted; save your changes as your own pres
 
 ### Where your presets are stored
 
-Every preset is a small file called `Name.mfpreset` in
-
-- **Windows:** `Documents\MIDI Forge\Presets\`
-- **macOS:** `~/Documents/MIDI Forge/Presets/`
+Every preset is a small file called `Name.mfpreset` in `Documents\MIDI Forge\Presets\`.
 
 Because they are in one place, your presets are available in every project and every DAW. Back up or
 share them by copying the files. You can also copy files into the folder directly; while the plug-in window
@@ -434,7 +418,6 @@ every note MIDI Forge has sent and sends *All Notes Off* on all 16 channels.
 
 | Problem | Solution |
 |---------|----------|
-| macOS says the plug-in is damaged or from an unidentified developer | Run the `xattr` commands under [Installation](#installation) |
 | A preset file is refused | It is damaged, not a MIDI Forge preset, or larger than 256 KB |
 | DAW doesn't list MIDI Forge | Check the install folder, then rescan plug-ins |
 | No sound | MIDI Forge outputs MIDI only – it must sit *before* an instrument on the same track |

@@ -23,8 +23,8 @@ This document explains how the code is organised and why. It is kept true with e
 
 The **engine** (`Source/Engine`) is plain C++17 without JUCE. It can be built and tested on any
 machine in seconds (`midi_forge_engine_tests`). The **plug-in layer** (`Source/Plugin`, `Source/UI`)
-connects it to JUCE, which provides the VST3 wrapper, parameters and the editor; the CLAP wrapper comes
-from `clap-juce-extensions`.
+connects it to JUCE, which provides the VST3 wrapper, parameters and the editor. A CLAP wrapper from
+`clap-juce-extensions` can be switched on with `-DMIDI_FORGE_BUILD_CLAP=ON` (off for now).
 
 ## Source layout
 
@@ -233,11 +233,11 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md#building) for commands. The workflow
 1. **Checks** (Linux): clang-format, clang-tidy, engine tests with warnings as errors, engine tests
    under address/UB sanitizers, plug-in layer tests, and screenshots of both editor pages (artifact
    `editor-screenshots`, the source of `docs/images/editor.png` and `docs/images/modulation.png`).
-2. **Plug-in builds** (Windows, macOS universal): VST3 + CLAP, zipped as artifacts. macOS builds are
-   ad-hoc signed.
+2. **Plug-in build** (Windows): the VST3, zipped as artifact `MIDI-Forge-Windows`. macOS and CLAP builds
+   are switched off for now; CMake still knows both (universal binary on macOS, `MIDI_FORGE_BUILD_CLAP`).
 3. **Release** (tags `v*` only): attaches the zips to a GitHub Release.
 
-Dependencies (JUCE 9.0.4, clap-juce-extensions) are fetched by CMake at pinned versions; GitHub
+Dependencies (JUCE 9.0.4; clap-juce-extensions only with CLAP switched on) are fetched by CMake at pinned versions; GitHub
 Actions are pinned to commit SHAs and updated by Dependabot.
 
 ## Licensing note

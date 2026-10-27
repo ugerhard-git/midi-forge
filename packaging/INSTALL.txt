@@ -1,24 +1,9 @@
 MIDI Forge - installation
 =========================
 
-This archive contains two formats of the same plug-in. Install whichever your DAW prefers
-(Bitwig: CLAP is the nicer fit; Reaper loads both).
-
-Windows
--------
-  MIDI Forge.vst3  ->  C:\Program Files\Common Files\VST3\
-  MIDI Forge.clap  ->  C:\Program Files\Common Files\CLAP\
-
-macOS
------
-  MIDI Forge.vst3  ->  ~/Library/Audio/Plug-Ins/VST3/
-  MIDI Forge.clap  ->  ~/Library/Audio/Plug-Ins/CLAP/
-
-  The build is not notarized by Apple, so macOS quarantines it after download.
-  Remove the quarantine flag once, in Terminal:
-
-    xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/"MIDI Forge.vst3"
-    xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/CLAP/"MIDI Forge.clap"
+Windows (VST3)
+--------------
+  Copy "MIDI Forge.vst3" to  C:\Program Files\Common Files\VST3\
 
 Then rescan plug-ins in your DAW.
 

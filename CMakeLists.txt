@@ -3,7 +3,8 @@
 # Targets:
 #   midi_forge_engine        the JUCE-free MIDI engine (static library)
 #   midi_forge_engine_tests  engine tests, no JUCE needed           (MIDI_FORGE_BUILD_ENGINE_TESTS)
-#   MidiForge_VST3/_CLAP     the plug-in                             (MIDI_FORGE_BUILD_PLUGIN)
+#   MidiForge_VST3           the plug-in                             (MIDI_FORGE_BUILD_PLUGIN)
+#   MidiForge_CLAP           the plug-in as CLAP, currently not built (MIDI_FORGE_BUILD_CLAP)
 #   midi_forge_plugin_tests  tests of the JUCE layer and the editor  (MIDI_FORGE_BUILD_PLUGIN_TESTS)
 #
 # See CONTRIBUTING.md for the commands CI runs.
@@ -17,13 +18,16 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON) # for clang-tidy and IDEs
 
-option(MIDI_FORGE_BUILD_PLUGIN "Build the VST3 and CLAP plug-in (downloads JUCE)" ON)
+option(MIDI_FORGE_BUILD_PLUGIN "Build the VST3 plug-in (downloads JUCE)" ON)
+# CLAP is switched off for now (the owner only needs the VST3); turning this on brings it back.
+option(MIDI_FORGE_BUILD_CLAP "Also build the CLAP plug-in (downloads clap-juce-extensions)" OFF)
 option(MIDI_FORGE_BUILD_ENGINE_TESTS "Build the engine tests" ON)
 option(MIDI_FORGE_BUILD_PLUGIN_TESTS "Build the plug-in layer tests (needs MIDI_FORGE_BUILD_PLUGIN)" OFF)
 option(MIDI_FORGE_WARNINGS_AS_ERRORS "Treat compiler warnings in our own code as errors" OFF)
 option(MIDI_FORGE_SANITIZERS "Build the engine and its tests with address and undefined-behaviour sanitizers" OFF)
 
-# Universal binary on macOS unless the caller decides otherwise.
+# Universal binary on macOS unless the caller decides otherwise. CI builds Windows only for now; this stays so
+# a Mac build can come back by adding a CI job.
 if(APPLE AND NOT CMAKE_OSX_ARCHITECTURES)
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "" FORCE)
 endif()
@@ -114,14 +118,17 @@ if(MIDI_FORGE_BUILD_PLUGIN)
         GIT_SHALLOW TRUE
         EXCLUDE_FROM_ALL)
 
-    # CLAP support for JUCE plug-ins, pinned to a commit
-    FetchContent_Declare(clap_juce_extensions
-        GIT_REPOSITORY https://github.com/free-audio/clap-juce-extensions.git
-        GIT_TAG 7adee3a1bd4684d4caa5601100e364abccff4b4d
-        GIT_SUBMODULES_RECURSE TRUE
-        EXCLUDE_FROM_ALL)
+    FetchContent_MakeAvailable(JUCE)
 
-    FetchContent_MakeAvailable(JUCE clap_juce_extensions)
+    if(MIDI_FORGE_BUILD_CLAP)
+        # CLAP support for JUCE plug-ins, pinned to a commit
+        FetchContent_Declare(clap_juce_extensions
+            GIT_REPOSITORY https://github.com/free-audio/clap-juce-extensions.git
+            GIT_TAG 7adee3a1bd4684d4caa5601100e364abccff4b4d
+            GIT_SUBMODULES_RECURSE TRUE
+            EXCLUDE_FROM_ALL)
+        FetchContent_MakeAvailable(clap_juce_extensions)
+    endif()
 
     set(MIDI_FORGE_PLUGIN_SOURCES
         Source/Plugin/ParameterIds.h
@@ -179,9 +186,11 @@ if(MIDI_FORGE_BUILD_PLUGIN)
             juce::juce_recommended_lto_flags
             juce::juce_recommended_warning_flags)
 
-    clap_juce_extensions_plugin(TARGET MidiForge
-        CLAP_ID "com.ugerhard.midiforge"
-        CLAP_FEATURES note-effect utility)
+    if(MIDI_FORGE_BUILD_CLAP)
+        clap_juce_extensions_plugin(TARGET MidiForge
+            CLAP_ID "com.ugerhard.midiforge"
+            CLAP_FEATURES note-effect utility)
+    endif()
 
     if(MIDI_FORGE_BUILD_PLUGIN_TESTS)
         enable_testing()
