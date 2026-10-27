@@ -40,7 +40,9 @@ MIDI Forge does not process audio. Ableton Live cannot host MIDI-effect plug-ins
 - **Header:** the **Chain** and **Modulation** tabs, the [preset controls](#presets) and the **Panic** button.
 - The **Chain** tab shows the **eight slot rows**, each with:
   - the **slot number** and a coloured strip showing the module's category,
-  - a **power switch** – a switched-off slot passes everything through unchanged,
+  - a **power switch** – a switched-off slot passes everything through unchanged. When a modulation route
+    moves the switch, it gets a yellow outline with a dot (filled: the slot is on right now, hollow: off),
+    and the row dims whenever the modulation switches the slot off,
   - the **module menu** – click it to open the [module browser](#picking-a-module-the-module-browser) and pick
     what this slot does; picking a module resets its knobs to their defaults,
   - the **i** button – shows what the loaded module does and what each of its knobs means (both pages),
@@ -385,7 +387,7 @@ The eight routes connect a source to a slot knob:
 | Control | Meaning |
 |---------|---------|
 | Source | LFO 1 … 4 or Random 1 … 4 |
-| Target | Which knob, named after the module in that slot, e.g. *Slot 2 · Gate*. The menu lists the knobs of every loaded module, slot by slot (both pages). *None* switches the route off |
+| Target | Which knob, named after the module in that slot, e.g. *Slot 2 · Gate*, or a slot's power switch (*Slot 2 · On/Off*). The menu lists the knobs of every loaded module, slot by slot (both pages), followed by its On/Off switch. *None* switches the route off |
 | **±** / **+** | Polarity. **±** (bipolar, the default): the source moves the knob below *and* above its position. **+** (unipolar): the source only pushes the knob **up** from its position (or only **down** with a negative amount). Click to switch |
 | Amount | −100 … +100 %. How far the source moves the knob. At 100 % it can sweep the knob's whole range; negative amounts turn the source upside down. Double-click: 50 % |
 
@@ -398,6 +400,14 @@ The eight routes connect a source to a slot knob:
 - Values are limited to the parameter's range. Several routes on the same knob add up. One source can drive
   several routes.
 - On knobs with fixed choices (scale, chord type, arpeggiator pattern …) the source steps through the choices.
+- **On/Off targets** switch a whole slot. The switch counts as 0 (off) or 1 (on) and the modulation is added:
+  a switched-on slot turns off when the result drops below 0.45, a switched-off slot turns on when it rises
+  above 0.55 (the gap keeps a slow source from flickering the slot on and off). Examples: a switched-on slot
+  with a bipolar route at −100 % is off whenever the source is high; a switched-off slot with a unipolar
+  route at +100 % joins in while the source is above 55 %. A *Random* modulator on a switch decides per note
+  or phrase whether the module plays (e.g. only some phrases get the Note Echo). As with clicking the
+  switch, notes passing through the slot are released when it switches; a held key sounds again when you
+  press it again.
 - Routes follow their module: when a module moves (▲ / ▼, or because a module above it was removed), its
   routes keep pointing at it. Routes to a removed module are set to *None* (Undo restores them).
 - The module type and the slot's on/off switch cannot be modulated (switching them releases notes).

@@ -129,8 +129,15 @@ public:
     //==============================================================================
     // Modulation access for the editor (message thread)
 
-    /** @return True if at least one active route targets this slot parameter. */
+    /**
+     * @return True if at least one active route targets this slot parameter (parameterIndex
+     *         slotSwitchParameterIndex: the slot's on/off switch).
+     */
     bool isParameterModulated (int slotIndex, int parameterIndex) const noexcept;
+    /** @return True if at least one active route moves this slot's on/off switch. */
+    bool isSlotSwitchModulated (int slotIndex) const noexcept;
+    /** @return Whether the slot was on after modulation, as last used by the engine. */
+    bool isSlotEnabledAfterModulation (int slotIndex) const noexcept;
     /** @return The value (0..1) of a slot parameter after modulation, as last used by the engine. */
     float getModulatedParameterValue (int slotIndex, int parameterIndex) const noexcept;
     /** @return An LFO's latest output (-1..+1). */
@@ -269,6 +276,7 @@ private:
 
     // Written by the audio thread after each block, read by the editor.
     std::array<std::atomic<float>, numSlots * numParametersPerSlot> modulatedValueReadouts {};
+    std::array<std::atomic<bool>, numSlots> modulatedSwitchReadouts {};
     std::array<std::atomic<float>, numLfos> lfoValueReadouts {};
     std::array<std::atomic<float>, numLfos> lfoPhaseReadouts {};
     std::array<std::atomic<float>, numNoteRandoms> noteRandomValueReadouts {};

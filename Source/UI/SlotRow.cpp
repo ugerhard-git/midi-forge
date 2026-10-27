@@ -286,7 +286,15 @@ void SlotRow::refreshFromProcessor()
     if (moduleType != displayedModuleType || page != displayedPage)
         showModule (moduleType, page);
 
-    const bool isEnabled = processor.isSlotEnabled (slotIndex);
+    // With a modulated switch, the row shows the state the chain is using right now.
+    const bool isSwitchModulated = processor.isSlotSwitchModulated (slotIndex);
+    const bool isEnabled =
+        isSwitchModulated ? processor.isSlotEnabledAfterModulation (slotIndex) : processor.isSlotEnabled (slotIndex);
+    if (isSwitchModulated != showsSwitchModulation)
+    {
+        showsSwitchModulation = isSwitchModulated;
+        repaint();
+    }
     if (isEnabled != displayedAsEnabled)
     {
         displayedAsEnabled = isEnabled;
@@ -343,6 +351,20 @@ void SlotRow::switchPage (int direction)
 
 void SlotRow::paintOverChildren (juce::Graphics& graphics)
 {
+    if (showsSwitchModulation)
+    {
+        // A yellow outline around the power switch, with a dot when modulation has the slot on right now.
+        const auto switchArea = powerSwitch.getBounds().toFloat().reduced (1.0f, 5.0f);
+        graphics.setColour (Theme::Colours::modulation.withAlpha (0.7f));
+        graphics.drawRoundedRectangle (switchArea, switchArea.getHeight() / 2.0f, 1.2f);
+        const auto dotArea = juce::Rectangle<float> (6.0f, 6.0f).withCentre (switchArea.getTopRight());
+        graphics.setColour (Theme::Colours::modulation);
+        if (displayedAsEnabled)
+            graphics.fillEllipse (dotArea);
+        else
+            graphics.drawEllipse (dotArea, 1.2f);
+    }
+
     if (! showsHiddenPageDot)
         return;
     const auto& arrow = displayedPage == 0 ? nextPageButton : previousPageButton;

@@ -429,12 +429,16 @@ void RouteRow::rebuildTargetMenu()
             targetMenu.addItem (processor.getModulationTargetName (targetIndex), targetIndex + 1);
             selectedTargetListed = selectedTargetListed || targetIndex == selectedTarget;
         }
+        // The slot's on/off switch comes after its knobs.
+        const int switchTarget = modulationTargetIndex (slotIndex, slotSwitchParameterIndex);
+        targetMenu.addItem (processor.getModulationTargetName (switchTarget), switchTarget + 1);
+        selectedTargetListed = selectedTargetListed || switchTarget == selectedTarget;
     }
 
     // A route can point at a knob the current module does not use (e.g. after changing the module): keep it visible.
     if (! selectedTargetListed)
     {
-        targetMenu.addSectionHeading ("Unused knob");
+        targetMenu.addSectionHeading ("Unused");
         targetMenu.addItem (processor.getModulationTargetName (selectedTarget), selectedTarget + 1);
     }
 

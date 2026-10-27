@@ -79,6 +79,7 @@ private:
     ModulationSourceValues sourceValues;
     int64_t samplesProcessed = 0;
     SlotSettings modulatedSlots[numSlots] {};
+    bool slotSwitchStates[numSlots] {}; ///< Each slot's on/off state after modulation, for the hysteresis
     float lfoValues[numLfos] {};
     double lfoPhases[numLfos] {};
 

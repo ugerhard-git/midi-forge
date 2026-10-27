@@ -1255,6 +1255,50 @@ TEST_CASE ("note dispatcher: the host shows its knobs, and notes leave on the di
     EXPECT (channels == std::vector<int> ({ 1, 2, 3 }));
 }
 
+//==============================================================================
+// Modulated on/off switches
+
+TEST_CASE ("switch targets: named per slot, listed for the host, and they follow moved modules")
+{
+    MidiForgeProcessor processor;
+    processor.loadModule (2, (int) ModuleType::Transpose);
+    const int switchOfSlot3 = modulationTargetIndex (2, slotSwitchParameterIndex);
+    EXPECT (processor.getModulationTargetName (switchOfSlot3) == juce::String::fromUTF8 ("Slot 3 \xc2\xb7 On/Off"));
+
+    auto* target = processor.parameters.getParameter (ParameterIds::routeTarget (0));
+    target->setValueNotifyingHost (target->getValueForText ("Slot 3 On/Off"));
+    EXPECT (routeTargetOf (processor, 0) == switchOfSlot3);
+    EXPECT (target->getCurrentValueAsText() == juce::String::fromUTF8 ("Slot 3 \xc2\xb7 On/Off"));
+
+    // Projects from before keep their targets: the knob targets keep their numbers.
+    EXPECT (processor.getModulationTargetName (modulationTargetIndex (2, 0)).endsWith ("Semitones"));
+
+    setRoute (processor, 0, switchOfSlot3);
+    processor.swapSlots (2, 3);
+    EXPECT (routeTargetOf (processor, 0) == modulationTargetIndex (3, slotSwitchParameterIndex));
+    EXPECT (processor.isSlotSwitchModulated (3) && ! processor.isSlotSwitchModulated (2));
+}
+
+TEST_CASE ("switch targets: a route switches a slot off, and the editor's readout shows it")
+{
+    MidiForgeProcessor processor;
+    processor.loadModule (0, (int) ModuleType::Transpose);
+    // A square LFO at 100 % on slot 1's switch, inverted (negative amount): off during the high half.
+    auto* lfoWave = processor.parameters.getParameter (ParameterIds::lfoWaveform (0));
+    lfoWave->setValueNotifyingHost (lfoWave->convertTo0to1 ((float) LfoWaveform::Square));
+    setRoute (processor, 0, modulationTargetIndex (0, slotSwitchParameterIndex), -100.0f);
+    processor.prepareToPlay (testSampleRate, testBlockSize);
+
+    bool sawOff = false, sawOn = false;
+    for (int block = 0; block < 400; ++block)
+    {
+        processBlock (processor, {});
+        (processor.isSlotEnabledAfterModulation (0) ? sawOn : sawOff) = true;
+    }
+    EXPECT (sawOn && sawOff);
+    EXPECT (processor.isSlotEnabled (0)); // the switch itself stays as the user set it
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juceInitialiser;

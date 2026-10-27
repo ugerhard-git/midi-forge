@@ -116,6 +116,7 @@ private:
     int displayedPage = 0;
     bool displayedAsEnabled = true;
     bool showsHiddenPageDot = false;
+    bool showsSwitchModulation = false; ///< A route moves the power switch (yellow outline)
 
     juce::ToggleButton powerSwitch;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> powerSwitchAttachment;

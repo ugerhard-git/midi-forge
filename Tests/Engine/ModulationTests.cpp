@@ -238,7 +238,7 @@ TEST_CASE ("routes: add LFO times amount to the knob value, sum up and clamp")
     EXPECT (base[2].parameterValues[1] == 0.5f); // the user's values are never changed
 }
 
-TEST_CASE ("routes: target numbering covers every slot parameter and keeps the numbers of 0.6.0")
+TEST_CASE ("routes: target numbering covers every slot parameter and switch, and keeps older numbers")
 {
     // A-D keep the numbers they had when slots had four parameters ...
     EXPECT (modulationTargetIndex (0, 0) == 1);
@@ -247,12 +247,15 @@ TEST_CASE ("routes: target numbering covers every slot parameter and keeps the n
     EXPECT (modulationTargetIndex (7, 3) == 32);
     // ... and E-H come after them.
     EXPECT (modulationTargetIndex (0, 4) == 33);
-    EXPECT (modulationTargetIndex (7, 7) == numModulationTargets - 1);
+    EXPECT (modulationTargetIndex (7, 7) == 64);
+    // ... and the on/off switches after those (0.13.0).
+    EXPECT (modulationTargetIndex (0, slotSwitchParameterIndex) == 65);
+    EXPECT (modulationTargetIndex (7, slotSwitchParameterIndex) == numModulationTargets - 1);
 
     std::set<int> seen;
     for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
     {
-        for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
+        for (int parameterIndex = 0; parameterIndex <= slotSwitchParameterIndex; ++parameterIndex)
         {
             ModulationRoute route;
             route.targetIndex = modulationTargetIndex (slotIndex, parameterIndex);
@@ -391,4 +394,70 @@ TEST_CASE ("engine: an LFO on the arpeggiator gate keeps the arpeggio on the gri
         }
     }
     EXPECT (noteLengths.size() > 5); // the gate really changes
+}
+
+TEST_CASE ("routes: a modulated on/off switch flips with hysteresis")
+{
+    SlotSettings base[numSlots] {};
+    SlotSettings modulated[numSlots] {};
+    ModulationRoute routes[numModulationRoutes] {};
+    routes[0].sourceIndex = 0;
+    routes[0].targetIndex = modulationTargetIndex (2, slotSwitchParameterIndex);
+    routes[0].amount = 1.0f;
+    base[2].isEnabled = true;
+    bool switchStates[numSlots];
+    std::fill (std::begin (switchStates), std::end (switchStates), true);
+
+    const auto applyWithSource = [&] (float bipolarValue)
+    {
+        ModulationSourceValues values;
+        values.bipolar[0] = bipolarValue;
+        applyModulationRoutes (values, routes, base, modulated, switchStates);
+        return modulated[2].isEnabled;
+    };
+    // Switched on (1): turns off only when 1 + source drops below 0.45 ...
+    EXPECT (applyWithSource (-0.5f));
+    EXPECT (! applyWithSource (-0.6f));
+    // ... and back on only above 0.55.
+    EXPECT (! applyWithSource (-0.5f));
+    EXPECT (! applyWithSource (-0.46f));
+    EXPECT (applyWithSource (-0.4f));
+    // Other slots and the knobs are untouched.
+    EXPECT (modulated[1].isEnabled == base[1].isEnabled);
+    EXPECT (modulated[2].parameterValues[0] == base[2].parameterValues[0]);
+
+    // A switched-off slot with a unipolar route turns on when the source passes the threshold.
+    base[2].isEnabled = false;
+    routes[0].isUnipolar = true;
+    switchStates[2] = false;
+    ModulationSourceValues values;
+    values.unipolar[0] = 0.5f;
+    applyModulationRoutes (values, routes, base, modulated, switchStates);
+    EXPECT (! modulated[2].isEnabled);
+    values.unipolar[0] = 0.6f;
+    applyModulationRoutes (values, routes, base, modulated, switchStates);
+    EXPECT (modulated[2].isEnabled);
+}
+
+TEST_CASE ("engine: a square LFO on a slot's switch turns the module on and off, without stuck notes")
+{
+    ChainTestRig rig;
+    rig.loadModule (0, ModuleType::Transpose, { 12, 0 });
+    rig.lfos[0].waveform = LfoWaveform::Square;
+    rig.lfos[0].isTempoSynced = false;
+    rig.lfos[0].rateHz = 2.0;
+    rig.routeLfo (0, 0, 0, slotSwitchParameterIndex, 100);
+
+    // Short notes all through two seconds: some are transposed (slot on), some are not (slot off).
+    for (int note = 0; note < 40; ++note)
+    {
+        rig.processBlock ({ noteOnAt (0, 60) });
+        rig.processSeconds (0.02);
+        rig.processBlock ({ noteOffAt (0, 60) });
+        rig.processSeconds (0.02);
+    }
+    const auto played = rig.playedNoteNumbers();
+    EXPECT (std::count (played.begin(), played.end(), 72) > 5);
+    EXPECT (std::count (played.begin(), played.end(), 60) > 5);
+    EXPECT (rig.notesStillSounding().empty());
 }

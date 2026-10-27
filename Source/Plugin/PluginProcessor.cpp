@@ -40,8 +40,10 @@ juce::StringArray lfoDivisionNames()
     return result;
 }
 
-/** Fixed host-side names of the modulation targets: "None", "Slot 1 A" ... "Slot 8 D". */
-/** Fixed host-side names of the modulation targets, in target-number order: "None", "Slot 1 A" ... */
+/**
+ * Fixed host-side names of the modulation targets, in target-number order: "None", "Slot 1 A" ...,
+ * then "Slot 1 On/Off" ...
+ */
 juce::StringArray fixedModulationTargetNames()
 {
     juce::StringArray result { "None" };
@@ -49,8 +51,12 @@ juce::StringArray fixedModulationTargetNames()
     {
         ModulationRoute route;
         route.targetIndex = targetIndex;
-        result.add ("Slot " + juce::String (route.targetSlotIndex() + 1) + " " +
-                    juce::String (ParameterIds::valueSuffixes[route.targetParameterIndex()]).toUpperCase());
+        const juce::String slotName = "Slot " + juce::String (route.targetSlotIndex() + 1) + " ";
+        if (route.targetsSlotSwitch())
+            result.add (slotName + "On/Off");
+        else
+            result.add (slotName +
+                        juce::String (ParameterIds::valueSuffixes[route.targetParameterIndex()]).toUpperCase());
     }
     return result;
 }
@@ -114,6 +120,8 @@ MidiForgeProcessor::MidiForgeProcessor()
 
     for (auto& readout : modulatedValueReadouts)
         readout.store (0.0f);
+    for (auto& readout : modulatedSwitchReadouts)
+        readout.store (true);
     for (auto& readout : lfoValueReadouts)
         readout.store (0.0f);
     for (auto& readout : lfoPhaseReadouts)
@@ -463,6 +471,9 @@ void MidiForgeProcessor::publishReadoutsForEditor()
         for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
             modulatedValueReadouts[(size_t) (slotIndex * numParametersPerSlot + parameterIndex)].store (
                 modulatedSlots[slotIndex].parameterValues[parameterIndex], std::memory_order_relaxed);
+    for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
+        modulatedSwitchReadouts[(size_t) slotIndex].store (modulatedSlots[slotIndex].isEnabled,
+                                                           std::memory_order_relaxed);
 
     for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
     {
@@ -507,6 +518,16 @@ NoteRandomSettings MidiForgeProcessor::getNoteRandomSettings (int randomIndex) c
     return settings;
 }
 
+bool MidiForgeProcessor::isSlotSwitchModulated (int slotIndex) const noexcept
+{
+    return isParameterModulated (slotIndex, slotSwitchParameterIndex);
+}
+
+bool MidiForgeProcessor::isSlotEnabledAfterModulation (int slotIndex) const noexcept
+{
+    return modulatedSwitchReadouts[(size_t) slotIndex].load (std::memory_order_relaxed);
+}
+
 bool MidiForgeProcessor::isParameterModulated (int slotIndex, int parameterIndex) const noexcept
 {
     const int targetIndex = modulationTargetIndex (slotIndex, parameterIndex);
@@ -533,6 +554,8 @@ juce::String MidiForgeProcessor::getModulationTargetName (int targetIndex) const
     const int slotIndex = route.targetSlotIndex();
     const int parameterIndex = route.targetParameterIndex();
     const juce::String slotName = "Slot " + juce::String (slotIndex + 1);
+    if (route.targetsSlotSwitch())
+        return slotName + middleDot + "On/Off";
 
     const auto& description = getModuleDescription (getModuleType (slotIndex));
     const auto& parameter = description.parameters[parameterIndex];

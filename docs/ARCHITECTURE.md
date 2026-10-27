@@ -197,6 +197,12 @@ strip in the footer for 8 seconds. Removal history is not saved in projects.
 
 ## Modulation
 
+- Routes can also target a slot's on/off switch (targets 65..72, `ModulationRoute::targetsSlotSwitch()`,
+  parameter index `slotSwitchParameterIndex`). `applyModulationRoutes()` adds the switch routes to 0 or 1 and
+  applies hysteresis (on above `switchOnThreshold`, off below `switchOffThreshold`), remembering each slot's
+  state in `MidiForgeEngine::slotSwitchStates`. The chain sees an ordinary switch change, so the usual slot
+  restart rules (release, orphaned keys) apply.
+
 - `Lfo` computes its output from a position measured in cycles. Tempo-synced LFOs take it from the
   host's quarter-note position while the transport runs (locked to the bar grid; "restart on key"
   remembers the host position of the restart), otherwise from their own clock, which mirrors the host

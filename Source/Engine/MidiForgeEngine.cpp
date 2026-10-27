@@ -31,6 +31,7 @@ MidiForgeEngine::MidiForgeEngine()
 
     for (auto* buffer : { &blockInput, &segmentEvents, &blockOutput })
         buffer->reserve (reservedEventsPerBuffer);
+    std::fill (std::begin (slotSwitchStates), std::end (slotSwitchStates), true);
 }
 
 void MidiForgeEngine::prepare (double sampleRate)
@@ -49,6 +50,7 @@ void MidiForgeEngine::reset()
     samplesProcessed = 0;
     isKeyHeld.fill (false);
     numKeysHeld = 0;
+    std::fill (std::begin (slotSwitchStates), std::end (slotSwitchStates), true);
 }
 
 BlockContext MidiForgeEngine::contextForSegment (const BlockContext& blockContext, int segmentStart,
@@ -133,9 +135,15 @@ void MidiForgeEngine::processSegment (int segmentStart, int segmentLength, const
     computeSourceValues (segmentContext, settings);
 
     if (isModulationActive)
-        applyModulationRoutes (sourceValues, settings.routes, settings.slots, modulatedSlots);
+    {
+        applyModulationRoutes (sourceValues, settings.routes, settings.slots, modulatedSlots, slotSwitchStates);
+    }
     else
+    {
         std::copy (std::begin (settings.slots), std::end (settings.slots), modulatedSlots);
+        for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
+            slotSwitchStates[slotIndex] = settings.slots[slotIndex].isEnabled;
+    }
 
     moduleChain.process (segmentEvents, segmentContext, modulatedSlots);
 
