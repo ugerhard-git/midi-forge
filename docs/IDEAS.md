@@ -16,6 +16,22 @@ When a feature is implemented, remove it here and describe it in [MANUAL.md](MAN
 
 ## Ideas
 
+### Note Split module (proposal sent to the owner, waiting for answers)
+
+A Filter that splits the chain: selected notes continue through the slots below it, all other notes skip
+the rest of the chain and go straight to the DAW unchanged. Example: only the hi-hat (F#1) goes on to a
+Repeater, kick and snare pass through untouched.
+
+- Proposed knobs: Low, High (same note = exactly one note, the default), Octaves (This octave / Every
+  octave), Mode (Selected → chain / Selected → DAW).
+- A note-off always takes the same path as its note-on (also after knob changes or LFO modulation); poly
+  aftertouch follows its note. Several Note Splits can be chained. Panic and slot changes also release
+  notes that skipped the chain.
+- Engine: the chain needs a bypass path that merges into the final output and is tracked by the
+  stuck-note logic.
+- Open questions: one note or a range? "Every octave" and invert mode wanted? Non-note messages down the
+  chain or straight to the DAW (or a knob)? Name?
+
 ### Six knobs per slot (A–F)
 
 Inspired by the Repeater (0.4.0), which would like adjustable **accent strength** and **note length** besides
