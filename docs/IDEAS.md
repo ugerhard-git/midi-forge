@@ -12,17 +12,22 @@ When a feature is implemented, remove it here and describe it in [MANUAL.md](MAN
 
 ## Planned
 
-### Remove a module with one click
+### Note Dispatcher module (Transform)
 
-Agreed with the owner, waiting for the go.
+Agreed with the owner. Sends incoming notes to a range of MIDI channels, rotating and keeping track of
+which channels are free (e.g. to play several mono synths polyphonically, or alternate between sounds).
 
-- A small **✕** button next to the **i** button of every slot that holds a module (not on empty slots).
-- One click removes the module: the modules below move up one slot, the empty slot goes to the end of the
-  chain.
-- Modulation routes follow their modules when they move up; routes to the removed module are set to *None*.
-  The ▲ / ▼ buttons get the same behaviour (today routes stay with the slot number when modules move).
-- An **undo strip** ("Removed *Repeater* · Undo") shows for a few seconds; Undo puts the module back exactly
-  as it was: slot, knobs, power switch, shown page and its routes.
+- **Knobs:** A *Algorithm* (Round Robin / Random / Ping Pong), B *Mode* (Single Notes / Chords),
+  C *First Channel* (1–16), D *Channels* (2–16; the range ends at channel 16), page 2: E *Input* (All, 1–16:
+  only notes from this channel are dispatched, everything else passes untouched), F *Chord Window*
+  (0–100 ms, default 30 ms).
+- A channel is **free** when no note sent to it is still held. *Round Robin* takes the next free channel above
+  the last one used, wrapping around; *Random* picks any free channel; *Ping Pong* runs up and down without
+  repeating the ends (1 2 3 4 3 2 1 2 …).
+- **Chords mode:** notes within the Chord Window count as one chord and all go to one channel.
+- **All channels busy:** the oldest note (or chord) is ended and its channel reused (steal).
+- Note-offs and polyphonic aftertouch follow their note's channel. Pitch bend, CCs, channel aftertouch and
+  program changes from the input channel are copied to every target channel.
 
 ## Ideas
 
