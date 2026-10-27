@@ -133,15 +133,12 @@ jobs:
           cp -R "build/MidiForge_artefacts/Release/VST3/MIDI Forge.vst3" dist/
           cp packaging/INSTALL.txt dist/
 
-      - name: Zip (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: Compress-Archive -Path dist/* -DestinationPath MIDI-Forge-Windows.zip
-
+      # GitHub always delivers an artifact as a zip, so the folder is uploaded as it is (zipping it here
+      # would give a zip inside a zip). The release job makes the release zip itself.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: MIDI-Forge-${{ matrix.name }}
-          path: MIDI-Forge-${{ matrix.name }}.zip
+          path: dist/
           if-no-files-found: error
           retention-days: 30
 
@@ -158,14 +155,22 @@ jobs:
         with:
           pattern: MIDI-Forge-*
           path: artifacts
-          merge-multiple: true
+
+      # Each artifact arrives as a folder (artifacts/MIDI-Forge-Windows/...); zip each one for the release.
+      - name: Zip the plug-ins
+        run: |
+          for folder in artifacts/*/; do
+            name=$(basename "$folder")
+            (cd "$folder" && zip -r -q "$GITHUB_WORKSPACE/$name.zip" .)
+          done
+          ls -l *.zip
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$TAG" artifacts/*.zip \
+          gh release create "$TAG" ./*.zip \
             --repo "$GITHUB_REPOSITORY" \
             --title "MIDI Forge $TAG" \
             --generate-notes

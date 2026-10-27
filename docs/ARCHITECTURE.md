@@ -258,9 +258,10 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md#building) for commands. The workflow
 1. **Checks** (Linux): clang-format, clang-tidy, engine tests with warnings as errors, engine tests
    under address/UB sanitizers, plug-in layer tests, and screenshots of both editor pages (artifact
    `editor-screenshots`, the source of `docs/images/editor.png` and `docs/images/modulation.png`).
-2. **Plug-in build** (Windows): the VST3, zipped as artifact `MIDI-Forge-Windows`. macOS and CLAP builds
+2. **Plug-in build** (Windows): the VST3 and INSTALL.txt as artifact `MIDI-Forge-Windows` (uploaded as a
+   folder; GitHub zips artifacts itself, so the download is a single zip). macOS and CLAP builds
    are switched off for now; CMake still knows both (universal binary on macOS, `MIDI_FORGE_BUILD_CLAP`).
-3. **Release** (tags `v*` only): attaches the zips to a GitHub Release.
+3. **Release** (tags `v*` only): zips each artifact folder and attaches the zips to a GitHub Release.
 
 Dependencies (JUCE 9.0.4; clap-juce-extensions only with CLAP switched on) are fetched by CMake at pinned versions; GitHub
 Actions are pinned to commit SHAs and updated by Dependabot.
