@@ -31,6 +31,23 @@ ParameterKnob::ParameterKnob()
     // Long texts ("Last Note") are condensed a little instead of being cut off.
     nameLabel.setMinimumHorizontalScale (0.75f);
     valueLabel.setMinimumHorizontalScale (0.7f);
+
+    triggerButton.setColour (juce::TextButton::buttonColourId, Theme::Colours::controlTrack);
+    triggerButton.onStateChange = [this] { triggerButtonStateChanged(); };
+    addChildComponent (triggerButton);
+}
+
+void ParameterKnob::triggerButtonStateChanged()
+{
+    const bool isDown = triggerButton.isDown();
+    if (! isTrigger || attachedParameter == nullptr || isDown == isTriggerDown)
+        return;
+    isTriggerDown = isDown;
+    if (isDown)
+        attachedParameter->beginChangeGesture();
+    attachedParameter->setValueNotifyingHost (isDown ? 1.0f : 0.0f);
+    if (! isDown)
+        attachedParameter->endChangeGesture();
 }
 
 void ParameterKnob::resized()
@@ -41,6 +58,7 @@ void ParameterKnob::resized()
     area.removeFromLeft (4);
     nameLabel.setBounds (area.removeFromTop (area.getHeight() / 2).withTrimmedTop (2));
     valueLabel.setBounds (area.withTrimmedBottom (4));
+    triggerButton.setBounds (getLocalBounds().withSizeKeepingCentre (juce::jmin (getWidth(), 90), 26));
 }
 
 void ParameterKnob::attachTo (juce::AudioProcessorValueTreeState& parameters, const juce::String& parameterId,
@@ -54,6 +72,16 @@ void ParameterKnob::attachTo (juce::AudioProcessorValueTreeState& parameters, co
     const bool hasSteps = description.isUsed() && description.kind != ParameterKind::Continuous;
     const int numSteps = hasSteps ? getNumberOfSteps (description) : 0;
     knob.setRange (0.0, 1.0, numSteps > 1 ? 1.0 / (numSteps - 1) : 0.0);
+
+    // Trigger parameters are a button: on while held down.
+    attachedParameter = parameters.getParameter (parameterId);
+    isTrigger = description.kind == ParameterKind::Trigger;
+    isTriggerDown = false;
+    triggerButton.setButtonText (description.name);
+    triggerButton.setTooltip (description.helpText);
+    triggerButton.setVisible (isTrigger);
+    for (auto* component : std::initializer_list<juce::Component*> { &knob, &nameLabel, &valueLabel })
+        component->setVisible (! isTrigger);
 }
 
 void ParameterKnob::setModulation (bool isModulated, float modulatedValue01)
@@ -69,6 +97,13 @@ void ParameterKnob::paintOverChildren (juce::Graphics& graphics)
 {
     if (! showsModulation || ! isVisible())
         return;
+    if (isTrigger)
+    {
+        // A modulated trigger: a yellow outline around the button.
+        graphics.setColour (Theme::Colours::modulation.withAlpha (0.8f));
+        graphics.drawRoundedRectangle (triggerButton.getBounds().toFloat().expanded (1.5f), 5.0f, 1.2f);
+        return;
+    }
 
     // Same geometry as ForgeLookAndFeel::drawRotarySlider, one ring further out.
     const auto rotary = knob.getRotaryParameters();

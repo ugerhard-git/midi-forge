@@ -52,6 +52,8 @@ const char* const slideDelayLabels[] = { "Off", "1/64", "1/32T", "1/32", "1/16T"
                                          "1/8", "1/4T", "1/8D",  "1/4",  "1/2T",  "1/4D",  "1/2",  "1/2D", "1 Bar" };
 const char* const dispatchAlgorithmLabels[] = { "Round Robin", "Random", "Ping Pong" };
 const char* const dispatchModeLabels[] = { "Single Notes", "Chords" };
+const char* const mutateDirectionLabels[] = { "Up", "Down", "Both" };
+const char* const mutateMemoryLabels[] = { "4 Bars", "2 Bars", "1 Bar", "Per Pitch" };
 const char* const echoDivisionLabels[] = { "1/32", "1/16T", "1/16", "1/16D", "1/8T", "1/8",
                                            "1/8D", "1/4T",  "1/4",  "1/4D",  "1/2",  "1 Bar" };
 const char* const arpeggiatorDivisionLabels[] = { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
@@ -89,6 +91,11 @@ ParameterDescription percentParameter (const char* name, float minimum, float ma
 ParameterDescription noteParameter (const char* name, float defaultNoteNumber)
 {
     return { name, ParameterKind::NoteNumber, 0, 127, defaultNoteNumber, nullptr, "", nullptr };
+}
+
+ParameterDescription triggerParameter (const char* name)
+{
+    return { name, ParameterKind::Trigger, 0, 1, 0, nullptr, "", nullptr };
 }
 
 template <size_t NumLabels>
@@ -328,6 +335,25 @@ const ModuleDescription* createModuleTable()
           "Robin takes the next free channel in turn, Random any free one, Ping Pong goes up and down. When "
           "every channel is busy, the oldest note is ended to make room. Controllers, pitch bend and "
           "aftertouch are copied to every channel." },
+
+        // Added in 0.15.0 --------------------------------------------------------------------------
+        { "Mutate",
+          ModuleCategory::Randomizer,
+          "Lets a melody drift: notes slowly move to neighbouring scale notes.",
+          { percentParameter ("Amount", 0, 100, 25).withHelp ("How often a note moves one more step away."),
+            integerParameter ("Range", 1, 3, 1).withHelp ("How many scale steps a single change can move."),
+            choiceParameter ("Direction", mutateDirectionLabels, 2).withHelp ("Which way the notes move."),
+            percentParameter ("Return", 0, 100, 30).withHelp ("How strongly changed notes drift back to the original."),
+            // Page 2
+            choiceParameter ("Root", pitchClassLabels, 0).withHelp ("Key of the scale the notes move in."),
+            choiceParameter ("Scale", scaleLabels, 1).withHelp ("The scale the notes move in."),
+            choiceParameter ("Memory", mutateMemoryLabels, 0)
+                .withHelp ("Remember changes per position in a 4, 2 or 1 bar loop, or per pitch."),
+            triggerParameter ("Reset").withHelp ("Back to the original melody (also when the DAW starts playing).") },
+          "Varies a looped melody or bassline slowly, one note at a time, staying in key. Every time a note plays, "
+          "it may move one more step to a neighbouring note of the scale, or back towards the original, and the "
+          "module remembers it: per position in the loop (the note on beat 2 of bar 3) or per pitch (every C). "
+          "Chords (notes within 30 ms) pass untouched." },
     };
     return table;
 }
@@ -547,6 +573,8 @@ std::string formatParameterValue (const ParameterDescription& parameter, float n
             return (showPlusSign ? "+" : "") + std::to_string (value) + parameter.unitSuffix;
         }
 
+        case ParameterKind::Trigger: return normalisedToInteger (parameter, normalisedValue) != 0 ? "On" : "Off";
+
         case ParameterKind::Continuous:
         {
             char text[32];
@@ -570,6 +598,9 @@ float parseParameterText (const ParameterDescription& parameter, const std::stri
 
     if (parameter.labelForMinimum != nullptr && text == parameter.labelForMinimum)
         return 0.0f;
+
+    if (parameter.kind == ParameterKind::Trigger && (text == "On" || text == "Off"))
+        return text == "On" ? 1.0f : 0.0f;
 
     if (parameter.kind == ParameterKind::NoteNumber)
         for (int noteNumber = 0; noteNumber < 128; ++noteNumber)

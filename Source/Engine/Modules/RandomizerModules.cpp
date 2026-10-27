@@ -1,6 +1,6 @@
 /**
  * @file RandomizerModules.cpp
- * @brief Modules that add controlled randomness: Humanize, Probability, Random Pitch, Pitch Slide.
+ * @brief Modules that add controlled randomness: Humanize, Probability, Random Pitch, Pitch Slide, Mutate.
  */
 #include "RandomizerModules.h"
 
@@ -378,6 +378,236 @@ private:
     std::array<bool, numChannelNoteCombinations> isKeyHeld {};
 };
 
+/**
+ * Lets a looped melody drift: every time a (single) note plays, it may move one more step to a neighbouring
+ * note of the scale, or back towards its original pitch, and the module remembers where each note is now.
+ *
+ * Memory: per position in a loop of 4, 2 or 1 bars (on a sixteenth grid, needs the DAW playing; otherwise it
+ * falls back to per pitch), or per pitch. The memory holds an offset in scale steps. It is cleared by the
+ * Reset button (when it turns on, also by modulation) and when the DAW starts playing.
+ *
+ * Chords pass untouched: notes starting within chordWindowMilliseconds of each other. Because a plug-in cannot
+ * look ahead, a mutated note that turns out to be the first note of a chord is restarted at its own pitch.
+ */
+class Mutate final : public MidiModule
+{
+public:
+    Mutate() : MidiModule (ModuleType::Mutate) { reset(); }
+
+    void reset() override
+    {
+        clearMemory();
+        outputNoteOfKey.fill (noOutputNote);
+        velocityOfKey.fill (0);
+        lastNoteOnTime = std::numeric_limits<int64_t>::min() / 2;
+        lastKey = 0;
+        lastNoteWasMutated = false;
+        wasResetOn = false;
+        wasPlaying = false;
+        soundingNotes.clear();
+    }
+
+    void process (const MidiEventList& input, MidiEventList& output, const BlockContext& context,
+                  const float* parameterValues) override
+    {
+        const bool isResetOn = integerParameter (parameterValues, resetButton) != 0;
+        if ((isResetOn && ! wasResetOn) || (context.isPlaying && ! wasPlaying))
+            clearMemory();
+        wasResetOn = isResetOn;
+        wasPlaying = context.isPlaying;
+
+        for (const auto& event : input)
+        {
+            if (event.isNoteOn())
+                handleNoteOn (event, context, parameterValues, output);
+            else if (event.isNoteOff())
+                handleNoteOff (event, output);
+            else if (event.isPolyPressure() && outputNoteOfKey[keyOf (event)] != noOutputNote)
+            {
+                auto followed = event;
+                followed.data1 = (uint8_t) outputNoteOfKey[keyOf (event)];
+                output.push_back (followed);
+            }
+            else
+                output.push_back (event);
+        }
+    }
+
+private:
+    enum Parameter
+    {
+        amountPercent,
+        rangeInSteps,
+        direction,
+        returnPercent,
+        rootPitchClass, ///< page 2
+        scaleIndex,     ///< page 2
+        memoryMode,     ///< page 2
+        resetButton     ///< page 2
+    };
+    enum Direction
+    {
+        up,
+        down,
+        both
+    };
+    enum MemoryMode
+    {
+        fourBars,
+        twoBars,
+        oneBar,
+        perPitch
+    };
+
+    static constexpr double chordWindowMilliseconds = 30.0;
+    static constexpr int sixteenthsPerBar = 16;
+    static constexpr int maximumOffset = 7; ///< Scale steps a note can drift at most (about an octave)
+    static constexpr int16_t noOutputNote = -1;
+
+    static size_t keyOf (const MidiEvent& event) noexcept
+    {
+        return channelNoteIndex (event.channel(), event.noteNumber());
+    }
+
+    void clearMemory() noexcept
+    {
+        positionOffsets.fill (0);
+        pitchOffsets.fill (0);
+    }
+
+    void handleNoteOn (const MidiEvent& noteOn, const BlockContext& context, const float* parameterValues,
+                       MidiEventList& output)
+    {
+        const size_t key = keyOf (noteOn);
+        if (outputNoteOfKey[key] != noOutputNote)
+            endKey (key, noOutputNote, noteOn.samplePosition, output); // played again: end its previous note
+
+        const int64_t eventTime = context.blockStartSample + noteOn.samplePosition;
+        const auto chordWindow = (int64_t) (chordWindowMilliseconds / 1000.0 * context.sampleRate);
+        const bool isChordNote = eventTime - lastNoteOnTime <= chordWindow;
+
+        int pitch = noteOn.noteNumber();
+        if (isChordNote)
+        {
+            // The previous note turned out to start a chord: restart it at its own pitch, if it was changed.
+            if (lastNoteWasMutated && outputNoteOfKey[lastKey] != noOutputNote)
+            {
+                endKey (lastKey, noOutputNote, noteOn.samplePosition, output);
+                startNote (lastKey, (int) (lastKey % numMidiNotes), velocityOfKey[lastKey], noteOn.samplePosition,
+                           output);
+            }
+            lastNoteWasMutated = false;
+        }
+        else
+        {
+            pitch = mutatedPitch (noteOn, eventTime, context, parameterValues);
+            lastNoteWasMutated = pitch != noteOn.noteNumber();
+            lastKey = key;
+        }
+        lastNoteOnTime = eventTime;
+        velocityOfKey[key] = (uint8_t) noteOn.velocity();
+        startNote (key, pitch, noteOn.velocity(), noteOn.samplePosition, output);
+    }
+
+    void handleNoteOff (const MidiEvent& noteOff, MidiEventList& output)
+    {
+        const size_t key = keyOf (noteOff);
+        if (outputNoteOfKey[key] == noOutputNote)
+        {
+            output.push_back (noteOff); // a note from before this module was there (rule 1)
+            return;
+        }
+        endKey (key, noOutputNote, noteOff.samplePosition, output, noteOff.velocity());
+    }
+
+    /** Sends the note-on for an input key and remembers the pitch it plays. */
+    void startNote (size_t key, int pitch, int velocity, int samplePosition, MidiEventList& output)
+    {
+        const int channel = (int) (key / numMidiNotes);
+        outputNoteOfKey[key] = (int16_t) pitch;
+        soundingNotes.noteStarted (channel, pitch);
+        output.push_back (MidiEvent::noteOn (samplePosition, channel, pitch, velocity));
+    }
+
+    /** Ends the note an input key is playing. */
+    void endKey (size_t key, int16_t newState, int samplePosition, MidiEventList& output, int releaseVelocity = 0)
+    {
+        const int channel = (int) (key / numMidiNotes);
+        const int pitch = outputNoteOfKey[key];
+        outputNoteOfKey[key] = newState;
+        if (soundingNotes.noteEnded (channel, pitch))
+            output.push_back (MidiEvent::noteOff (samplePosition, channel, pitch, releaseVelocity));
+    }
+
+    /** Updates the remembered offset for this note (return, then maybe one more step) and applies it. */
+    int mutatedPitch (const MidiEvent& noteOn, int64_t eventTime, const BlockContext& context,
+                      const float* parameterValues)
+    {
+        int8_t& offset = memorySlotFor (noteOn, eventTime, context, integerParameter (parameterValues, memoryMode));
+
+        if (offset != 0 && randomUnitValue() * 100.0f < (float) integerParameter (parameterValues, returnPercent))
+            offset = (int8_t) (offset > 0 ? offset - 1 : offset + 1);
+
+        if (randomUnitValue() * 100.0f < (float) integerParameter (parameterValues, amountPercent))
+        {
+            const int step = randomInteger (1, std::clamp (integerParameter (parameterValues, rangeInSteps), 1, 3));
+            const int chosenDirection = integerParameter (parameterValues, direction);
+            const bool goesUp = chosenDirection == up || (chosenDirection == both && randomInteger (0, 1) == 1);
+            offset = (int8_t) std::clamp (offset + (goesUp ? step : -step), -maximumOffset, maximumOffset);
+        }
+
+        const int root = std::clamp (integerParameter (parameterValues, rootPitchClass), 0, 11);
+        const auto mask =
+            scales[std::clamp (integerParameter (parameterValues, scaleIndex), 0, numScales - 1)].semitoneMask;
+        return moveByScaleSteps (noteOn.noteNumber(), offset, root, mask);
+    }
+
+    /** @return The memory slot of a note: its position in the loop, or its pitch. */
+    int8_t& memorySlotFor (const MidiEvent& noteOn, int64_t eventTime, const BlockContext& context, int mode) noexcept
+    {
+        if (mode == perPitch || ! context.followsHostTransport())
+            return pitchOffsets[(size_t) noteOn.noteNumber()];
+
+        const int loopBars = mode == fourBars ? 4 : (mode == twoBars ? 2 : 1);
+        const int loopSixteenths = loopBars * sixteenthsPerBar;
+        const double beat = context.ppqPositionAtBlockStart +
+                            (double) (eventTime - context.blockStartSample) / context.samplesPerBeat();
+        const auto sixteenth = (int64_t) std::llround (beat * 4.0);
+        return positionOffsets[(size_t) (((sixteenth % loopSixteenths) + loopSixteenths) % loopSixteenths)];
+    }
+
+    /**
+     * @return The note `steps` scale notes above (positive) or below (negative) a note; the note itself for 0
+     *         steps or when the result would leave the MIDI range.
+     */
+    static int moveByScaleSteps (int noteNumber, int steps, int root, unsigned short semitoneMask) noexcept
+    {
+        const int stepDirection = steps > 0 ? 1 : -1;
+        int note = noteNumber;
+        for (int stepsLeft = std::abs (steps); stepsLeft > 0;)
+        {
+            note += stepDirection;
+            if (note < 0 || note >= numMidiNotes)
+                return noteNumber;
+            const int semitoneAboveRoot = ((note - root) % 12 + 12) % 12;
+            if ((semitoneMask >> semitoneAboveRoot) & 1u)
+                --stepsLeft;
+        }
+        return note;
+    }
+
+    std::array<int8_t, 4 * sixteenthsPerBar> positionOffsets {};
+    std::array<int8_t, numMidiNotes> pitchOffsets {};
+    std::array<int16_t, numChannelNoteCombinations> outputNoteOfKey {};
+    std::array<uint8_t, numChannelNoteCombinations> velocityOfKey {};
+    int64_t lastNoteOnTime = 0;
+    size_t lastKey = 0;
+    bool lastNoteWasMutated = false;
+    bool wasResetOn = false;
+    bool wasPlaying = false;
+    SoundingNoteCounter soundingNotes;
+};
+
 } // namespace
 
 std::unique_ptr<MidiModule> createRandomizerModule (ModuleType type)
@@ -388,6 +618,7 @@ std::unique_ptr<MidiModule> createRandomizerModule (ModuleType type)
         case ModuleType::Probability: return std::make_unique<Probability>();
         case ModuleType::RandomPitch: return std::make_unique<RandomPitch>();
         case ModuleType::PitchSlide: return std::make_unique<PitchSlide>();
+        case ModuleType::Mutate: return std::make_unique<Mutate>();
         default: return nullptr;
     }
 }

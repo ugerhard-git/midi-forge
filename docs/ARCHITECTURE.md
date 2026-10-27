@@ -140,6 +140,12 @@ on all channels. The stress test also checks that no channel is left bent.
   their note, whatever the knobs say by then. A key that sounds again ends its previous note first, as a
   synth would. Free channels are counted per channel (`numNotesOnChannel`); the oldest is found by the order
   in which channels last got a note or chord.
+- **Mutate** derives from `MidiModule` directly. It keeps offsets in scale steps per loop position (64
+  sixteenths) or per pitch, changes them by a Return chance (one step home) and an Amount chance (1..Range
+  steps away, at most 7) whenever a single note plays, and maps each key to the pitch it started (for its
+  note-off). Chord notes (onsets within 30 ms) pass; a changed first note of a chord is restarted at its own
+  pitch. Its Reset is a `ParameterKind::Trigger` parameter: the module acts on the rising edge (also when
+  modulated); the editor shows trigger parameters as a button that is on while held.
 - **Pitch Slide** derives from `MidiModule` directly: notes pass through on time, and the module adds pitch
   bend messages per channel (about one per millisecond while a slide moves, only when the value changes).
   It remembers the player's bend and adds the slide to it; when a channel's last held key ends, it sends the

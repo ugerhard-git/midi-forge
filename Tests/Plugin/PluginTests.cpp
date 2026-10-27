@@ -1425,6 +1425,46 @@ TEST_CASE ("step modulators: the Steps sub-tab shows the panels, and drawing set
     EXPECT (std::abs (processor.getStepModulatorSettings (1).stepValues[3] - -0.6f) < 1.0e-6f);
 }
 
+//==============================================================================
+// Mutate and trigger buttons
+
+TEST_CASE ("mutate: the host shows its knobs; Reset is a button that is on while held")
+{
+    MidiForgeProcessor processor;
+    processor.loadModule (0, (int) ModuleType::Mutate);
+    EXPECT (hostTextOf (processor, 0, 0) == "25%");
+    EXPECT (hostTextOf (processor, 0, 2) == "Both");
+    EXPECT (hostTextOf (processor, 0, 5) == "Minor");
+    EXPECT (hostTextOf (processor, 0, 6) == "4 Bars");
+    EXPECT (hostTextOf (processor, 0, 7) == "Off");
+    processor.setShownPage (0, 1);
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditorAndMakeActive());
+    auto* forgeEditor = dynamic_cast<MidiForgeEditor*> (editor.get());
+    if (forgeEditor == nullptr)
+        return;
+    forgeEditor->refreshFromProcessor();
+
+    // Find the Reset button of slot 1 (page 2, fourth knob).
+    juce::TextButton* resetButton = nullptr;
+    std::function<void (juce::Component&)> find = [&] (juce::Component& component)
+    {
+        if (auto* button = dynamic_cast<juce::TextButton*> (&component))
+            if (button->getButtonText() == "Reset" && button->isVisible() && resetButton == nullptr)
+                resetButton = button;
+        for (auto* child : component.getChildren())
+            find (*child);
+    };
+    find (*editor);
+    EXPECT (resetButton != nullptr);
+    if (resetButton == nullptr)
+        return;
+    resetButton->setState (juce::Button::buttonDown);
+    EXPECT (hostTextOf (processor, 0, 7) == "On");
+    resetButton->setState (juce::Button::buttonNormal);
+    EXPECT (hostTextOf (processor, 0, 7) == "Off");
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juceInitialiser;

@@ -16,6 +16,7 @@ namespace midiforge
 /**
  * A rotary knob with the parameter name and its current value next to it.
  * When an LFO modulates the parameter, a dot on an outer ring shows the value the chain actually uses.
+ * Trigger parameters (e.g. Mutate's Reset) are shown as a button instead: on while it is held down.
  */
 class ParameterKnob final : public juce::Component
 {
@@ -41,9 +42,16 @@ public:
     juce::Slider knob;
     juce::Label nameLabel;
     juce::Label valueLabel;
+    juce::TextButton triggerButton; ///< Shown instead of the knob for trigger parameters
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> parameterAttachment;
 
 private:
+    /** Sends the trigger parameter on while the button is held and off when it is released. */
+    void triggerButtonStateChanged();
+
+    juce::RangedAudioParameter* attachedParameter = nullptr;
+    bool isTrigger = false;
+    bool isTriggerDown = false;
     bool showsModulation = false;
     float modulatedValue = 0.0f;
 };

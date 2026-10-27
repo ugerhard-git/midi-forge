@@ -48,6 +48,8 @@ enum class ModuleType : int
     PitchSlide, ///< Randomizer
     // Added in 0.12.0
     NoteDispatcher, ///< Transform
+    // Added in 0.15.0
+    Mutate, ///< Randomizer
 
     Count
 };
@@ -74,7 +76,8 @@ enum class ParameterKind
     Continuous, ///< Real number between minimum and maximum.
     Choice,     ///< Index into choiceLabels.
     NoteNumber, ///< MIDI note number shown as a note name (C3 = 60).
-    Percent     ///< Whole number shown with a % sign.
+    Percent,    ///< Whole number shown with a % sign.
+    Trigger     ///< A button (0 = off, 1 = on); the module acts when it turns on (pressed or modulated).
 };
 
 /** The groups the module menu and the colour coding of the editor are organised by. */

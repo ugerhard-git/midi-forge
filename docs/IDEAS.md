@@ -38,11 +38,6 @@ direction (up, down, alternating, random) and a velocity tilt across the strum.
 Like Probability, but each position in the bar has a weight: downbeats almost always play, off-beat
 sixteenths drop out more often. Variation without losing the backbone of the groove.
 
-### Mutate
-
-Now and then replaces a note with a neighbouring note of the scale, so a melody evolves slowly but stays
-recognisable. Needs: scale source (own Root/Scale knobs or "follow Scale Quantize"), how often, how far.
-
 ### Ghost Notes
 
 Adds quiet extra hits shortly before or after notes, with a chance, mainly for drums (hi-hats, snares).

@@ -305,6 +305,34 @@ varied. The note-off is delayed by the same amount, so note lengths stay as play
 | Chance | 0 … 100 % | Share of notes that get shifted |
 | Mode | Any / Octaves / 5ths + Oct | Which intervals are used |
 
+**Mutate** – lets a looped melody or bassline evolve slowly while staying in key. Every time a note plays,
+it may move **one more step** to a neighbouring note of the scale (a C in C minor becomes a D or a B♭ …),
+or back towards its original pitch – and Mutate **remembers** where each note has wandered to. Over minutes
+the line drifts away from the original and, with *Return*, keeps finding its way back, like a player who
+varies a riff.
+
+- **Memory per position** (*4 Bars*, *2 Bars*, *1 Bar*): each place in a loop of that length (on a sixteenth
+  grid) remembers its own change, so the same pitch can change in one place and stay in another. Set it to
+  the length of your loop. This needs the DAW playing; when it is stopped, Mutate remembers per pitch.
+- **Memory per pitch:** every C moves together, every D together …
+- **Chords pass untouched:** notes starting within 30 ms of each other. (Mutate cannot look ahead: if the first
+  note of a chord was already changed, it is restarted at its own pitch a moment later.) Legato melody notes
+  that overlap but start apart are melody notes and do change.
+- **Reset** brings back the original melody. It is a button (hold it down … it acts the moment you press it);
+  a modulation route can press it too, e.g. a step modulator at the start of every 8th bar. Mutate also
+  starts from the original whenever the DAW starts playing.
+
+| Knob | Range | Meaning |
+|------|-------|---------|
+| Amount | 0 … 100 % | How often a note moves one more step (default 25 %) |
+| Range | 1 … 3 | How many scale steps one change can move |
+| Direction | Up / Down / Both | Which way the notes move |
+| Return | 0 … 100 % | How often a changed note moves one step back towards the original (default 30 %). 0 %: it can drift up to about an octave away |
+| Root *(page 2)* | C … B | Key of the scale |
+| Scale *(page 2)* | Major, Minor … Whole Tone (as in Scale Quantize) | The scale the notes move in (default Minor) |
+| Memory *(page 2)* | 4 Bars / 2 Bars / 1 Bar / Per Pitch | What the changes are remembered by, see above (default 4 Bars) |
+| Reset *(page 2)* | button | Back to the original melody |
+
 **Pitch Slide** – slides notes in from another pitch, or out to another pitch, using **pitch bend**. The notes
 themselves play unchanged and on time.
 
