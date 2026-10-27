@@ -30,25 +30,31 @@ Repeats 1 …) the lower half is cut off at the minimum, so half the LFO is wast
 - Tests: unipolar range and sign with positive/negative amounts, lowest-point start with restart on key,
   mixed bipolar/unipolar routes on one LFO, state and presets, stress test with random polarities.
 
-## Ideas
+### Note Random modulators (4)
 
-### Note Random modulators (proposal sent to the owner, waiting for answers)
+Design agreed; waiting for the go. Modulation sources that roll a random value on each new played note
+and hold it until the next one. They appear in the routes' Source menu after the LFOs (**Random 1 … 4**)
+and can drive every knob the LFOs can, with the same amount (±100 %) and the per-route polarity above.
 
-Modulation sources that roll a random value (−1 … +1) on each new played note and hold it until the next
-one. They appear in the routes' Source menu after the LFOs (Random 1, Random 2) and can drive every knob
-the LFOs can, with the same amount and (once built) per-route polarity.
-
-- Chord window: the first note-on rolls a new value immediately (no latency) and already uses it; further
-  note-ons within the window (proposed 0 … 100 ms, default 30 ms) keep that value, so a slightly uneven
+- **Chord window** (0 … 100 ms, default 30 ms): the first note-on rolls a new value immediately (no
+  latency) and already uses it; further note-ons within the window keep that value, so a slightly uneven
   chord counts as one event.
-- Proposed settings per modulator: Chord window; New value on (Every note / First note of a phrase);
-  Steps (Smooth, 2 … 12).
-- Only notes played into the plug-in trigger; generated notes (arpeggio, repeats, echoes) use the current
-  value. The engine already splits blocks at every input event, so values apply exactly from that note.
-- Compatibility: the route Source parameter gets two more choices; project state stores the index, only
-  automation of a route's Source could shift.
-- Open questions: how many modulators? window range/default? phrase option? steps? generated notes
-  trigger or not?
+- **New value on:** *Every note* or *First note of a phrase* (only when a key is pressed after all keys
+  were released, for legato playing).
+- **Steps:** *Smooth* (any value) or 2 … 12 evenly spaced values (good for choice knobs like Scale or
+  Chord type).
+- Only notes **played into the plug-in** trigger a new value; notes the modules generate (arpeggio steps,
+  repeats, echoes) use the current value. The engine already splits blocks at every input event, so a new
+  value applies exactly from the note that rolled it.
+- Host parameters per modulator (appended): chord window, trigger mode, steps. The route Source parameter
+  gets four more choices; project state stores the index, so projects stay correct (only existing
+  automation of a route's Source could shift).
+- UI: a "Random" row on the Modulation tab with four compact panels (current value, settings); rings on
+  modulated knobs work as for LFOs.
+- Tests: new value per note, chord window boundaries, phrase mode, steps quantisation, generated notes
+  don't trigger, routes with both polarities, state and presets, stress test with random routings.
+
+## Ideas
 
 ### Knobs for discrete options snap to the options
 
