@@ -12,7 +12,20 @@ When a feature is implemented, remove it here and describe it in [MANUAL.md](MAN
 
 ## Planned
 
-(nothing at the moment)
+### Pitch Slide module (Randomizer)
+
+Agreed with the owner, waiting for the go. Slides the pitch of incoming notes with pitch bend messages.
+
+- **Knobs:** A *Offset* (−24 … +24 semitones, fixed), B *Mode* (Slide In / Slide Out), C *Length*
+  (tempo-synced, 1/64 … 1 bar incl. triplets and dotted), D *Chance* (0 … 100 %, does a note slide at all),
+  page 2: E *Curve* (−100 … +100, 0 = linear; negative = fast start, positive = slow start),
+  F *Bend Range* (1 … 48 semitones, default 2, must match the synth's pitch bend range).
+- **Slide In:** the note starts at Offset and glides to its own pitch. **Slide Out:** the note starts at its own
+  pitch and glides to Offset, starting at the note-on.
+- Pitch bend acts on the whole channel, so a chord bends together; notes within 30 ms count as one chord and
+  get one slide. No MPE for now.
+- The player's own pitch bend is added to the slide. About one bend message per millisecond; the bend returns
+  to centre when the notes end. Offsets beyond the Bend Range are limited to it.
 
 ## Ideas
 
