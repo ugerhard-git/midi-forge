@@ -12,7 +12,23 @@ When a feature is implemented, remove it here and describe it in [MANUAL.md](MAN
 
 ## Planned
 
-(nothing at the moment)
+### LFO polarity per route (Bipolar / Unipolar)
+
+Design agreed; waiting for the go. Background: LFOs are bipolar today (−1 … +1, swinging the value below
+*and* above the knob position). For knobs at the bottom of their range (Inversion 0, Octaves 1,
+Repeats 1 …) the lower half is cut off at the minimum, so half the LFO is wasted.
+
+- A **Polarity** switch per **route**: *Bipolar* (−1 … +1, today's behaviour, the default) or *Unipolar*
+  (0 … +1): the route only pushes the value up from the knob position, or only down with a negative amount.
+  One LFO can drive a bipolar route and a unipolar route at the same time.
+- On unipolar routes the cycle starts at the **lowest point**: Sine and Triangle are read a quarter cycle
+  earlier (Saw Up, Square and the random waves already start low or have no fixed start). Together with
+  *Restart on key*, every phrase starts at the knob position and rises. Bipolar routes of the same LFO
+  are unaffected.
+- One new automatable host parameter per route (appended, so existing projects keep bipolar routes) and a
+  toggle in each route row on the Modulation tab; the knob rings show the unipolar range.
+- Tests: unipolar range and sign with positive/negative amounts, lowest-point start with restart on key,
+  mixed bipolar/unipolar routes on one LFO, state and presets, stress test with random polarities.
 
 ## Ideas
 
@@ -23,19 +39,6 @@ numbers) should jump from step to step while dragging, instead of moving smoothl
 Applies to the slot knobs (A–D) and the LFO knobs (Rate in Tempo mode, Phase steps). Things to decide:
 whether host automation should also be stepped (it can stay continuous; the module rounds anyway), and
 how mouse-wheel and fine-drag (Shift) behave on stepped knobs.
-
-### LFO polarity switch (Bipolar / Unipolar)
-
-Agreed direction with the owner; details to discuss before building. Background: LFOs are bipolar today
-(−1 … +1, swinging the value below *and* above the knob position). For knobs at the bottom of their range
-(Inversion 0, Octaves 1, Repeats 1 …) the lower half is cut off at the minimum, so half the LFO is wasted.
-
-- A **Polarity** switch per LFO: *Bipolar* (−1 … +1, today's behaviour, the default) or *Unipolar* (0 … +1):
-  the LFO only pushes the value up from the knob position, or only down with a negative amount.
-- One new automatable host parameter per LFO (appended, so existing projects keep bipolar LFOs) and a
-  toggle in each LFO panel; the waveform preview shows the 0 … +1 range when unipolar.
-- Open points: per LFO or per route? Should "Restart on key" plus Unipolar start at 0 (e.g. Saw Up, Sine
-  starting at its lowest point)?
 
 ### Six knobs per slot (A–F)
 
