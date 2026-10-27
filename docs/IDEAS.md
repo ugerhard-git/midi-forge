@@ -24,16 +24,22 @@ Applies to the slot knobs (A–D) and the LFO knobs (Rate in Tempo mode, Phase s
 whether host automation should also be stepped (it can stay continuous; the module rounds anyway), and
 how mouse-wheel and fine-drag (Shift) behave on stepped knobs.
 
-### Six knobs per slot (A–F)
+### Paged knobs: up to 8 per slot (proposal sent to the owner, waiting for answers)
 
-Inspired by the Repeater (0.4.0), which would like adjustable **accent strength** and **note length** besides
-rate, velocity source, swing and accent pattern. Other modules could use the extra knobs later too
-(e.g. Arpeggiator swing, Note Echo note length).
+Replaces the earlier "six knobs per slot" idea. Inspired by the Repeater (0.4.0), which would like
+adjustable **accent strength** and **note length**.
 
-- 2 more host parameters per slot (16 in total), appended so existing projects stay compatible;
-  4 → 6 modulation targets per slot.
-- Wider slot rows or a second knob row; check that the window still fits on small laptop screens.
-- Existing modules keep their A–D; E and F stay unused until a module needs them.
+- Four knobs stay on screen; modules with more than four parameters get a second page (proposed: a small
+  "1 | 2" switch next to the knobs, shown only for such modules). The window size does not change.
+- Every slot gets host parameters E–H (32 in total, appended); modules declare up to 8 parameters,
+  existing modules keep A–D.
+- Route targets for E–H get new numbers after the existing ones, so stored routes keep their knobs; the
+  target menu still lists everything sorted by slot. Presets and user preset files without E–H get defaults.
+- Switching the module goes back to page 1; a dot on the page switch marks a modulated knob on the hidden page.
+- Candidates for page 2: Repeater accent strength and note length; Arpeggiator swing; Chord strum; Note Echo
+  note length (each to be discussed on its own).
+- Open questions: "1 | 2" or arrows? Remember the page in projects/presets? First build = infrastructure +
+  Repeater accent strength and note length? Dot for modulated hidden knobs?
 
 ### Modulating the modulation
 
