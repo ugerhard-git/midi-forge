@@ -63,6 +63,11 @@ public:
     void swapSlots (int firstSlotIndex, int secondSlotIndex);
     /** Empties a slot and switches it on. */
     void clearSlot (int slotIndex);
+    /** @return The knob page (0 = A-D, 1 = E-H) the editor shows for a slot; always a page the module has. */
+    int getShownPage (int slotIndex) const noexcept;
+    /** Remembers which knob page the editor shows for a slot (saved in projects and user presets). */
+    void setShownPage (int slotIndex, int page) noexcept;
+
     /** Releases all sounding notes at the start of the next block. Safe from any thread. */
     void panic() noexcept { engine->requestPanic(); }
 
@@ -139,6 +144,12 @@ private:
     void addRouteParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
     /** Added in 0.6.0, after all older parameters: Note Random modulators and the route polarities. */
     void addNoteRandomAndPolarityParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
+    /** Added in 0.7.0, after all older parameters: slot parameters E-H. */
+    void addSecondPageSlotParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
+    std::unique_ptr<juce::AudioParameterFloat> createModuleParameter (int slotIndex, int parameterIndex, int version);
+    /** The parameter state plus the shown knob pages, as saved in projects and user presets. */
+    juce::ValueTree copyStateWithPages();
+    void restoreShownPages (const juce::ValueTree& state);
     void readEngineSettings();
     BlockContext readBlockContext (int numSamples);
     void publishReadoutsForEditor();
@@ -209,6 +220,8 @@ private:
     juce::String currentUserPresetName;
     std::vector<float> valuesOfCurrentPreset;
     UserPresetLibrary userPresets;
+    std::array<std::atomic<int>, numSlots> shownPages {};
+    static constexpr const char* shownPagesProperty = "shownPages";
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MidiForgeProcessor)
 };

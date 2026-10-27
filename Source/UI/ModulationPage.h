@@ -93,15 +93,25 @@ public:
     RouteRow (MidiForgeProcessor& processor, int routeIndex);
     void paint (juce::Graphics& graphics) override;
     void resized() override;
-    /** Keeps the target names in step with the modules in the slots. Call regularly from a timer. */
+    /** Keeps the target menu in step with the modules in the slots. Call regularly from a timer. */
     void refreshFromProcessor();
 
 private:
+    /**
+     * Fills the target menu: "None", then per slot a heading and the knobs its module uses, sorted by
+     * slot and knob. Item IDs are target numbers + 1 (the menu order differs from the numbering).
+     */
+    void rebuildTargetMenu();
+    int currentTargetIndex() const;
+
     MidiForgeProcessor& processor;
     const int routeIndex;
 
     juce::ComboBox sourceMenu, targetMenu;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> sourceAttachment, targetAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> sourceAttachment;
+    std::unique_ptr<juce::ParameterAttachment> targetAttachment;
+    std::array<int, numSlots> moduleTypesInTargetMenu {};
+    int targetInMenu = -1;
     juce::TextButton polarityButton;
     juce::AudioProcessorValueTreeState::ButtonAttachment polarityAttachment;
     juce::Slider amountSlider;

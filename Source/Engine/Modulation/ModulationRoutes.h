@@ -18,8 +18,13 @@ constexpr int numNoteRandoms = 4;
 constexpr int numModulationSources = numLfos + numNoteRandoms;
 constexpr int firstNoteRandomSource = numLfos;
 constexpr int numModulationRoutes = 8;
-/** Targets are numbered: 0 = none, then slot 1 A, slot 1 B, ... slot 8 D. */
+/**
+ * Targets are numbered: 0 = none, then slot 1 A, slot 1 B, ... slot 8 D (1..32, since 0.2.0), then
+ * slot 1 E ... slot 8 H (33..64, added in 0.7.0). The numbers are stored in projects, so knobs added later
+ * get numbers after the existing ones.
+ */
 constexpr int numModulationTargets = 1 + numSlots * numParametersPerSlot;
+constexpr int firstSecondPageTarget = 1 + numSlots * numParametersPerPage;
 
 /** One modulation route. */
 struct ModulationRoute
@@ -42,14 +47,25 @@ struct ModulationRoute
         return targetIndex > 0 && targetIndex < numModulationTargets && sourceIndex >= 0 &&
                sourceIndex < numModulationSources && std::abs (amount) >= smallestEffectiveAmount;
     }
-    int targetSlotIndex() const noexcept { return (targetIndex - 1) / numParametersPerSlot; }
-    int targetParameterIndex() const noexcept { return (targetIndex - 1) % numParametersPerSlot; }
+    int targetSlotIndex() const noexcept
+    {
+        return targetIndex < firstSecondPageTarget ? (targetIndex - 1) / numParametersPerPage
+                                                   : (targetIndex - firstSecondPageTarget) / numParametersPerPage;
+    }
+    int targetParameterIndex() const noexcept
+    {
+        return targetIndex < firstSecondPageTarget
+                   ? (targetIndex - 1) % numParametersPerPage
+                   : numParametersPerPage + (targetIndex - firstSecondPageTarget) % numParametersPerPage;
+    }
 };
 
 /** @return The target number for a slot and parameter (both zero based). */
 constexpr int modulationTargetIndex (int slotIndex, int parameterIndex) noexcept
 {
-    return 1 + slotIndex * numParametersPerSlot + parameterIndex;
+    return parameterIndex < numParametersPerPage
+               ? 1 + slotIndex * numParametersPerPage + parameterIndex
+               : firstSecondPageTarget + slotIndex * numParametersPerPage + (parameterIndex - numParametersPerPage);
 }
 
 /** The current output of every modulation source, in both polarities. */

@@ -238,18 +238,30 @@ TEST_CASE ("routes: add LFO times amount to the knob value, sum up and clamp")
     EXPECT (base[2].parameterValues[1] == 0.5f); // the user's values are never changed
 }
 
-TEST_CASE ("routes: target numbering covers every slot parameter")
+TEST_CASE ("routes: target numbering covers every slot parameter and keeps the numbers of 0.6.0")
 {
-    ModulationRoute route;
-    route.targetIndex = modulationTargetIndex (7, 3);
-    EXPECT (route.targetIndex == numModulationTargets - 1);
-    EXPECT (route.targetSlotIndex() == 7 && route.targetParameterIndex() == 3);
-    route.targetIndex = modulationTargetIndex (0, 0);
-    EXPECT (route.targetIndex == 1 && route.targetSlotIndex() == 0 && route.targetParameterIndex() == 0);
-}
+    // A-D keep the numbers they had when slots had four parameters ...
+    EXPECT (modulationTargetIndex (0, 0) == 1);
+    EXPECT (modulationTargetIndex (0, 3) == 4);
+    EXPECT (modulationTargetIndex (1, 0) == 5);
+    EXPECT (modulationTargetIndex (7, 3) == 32);
+    // ... and E-H come after them.
+    EXPECT (modulationTargetIndex (0, 4) == 33);
+    EXPECT (modulationTargetIndex (7, 7) == numModulationTargets - 1);
 
-//==============================================================================
-// LFOs driving modules
+    std::set<int> seen;
+    for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
+    {
+        for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
+        {
+            ModulationRoute route;
+            route.targetIndex = modulationTargetIndex (slotIndex, parameterIndex);
+            EXPECT (route.targetSlotIndex() == slotIndex && route.targetParameterIndex() == parameterIndex);
+            seen.insert (route.targetIndex);
+        }
+    }
+    EXPECT ((int) seen.size() == numModulationTargets - 1 && *seen.begin() == 1);
+}
 
 TEST_CASE ("engine: a square LFO on Transpose alternates the pitch, and note-offs still match")
 {

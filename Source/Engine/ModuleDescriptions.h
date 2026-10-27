@@ -2,7 +2,8 @@
  * @file ModuleDescriptions.h
  * @brief Static description of every module type: its name, category and (up to four) parameters.
  *
- * Every slot of the chain exposes four generic host parameters, called A to D, each normalised to 0..1.
+ * Every slot of the chain exposes eight generic host parameters, called A to H, each normalised to 0..1.
+ * The editor shows them in pages of four (A-D, E-H); most modules only use A-D.
  * The description of the module loaded in a slot decides what each of them means, which range it maps
  * to and how its value is shown as text. Keeping this in one table means the engine, the host parameter
  * display and the editor can never disagree about it.
@@ -48,7 +49,10 @@ enum class ModuleType : int
 };
 
 constexpr int numModuleTypes = (int) ModuleType::Count;
-constexpr int numParametersPerSlot = 4;
+constexpr int numParametersPerSlot = 8;
+/** The editor shows a slot's parameters in pages of this many knobs. */
+constexpr int numParametersPerPage = 4;
+constexpr int numParameterPages = numParametersPerSlot / numParametersPerPage;
 
 /** How a parameter's normalised value is turned into a plain value and displayed. */
 enum class ParameterKind
@@ -85,6 +89,11 @@ struct ParameterDescription
 
     bool isUsed() const noexcept { return kind != ParameterKind::Unused; }
 };
+
+/** @return How many of a module's parameters are in use (index of the last used one + 1). */
+int getNumberOfUsedParameters (const struct ModuleDescription& description) noexcept;
+/** @return How many knob pages a module needs (1 or 2). */
+int getNumberOfParameterPages (const struct ModuleDescription& description) noexcept;
 
 /** Describes one module type. */
 struct ModuleDescription

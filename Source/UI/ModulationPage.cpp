@@ -319,12 +319,25 @@ RouteRow::RouteRow (MidiForgeProcessor& processorToControl, int routeIndexToShow
       amountAttachment (processor.parameters, ParameterIds::routeAmount (routeIndex), amountSlider)
 {
     fillWithChoices (sourceMenu, processor.parameters.getParameter (ParameterIds::routeSource (routeIndex)));
-    for (int targetIndex = 0; targetIndex < numModulationTargets; ++targetIndex)
-        targetMenu.addItem (processor.getModulationTargetName (targetIndex), targetIndex + 1);
     sourceAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
         processor.parameters, ParameterIds::routeSource (routeIndex), sourceMenu);
-    targetAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
-        processor.parameters, ParameterIds::routeTarget (routeIndex), targetMenu);
+
+    // The target menu is ordered by slot, not by target number, so it gets its own attachment.
+    targetAttachment = std::make_unique<juce::ParameterAttachment> (
+        *processor.parameters.getParameter (ParameterIds::routeTarget (routeIndex)),
+        [this] (float targetIndex)
+        {
+            if (targetMenu.indexOfItemId (juce::roundToInt (targetIndex) + 1) < 0)
+                rebuildTargetMenu();
+            targetMenu.setSelectedId (juce::roundToInt (targetIndex) + 1, juce::dontSendNotification);
+        });
+    targetMenu.onChange = [this]
+    {
+        if (const int chosenId = targetMenu.getSelectedId(); chosenId > 0)
+            targetAttachment->setValueAsCompleteGesture ((float) (chosenId - 1));
+    };
+    rebuildTargetMenu();
+    targetAttachment->sendInitialUpdate();
     sourceMenu.setTooltip ("Which LFO or Random modulator drives this route");
     targetMenu.setTooltip ("Which slot parameter the source moves");
 
@@ -385,17 +398,58 @@ void RouteRow::resized()
     amountSlider.setBounds (area);
 }
 
+int RouteRow::currentTargetIndex() const
+{
+    return juce::roundToInt (
+        processor.parameters.getParameter (ParameterIds::routeTarget (routeIndex))
+            ->convertFrom0to1 (processor.parameters.getParameter (ParameterIds::routeTarget (routeIndex))->getValue()));
+}
+
+void RouteRow::rebuildTargetMenu()
+{
+    const int selectedTarget = currentTargetIndex();
+    targetMenu.clear (juce::dontSendNotification);
+    targetMenu.addItem ("None", 1);
+
+    bool selectedTargetListed = selectedTarget == 0;
+    for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
+    {
+        moduleTypesInTargetMenu[(size_t) slotIndex] = processor.getModuleType (slotIndex);
+        const auto& description = getModuleDescription (moduleTypesInTargetMenu[(size_t) slotIndex]);
+        if (getNumberOfUsedParameters (description) == 0)
+            continue;
+
+        targetMenu.addSectionHeading ("Slot " + juce::String (slotIndex + 1) + juce::String::fromUTF8 (" \xc2\xb7 ") +
+                                      description.name);
+        for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
+        {
+            if (! description.parameters[parameterIndex].isUsed())
+                continue;
+            const int targetIndex = modulationTargetIndex (slotIndex, parameterIndex);
+            targetMenu.addItem (processor.getModulationTargetName (targetIndex), targetIndex + 1);
+            selectedTargetListed = selectedTargetListed || targetIndex == selectedTarget;
+        }
+    }
+
+    // A route can point at a knob the current module does not use (e.g. after changing the module): keep it visible.
+    if (! selectedTargetListed)
+    {
+        targetMenu.addSectionHeading ("Unused knob");
+        targetMenu.addItem (processor.getModulationTargetName (selectedTarget), selectedTarget + 1);
+    }
+
+    targetInMenu = selectedTarget;
+    targetMenu.setSelectedId (selectedTarget + 1, juce::dontSendNotification);
+}
+
 void RouteRow::refreshFromProcessor()
 {
-    // Target names follow the modules loaded in the slots ("Slot 2 · Gate").
-    for (int targetIndex = 0; targetIndex < numModulationTargets; ++targetIndex)
-    {
-        const auto name = processor.getModulationTargetName (targetIndex);
-        if (targetMenu.getItemText (targetIndex) != name)
-            targetMenu.changeItemText (targetIndex + 1, name);
-    }
-    if (targetMenu.getText() != targetMenu.getItemText (targetMenu.getSelectedItemIndex()))
-        targetMenu.setText (targetMenu.getItemText (targetMenu.getSelectedItemIndex()), juce::dontSendNotification);
+    // The menu follows the modules loaded in the slots ("Slot 2 · Gate").
+    bool modulesChanged = currentTargetIndex() != targetInMenu;
+    for (int slotIndex = 0; slotIndex < numSlots && ! modulesChanged; ++slotIndex)
+        modulesChanged = processor.getModuleType (slotIndex) != moduleTypesInTargetMenu[(size_t) slotIndex];
+    if (modulesChanged && ! targetMenu.isPopupActive())
+        rebuildTargetMenu();
 
     const auto polarityText = juce::String::fromUTF8 (polarityButton.getToggleState() ? "+" : "\xc2\xb1");
     if (polarityButton.getButtonText() != polarityText)

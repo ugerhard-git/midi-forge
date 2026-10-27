@@ -18,7 +18,7 @@ struct SlotSettings
 {
     int moduleType = 0;                             ///< A ModuleType value.
     bool isEnabled = true;                          ///< A disabled slot passes everything through.
-    float parameterValues[numParametersPerSlot] {}; ///< Normalised values of parameters A to D.
+    float parameterValues[numParametersPerSlot] {}; ///< Normalised values of parameters A to H.
 };
 
 /**

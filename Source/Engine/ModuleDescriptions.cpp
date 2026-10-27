@@ -42,7 +42,7 @@ const char* const repeaterDivisionLabels[] = { "1/4D", "1/4",  "1/8D",  "1/4T", 
                                                "1/8T", "1/16", "1/16T", "1/32", "1/32T", "1/64" };
 const char* const repeaterVelocityLabels[] = { "Last Note", "Aftertouch" };
 const char* const noteSplitOctaveLabels[] = { "This octave", "Every octave" };
-const char* const repeaterAccentLabels[] = { "Off", "Every 2nd", "Every 3rd", "Every 4th", "On the Beat" };
+const char* const repeaterAccentLabels[] = { "Off", "Every 2nd", "Every 3rd", "Every 4th", "On Beat" };
 const char* const echoDivisionLabels[] = { "1/32", "1/16T", "1/16", "1/16D", "1/8T", "1/8",
                                            "1/8D", "1/4T",  "1/4",  "1/4D",  "1/2",  "1 Bar" };
 const char* const arpeggiatorDivisionLabels[] = { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
@@ -182,7 +182,9 @@ const ModuleDescription* createModuleTable()
           "Retriggers held notes on the tempo grid (ratchets).",
           { choiceParameter ("Rate", repeaterDivisionLabels, 7),
             choiceParameter ("Velocity", repeaterVelocityLabels, 0), percentParameter ("Swing", 50, 75, 50),
-            choiceParameter ("Accent", repeaterAccentLabels, 0) } },
+            choiceParameter ("Accent", repeaterAccentLabels, 0),
+            // Page 2 (added in 0.7.0)
+            integerParameter ("Accent Boost", 0, 64, 25), percentParameter ("Length", 10, 100, 50) } },
 
         // Added in 0.5.0 ---------------------------------------------------------------------------
         { "Note Split",
@@ -276,6 +278,20 @@ const char* getCategoryName (ModuleCategory category) noexcept
         case ModuleCategory::None: break;
     }
     return "";
+}
+
+int getNumberOfUsedParameters (const ModuleDescription& description) noexcept
+{
+    int numUsed = 0;
+    for (int index = 0; index < numParametersPerSlot; ++index)
+        if (description.parameters[index].isUsed())
+            numUsed = index + 1;
+    return numUsed;
+}
+
+int getNumberOfParameterPages (const ModuleDescription& description) noexcept
+{
+    return std::max (1, (getNumberOfUsedParameters (description) + numParametersPerPage - 1) / numParametersPerPage);
 }
 
 int getNumberOfSteps (const ParameterDescription& parameter) noexcept

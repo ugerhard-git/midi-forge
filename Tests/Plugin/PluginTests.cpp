@@ -51,7 +51,7 @@ TEST_CASE ("plugin: exposes slot, LFO and route parameters with stable IDs")
     for (auto* parameter : processor.getParameters())
         if (dynamic_cast<juce::AudioProcessorParameterWithID*> (parameter) != nullptr)
             ++numOurParameters;
-    constexpr int parametersPerSlot = 6, parametersPerLfo = 7, parametersPerRoute = 4, parametersPerRandom = 3;
+    constexpr int parametersPerSlot = 10, parametersPerLfo = 7, parametersPerRoute = 4, parametersPerRandom = 3;
     EXPECT (numOurParameters == numSlots * parametersPerSlot + numLfos * parametersPerLfo +
                                     numModulationRoutes * parametersPerRoute + numNoteRandoms * parametersPerRandom);
 
@@ -59,10 +59,11 @@ TEST_CASE ("plugin: exposes slot, LFO and route parameters with stable IDs")
     const auto idAt = [&processor] (int index)
     { return dynamic_cast<juce::AudioProcessorParameterWithID*> (processor.getParameters()[index])->paramID; };
     EXPECT (idAt (numSlots * 6 + numLfos * 7 + numModulationRoutes * 3 - 1) == "r8_amount"); // last of 0.2.0
-    EXPECT (idAt (numOurParameters - 1) == "r8_polarity");
+    EXPECT (idAt (numOurParameters - 1 - numSlots * 4) == "r8_polarity");                    // last of 0.6.0
+    EXPECT (idAt (numOurParameters - 1) == "s8_h");                                          // E-H (0.7.0) come last
 
     for (const char* id : { "s1_type", "s8_d", "l1_wave", "l4_restart", "r1_source", "r8_amount", "r1_polarity",
-                            "n1_window", "n4_steps" })
+                            "n1_window", "n4_steps", "s1_e", "s8_h" })
         EXPECT (processor.parameters.getParameter (id) != nullptr);
     EXPECT (processor.isMidiEffect() && processor.acceptsMidi() && processor.producesMidi());
 
@@ -101,7 +102,7 @@ TEST_CASE ("plugin: every factory preset loads and only uses valid values")
             const auto& description = getModuleDescription (slot.moduleType);
             for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
             {
-                const float value = slot.plainValues[parameterIndex];
+                const float value = slot.valueOf (parameterIndex);
                 if (std::isnan (value))
                     continue;
                 EXPECT (description.parameters[parameterIndex].isUsed());
@@ -646,7 +647,7 @@ void prepareProcessorForSnapshots (MidiForgeProcessor& processor)
 {
     const auto& presets = getFactoryPresets();
     for (int index = 0; index < (int) presets.size(); ++index)
-        if (juce::String (presets[(size_t) index].name) == "Breathing Arp")
+        if (juce::String (presets[(size_t) index].name) == "Ratchet Chords")
             processor.setCurrentProgram (index);
 
     processor.prepareToPlay (testSampleRate, testBlockSize);
@@ -654,6 +655,105 @@ void prepareProcessorForSnapshots (MidiForgeProcessor& processor)
         processBlock (processor, {});
 }
 } // namespace
+
+//==============================================================================
+// Knob pages and parameters E-H
+
+TEST_CASE ("pages: the Repeater's page-2 knobs exist on the host with their own units")
+{
+    MidiForgeProcessor processor;
+    processor.loadModule (0, (int) ModuleType::Repeater);
+    EXPECT (processor.parameters.getParameter ("s1_e")->getCurrentValueAsText() == "25");  // accent boost
+    EXPECT (processor.parameters.getParameter ("s1_f")->getCurrentValueAsText() == "50%"); // note length
+    EXPECT (processor.parameters.getParameter ("s1_g")->getCurrentValueAsText() == "-");   // unused
+
+    // Factory presets with a Repeater keep the module defaults on page 2.
+    const auto& presets = getFactoryPresets();
+    for (int index = 0; index < (int) presets.size(); ++index)
+        if (juce::String (presets[(size_t) index].name) == "Hi-Hat Ratchet (Drums)")
+            processor.setCurrentProgram (index);
+    EXPECT (processor.getModuleType (1) == (int) ModuleType::Repeater);
+    EXPECT (processor.parameters.getParameter ("s2_e")->getCurrentValueAsText() == "25");
+    EXPECT (processor.parameters.getParameter ("s2_f")->getCurrentValueAsText() == "50%");
+}
+
+TEST_CASE ("pages: the shown page is per slot, reset by a new module, moved by swapping, and saved")
+{
+    juce::File presetFolder = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                  .getChildFile ("midi-forge-pages-" + juce::Uuid().toString());
+    MidiForgeProcessor processor;
+    processor.setUserPresetFolder (presetFolder);
+    processor.loadModule (2, (int) ModuleType::Repeater);
+    processor.loadModule (3, (int) ModuleType::Transpose);
+
+    processor.setShownPage (2, 1);
+    processor.setShownPage (3, 1);
+    EXPECT (processor.getShownPage (2) == 1);
+    EXPECT (processor.getShownPage (3) == 0); // Transpose has only one page
+
+    juce::MemoryBlock project;
+    processor.getStateInformation (project);
+    EXPECT (processor.saveUserPreset ("Paged").isEmpty());
+
+    processor.swapSlots (2, 5);
+    EXPECT (processor.getShownPage (5) == 1 && processor.getShownPage (2) == 0);
+    processor.loadModule (5, (int) ModuleType::Repeater); // a new module starts on page 1
+    EXPECT (processor.getShownPage (5) == 0);
+
+    MidiForgeProcessor reopened;
+    reopened.setStateInformation (project.getData(), (int) project.getSize());
+    EXPECT (reopened.getShownPage (2) == 1);
+
+    EXPECT (processor.loadUserPreset ("Paged"));
+    EXPECT (processor.getModuleType (2) == (int) ModuleType::Repeater && processor.getShownPage (2) == 1);
+    presetFolder.deleteRecursively();
+}
+
+TEST_CASE ("stepped knobs: knobs snap to the steps of choice and whole-number parameters")
+{
+    MidiForgeProcessor processor;
+    processor.loadModule (0, (int) ModuleType::Repeater);
+    const auto& repeater = getModuleDescription (ModuleType::Repeater);
+
+    ParameterKnob rateKnob, swingKnob, timingKnob;
+    rateKnob.attachTo (processor.parameters, "s1_a", repeater.parameters[0]); // 12 choices
+    EXPECT (std::abs (rateKnob.knob.getInterval() - 1.0 / 11.0) < 1.0e-9);
+    swingKnob.attachTo (processor.parameters, "s1_c", repeater.parameters[2]); // 50..75 %
+    EXPECT (std::abs (swingKnob.knob.getInterval() - 1.0 / 25.0) < 1.0e-9);
+
+    processor.loadModule (1, (int) ModuleType::Humanize);
+    timingKnob.attachTo (processor.parameters, "s2_a", getModuleDescription (ModuleType::Humanize).parameters[0]);
+    EXPECT (timingKnob.knob.getInterval() < 1.0e-12); // continuous (milliseconds)
+
+    // Dragging lands on steps: a value between two choices snaps to one of them.
+    rateKnob.knob.setValue (0.3);
+    EXPECT (std::abs (rateKnob.knob.getValue() * 11.0 - std::round (rateKnob.knob.getValue() * 11.0)) < 1.0e-9);
+}
+
+TEST_CASE ("pages: projects from 0.6.0 load with page-2 defaults and keep their route targets")
+{
+    // A 0.6.0 project: slot 8 holds a Repeater, route 1 targets "Slot 8 D" (target number 32).
+    juce::XmlElement oldState ("MidiForge");
+    const auto addParameter = [&oldState] (const char* id, double value)
+    {
+        auto* parameter = oldState.createNewChildElement ("PARAM");
+        parameter->setAttribute ("id", id);
+        parameter->setAttribute ("value", value);
+    };
+    addParameter ("s8_type", (double) ModuleType::Repeater);
+    addParameter ("r1_target", 32);
+    addParameter ("r1_amount", 30);
+    juce::MemoryBlock oldProject;
+    juce::AudioProcessor::copyXmlToBinary (oldState, oldProject);
+
+    MidiForgeProcessor processor;
+    processor.setStateInformation (oldProject.getData(), (int) oldProject.getSize());
+    EXPECT (processor.getModuleType (7) == (int) ModuleType::Repeater);
+    EXPECT (processor.isParameterModulated (7, 3)); // still the Accent knob (D)
+    EXPECT (processor.getModulationTargetName (32) == juce::String::fromUTF8 ("Slot 8 \xc2\xb7 Accent"));
+    EXPECT (processor.getModulationTargetName (modulationTargetIndex (7, 5)) ==
+            juce::String::fromUTF8 ("Slot 8 \xc2\xb7 Length"));
+}
 
 int main (int argc, char** argv)
 {

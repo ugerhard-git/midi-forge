@@ -266,3 +266,58 @@ TEST_CASE ("repeater: an LFO on the rate never leaves notes hanging")
     EXPECT (noteOnsOf (rig).size() > 20);
     EXPECT (rig.notesStillSounding().empty());
 }
+
+//==============================================================================
+// Page 2: accent boost and note length
+
+TEST_CASE ("repeater: note length sets how long each repeat lasts, never longer than a step")
+{
+    const auto lengthsOf = [] (float lengthPercent, float swingPercent)
+    {
+        ChainTestRig rig;
+        setUpRepeater (rig, RepeaterRate::sixteenth, RepeaterVelocity::lastNote, swingPercent, RepeaterAccent::off,
+                       true);
+        rig.setParameter (0, 5, lengthPercent);
+        rig.processBlock ({ noteOnAt (0, 60) });
+        rig.processSeconds (1.0);
+        rig.processBlock ({ noteOffAt (0, 60) });
+        rig.processSeconds (0.5);
+        EXPECT (rig.notesStillSounding().empty());
+
+        std::vector<int> lengths;
+        int lastOn = 0;
+        for (const auto& event : rig.everyOutputEvent)
+        {
+            if (event.isNoteOn())
+                lastOn = event.samplePosition;
+            else if (event.isNoteOff())
+                lengths.push_back (event.samplePosition - lastOn);
+        }
+        return lengths;
+    };
+
+    for (int length : lengthsOf (25, 50))
+        EXPECT (length == sixteenthAt120Bpm / 4 - 1);
+    for (int length : lengthsOf (100, 50))
+        EXPECT (length == sixteenthAt120Bpm - 1); // ends just before the next repeat
+
+    // With heavy swing the short gaps cap the length, so repeats never overlap or get skipped.
+    const auto swung = lengthsOf (100, 75);
+    EXPECT (swung.size() >= 7);
+    for (size_t index = 0; index < swung.size(); ++index)
+        EXPECT (swung[index] == sixteenthAt120Bpm - 1 || swung[index] == sixteenthAt120Bpm / 2 - 1);
+}
+
+TEST_CASE ("repeater: accent boost sets how much louder accented repeats are")
+{
+    ChainTestRig rig;
+    setUpRepeater (rig, RepeaterRate::sixteenth, RepeaterVelocity::lastNote, 50, RepeaterAccent::everySecond, true);
+    rig.setParameter (0, 4, 40);
+    rig.processBlock ({ noteOnAt (0, 60, 70) });
+    rig.processSeconds (0.5);
+
+    const auto hits = noteOnsOf (rig);
+    EXPECT (hits.size() >= 5);
+    for (size_t step = 1; step < hits.size(); ++step)
+        EXPECT (hits[step].velocity == (step % 2 == 0 ? 110 : 70));
+}

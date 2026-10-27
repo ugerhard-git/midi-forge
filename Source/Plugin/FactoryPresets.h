@@ -8,6 +8,7 @@
 
 #include "Engine/MidiForgeEngine.h"
 
+#include <limits>
 #include <vector>
 
 namespace midiforge
@@ -16,11 +17,24 @@ namespace midiforge
 /** Marks a preset value that should stay at the module's default. */
 extern const float keepDefault;
 
+/** A value that means "keep the module's default" (usable in in-class initialisers). */
+inline constexpr float keepDefaultValue = std::numeric_limits<float>::quiet_NaN();
+
 /** One slot of a preset. Values are plain (not normalised); keepDefault keeps the module's default. */
 struct PresetSlot
 {
     ModuleType moduleType;
-    float plainValues[numParametersPerSlot];
+    float plainValues[numParametersPerPage];         ///< Parameters A..D
+    float secondPageValues[numParametersPerPage] = { ///< Parameters E..H; by default the module's defaults
+        keepDefaultValue, keepDefaultValue, keepDefaultValue, keepDefaultValue
+    };
+
+    /** @return The plain value for parameter 0..7, or keepDefault. */
+    float valueOf (int parameterIndex) const noexcept
+    {
+        return parameterIndex < numParametersPerPage ? plainValues[parameterIndex]
+                                                     : secondPageValues[parameterIndex - numParametersPerPage];
+    }
 };
 
 /** An LFO a preset sets up. LFOs a preset does not mention are reset to their defaults. */

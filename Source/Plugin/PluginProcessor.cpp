@@ -41,14 +41,27 @@ juce::StringArray lfoDivisionNames()
 }
 
 /** Fixed host-side names of the modulation targets: "None", "Slot 1 A" ... "Slot 8 D". */
+/** Fixed host-side names of the modulation targets, in target-number order: "None", "Slot 1 A" ... */
 juce::StringArray fixedModulationTargetNames()
 {
     juce::StringArray result { "None" };
-    for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
-        for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
-            result.add ("Slot " + juce::String (slotIndex + 1) + " " +
-                        juce::String (ParameterIds::valueSuffixes[parameterIndex]).toUpperCase());
+    for (int targetIndex = 1; targetIndex < numModulationTargets; ++targetIndex)
+    {
+        ModulationRoute route;
+        route.targetIndex = targetIndex;
+        result.add ("Slot " + juce::String (route.targetSlotIndex() + 1) + " " +
+                    juce::String (ParameterIds::valueSuffixes[route.targetParameterIndex()]).toUpperCase());
+    }
     return result;
+}
+
+/** Turns the shown knob page of every slot into text for saving, e.g. "0,1,0,0,0,0,0,0". */
+juce::String pagesToText (const std::array<std::atomic<int>, numSlots>& pages)
+{
+    juce::StringArray texts;
+    for (const auto& page : pages)
+        texts.add (juce::String (page.load()));
+    return texts.joinIntoString (",");
 }
 } // namespace
 
@@ -107,6 +120,8 @@ MidiForgeProcessor::MidiForgeProcessor()
         readout.store (0.0f);
     for (auto& readout : noteRandomValueReadouts)
         readout.store (0.0f);
+    for (auto& page : shownPages)
+        page.store (0);
 
     rememberValuesOfCurrentPreset(); // the "Init" state everything starts with
 
@@ -122,6 +137,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout MidiForgeProcessor::createPa
     addLfoParameters (layout);
     addRouteParameters (layout);
     addNoteRandomAndPolarityParameters (layout);
+    addSecondPageSlotParameters (layout);
     return layout;
 }
 
@@ -145,33 +161,49 @@ void MidiForgeProcessor::addSlotParameters (juce::AudioProcessorValueTreeState::
             juce::ParameterID { ParameterIds::slotEnabled (slotIndex), ParameterIds::slotParameterVersion },
             slotName + " On", true));
 
-        for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
-        {
-            // The host shows these values in the units of whichever module is loaded in the slot.
-            auto attributes =
-                juce::AudioParameterFloatAttributes()
-                    .withStringFromValueFunction (
-                        [this, slotIndex, parameterIndex] (float normalisedValue, int)
-                        {
-                            const auto& description =
-                                getModuleDescription (getModuleType (slotIndex)).parameters[parameterIndex];
-                            return juce::String (formatParameterValue (description, normalisedValue));
-                        })
-                    .withValueFromStringFunction (
-                        [this, slotIndex, parameterIndex] (const juce::String& text)
-                        {
-                            const auto& description =
-                                getModuleDescription (getModuleType (slotIndex)).parameters[parameterIndex];
-                            return parseParameterText (description, text.trim().toStdString(),
-                                                       getParameterValue (slotIndex, parameterIndex));
-                        });
+        for (int parameterIndex = 0; parameterIndex < numParametersPerPage; ++parameterIndex)
+            group->addChild (createModuleParameter (slotIndex, parameterIndex, ParameterIds::slotParameterVersion));
+        layout.add (std::move (group));
+    }
+}
 
-            group->addChild (std::make_unique<juce::AudioParameterFloat> (
-                juce::ParameterID { ParameterIds::moduleParameter (slotIndex, parameterIndex),
-                                    ParameterIds::slotParameterVersion },
-                slotName + " " + juce::String (ParameterIds::valueSuffixes[parameterIndex]).toUpperCase(),
-                juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f, attributes));
-        }
+std::unique_ptr<juce::AudioParameterFloat> MidiForgeProcessor::createModuleParameter (int slotIndex, int parameterIndex,
+                                                                                      int version)
+{
+    // The host shows these values in the units of whichever module is loaded in the slot.
+    auto attributes = juce::AudioParameterFloatAttributes()
+                          .withStringFromValueFunction (
+                              [this, slotIndex, parameterIndex] (float normalisedValue, int)
+                              {
+                                  const auto& description =
+                                      getModuleDescription (getModuleType (slotIndex)).parameters[parameterIndex];
+                                  return juce::String (formatParameterValue (description, normalisedValue));
+                              })
+                          .withValueFromStringFunction (
+                              [this, slotIndex, parameterIndex] (const juce::String& text)
+                              {
+                                  const auto& description =
+                                      getModuleDescription (getModuleType (slotIndex)).parameters[parameterIndex];
+                                  return parseParameterText (description, text.trim().toStdString(),
+                                                             getParameterValue (slotIndex, parameterIndex));
+                              });
+
+    return std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIds::moduleParameter (slotIndex, parameterIndex), version },
+        "Slot " + juce::String (slotIndex + 1) + " " +
+            juce::String (ParameterIds::valueSuffixes[parameterIndex]).toUpperCase(),
+        juce::NormalisableRange<float> (0.0f, 1.0f), 0.0f, attributes);
+}
+
+void MidiForgeProcessor::addSecondPageSlotParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+{
+    for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
+    {
+        auto group = std::make_unique<juce::AudioProcessorParameterGroup> (
+            "slot" + juce::String (slotIndex + 1) + "page2", "Slot " + juce::String (slotIndex + 1) + " Page 2", " | ");
+        for (int parameterIndex = numParametersPerPage; parameterIndex < numParametersPerSlot; ++parameterIndex)
+            group->addChild (
+                createModuleParameter (slotIndex, parameterIndex, ParameterIds::secondPageParameterVersion));
         layout.add (std::move (group));
     }
 }
@@ -550,6 +582,7 @@ void MidiForgeProcessor::loadModule (int slotIndex, int moduleType)
     for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
         setParameterAsGesture (ParameterIds::moduleParameter (slotIndex, parameterIndex),
                                getNormalisedDefault (description.parameters[parameterIndex]));
+    shownPages[(size_t) slotIndex].store (0); // a new module starts on its first page
 }
 
 void MidiForgeProcessor::swapSlots (int firstSlotIndex, int secondSlotIndex)
@@ -575,6 +608,35 @@ void MidiForgeProcessor::swapSlots (int firstSlotIndex, int secondSlotIndex)
         setParameterAsGesture (firstIds[index], secondValue);
         setParameterAsGesture (secondIds[index], firstValue);
     }
+
+    const int firstPage = shownPages[(size_t) firstSlotIndex].load();
+    shownPages[(size_t) firstSlotIndex].store (shownPages[(size_t) secondSlotIndex].load());
+    shownPages[(size_t) secondSlotIndex].store (firstPage);
+}
+
+int MidiForgeProcessor::getShownPage (int slotIndex) const noexcept
+{
+    const int lastPage = getNumberOfParameterPages (getModuleDescription (getModuleType (slotIndex))) - 1;
+    return juce::jlimit (0, lastPage, shownPages[(size_t) slotIndex].load());
+}
+
+void MidiForgeProcessor::setShownPage (int slotIndex, int page) noexcept
+{
+    shownPages[(size_t) slotIndex].store (juce::jlimit (0, numParameterPages - 1, page));
+}
+
+void MidiForgeProcessor::restoreShownPages (const juce::ValueTree& state)
+{
+    const auto texts = juce::StringArray::fromTokens (state.getProperty (shownPagesProperty).toString(), ",", "");
+    for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
+        setShownPage (slotIndex, slotIndex < texts.size() ? texts[slotIndex].getIntValue() : 0);
+}
+
+juce::ValueTree MidiForgeProcessor::copyStateWithPages()
+{
+    auto state = parameters.copyState();
+    state.setProperty (shownPagesProperty, pagesToText (shownPages), nullptr);
+    return state;
 }
 
 void MidiForgeProcessor::clearSlot (int slotIndex)
@@ -618,10 +680,10 @@ void MidiForgeProcessor::setCurrentProgram (int presetIndex)
         loadModule (slotIndex, (int) presetSlot.moduleType);
         const auto& description = getModuleDescription (presetSlot.moduleType);
         for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
-            if (! std::isnan (presetSlot.plainValues[parameterIndex]))
+            if (! std::isnan (presetSlot.valueOf (parameterIndex)))
                 setParameterAsGesture (ParameterIds::moduleParameter (slotIndex, parameterIndex),
                                        plainValueToNormalised (description.parameters[parameterIndex],
-                                                               presetSlot.plainValues[parameterIndex]));
+                                                               presetSlot.valueOf (parameterIndex)));
         setParameterAsGesture (ParameterIds::slotEnabled (slotIndex), 1.0f);
     }
 
@@ -698,7 +760,7 @@ void MidiForgeProcessor::applyPresetModulation (const FactoryPreset& preset)
 
 void MidiForgeProcessor::getStateInformation (juce::MemoryBlock& destination)
 {
-    auto state = parameters.copyState();
+    auto state = copyStateWithPages();
     state.setProperty ("preset", currentPresetIndex, nullptr);
     state.setProperty ("presetKind", (int) currentPresetKind, nullptr);
     state.setProperty ("userPresetName", currentUserPresetName, nullptr);
@@ -721,6 +783,7 @@ void MidiForgeProcessor::setStateInformation (const void* data, int sizeInBytes)
     if (currentPresetKind == PresetKind::user && currentUserPresetName.isEmpty())
         currentPresetKind = PresetKind::none;
     parameters.replaceState (state);
+    restoreShownPages (state);
     rememberValuesOfCurrentPreset();
 }
 
@@ -787,6 +850,7 @@ bool MidiForgeProcessor::loadUserPreset (const juce::String& name)
         return false;
 
     applyStateValues (*state);
+    restoreShownPages (*state);
     currentPresetKind = PresetKind::user;
     currentUserPresetName = UserPresetLibrary::cleanName (name);
     rememberValuesOfCurrentPreset();
@@ -795,7 +859,7 @@ bool MidiForgeProcessor::loadUserPreset (const juce::String& name)
 
 juce::String MidiForgeProcessor::saveUserPreset (const juce::String& name)
 {
-    const auto error = userPresets.save (name, parameters.copyState());
+    const auto error = userPresets.save (name, copyStateWithPages());
     if (error.isNotEmpty())
         return error;
 

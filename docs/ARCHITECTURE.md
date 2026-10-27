@@ -43,7 +43,8 @@ from `clap-juce-extensions`.
 | `Source/Plugin/ParameterIds.h` | Host parameter IDs (stored in projects – never rename) |
 | `Source/Plugin/FactoryPresets.*` | The factory presets (JUCE-free, so the engine tests can check them too) |
 | `Source/Plugin/UserPresetLibrary.*` | User preset files: folder, save/load/rename/delete/import, validation, name cleaning |
-| `Source/UI/*` | Editor: `MidiForgeEditor` (tabs), `SlotRow` + `ParameterKnob` (Chain tab), `ModulationPage` with `LfoPanel`, `WaveformPreview`, `NoteRandomPanel`, `RouteRow`, `CompactKnob` (Modulation tab), `PresetBar` (◀ menu ▶, Save, ⋯ menu with async dialogs), `ForgeLookAndFeel`, `Theme` |
+| `Source/UI/*` | Editor: `MidiForgeEditor` (tabs), `SlotRow` + `ParameterKnob` (Chain tab), `ModulationPage` with `LfoPanel`, `WaveformPreview`, `NoteRandomPanel`, `RouteRow`, `CompactKnob` (Modulation tab), `PresetBar` (◀ menu ▶, Save, ⋯ menu with async dialogs). `ParameterKnob::attachTo()` sets the knob's
+step interval from the parameter description, so stepped parameters snap while dragging, `ForgeLookAndFeel`, `Theme` |
 | `Tests/Engine/*` | Engine tests (no JUCE) |
 | `Tests/Plugin/*` | Tests of the JUCE layer; can also render both editor pages to PNGs |
 | `docs/` | This document, the user manual, images |
@@ -51,8 +52,12 @@ from `clap-juce-extensions`.
 
 ## Parameters
 
-Every slot has six host parameters: `sN_type` (module), `sN_on` (on/off) and `sN_a` … `sN_d`
-(four generic values, normalised 0..1). A fixed parameter set is what hosts expect, so modules don't
+Every slot has ten host parameters: `sN_type` (module), `sN_on` (on/off) and `sN_a` … `sN_h`
+(eight generic values, normalised 0..1; `sN_e` … `sN_h` were added in 0.7.0 and come after all older
+parameters). The editor shows them in pages of four (`numParametersPerPage`); modules with more than four
+used parameters get page arrows. The page shown per slot is not a host parameter: the processor keeps it
+(`getShownPage`/`setShownPage`) and saves it as the property `shownPages` of the state tree in projects and
+user presets; loading a module resets it to page 1. A fixed parameter set is what hosts expect, so modules don't
 add or remove parameters. Instead the **module description** (`ModuleDescriptions.cpp`) says what A … D
 mean for each module: name, kind (integer, choice, note, percent, continuous), range, default and
 display text. The host display, the editor and the modules all read from that one table.
@@ -70,7 +75,12 @@ slot 8 D (`modulationTargetIndex()`).
 - Never reorder or remove `ModuleType` entries or choice labels; only append.
 - Never reorder `LfoWaveform` values or the `lfoDivisions` table; only append.
 - Never rename parameter IDs. New parameters get a new version number in `ParameterIds`
-  (slot parameters: 1, modulation parameters: 2).
+  (slot parameters: 1, modulation parameters: 2, Note Random and polarity: 3, slot parameters E–H: 4).
+- Modulation target numbers: A–D of every slot keep 1 … 32; E–H are 33 … 64
+  (`firstSecondPageTarget`). The route target menu is ordered by slot and lists only knobs the loaded
+  modules use, so it has its own attachment (`juce::ParameterAttachment`) instead of a ComboBoxAttachment.
+- Factory presets give values for A–D in `PresetSlot::plainValues`; page 2 (`secondPageValues`) defaults
+  to "keep the module's default", so presets written before 0.7.0 need no change.
 
 ## The processing path (audio thread)
 

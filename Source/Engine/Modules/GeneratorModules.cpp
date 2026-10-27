@@ -460,8 +460,9 @@ private:
  * - Swing delays every second (odd) step; accents make selected steps louder.
  * - Repeats use the velocity of the last key pressed, or the aftertouch (poly pressure for that note
  *   if the keyboard sends it, otherwise channel pressure; the note's own velocity until pressure arrives).
- * - Each hit lasts half a step. A grid step is skipped for a key whose previous hit is still sounding,
- *   so a key pressed just before a step does not double-trigger.
+ * - Each hit lasts the set note length (a share of a step) but always ends before the next grid step,
+ *   so repeats never overlap. A key pressed less than half a step before a grid step skips that step,
+ *   so it does not double-trigger.
  */
 class Repeater final : public SchedulingModule
 {
@@ -490,7 +491,9 @@ public:
         const double swingDelayInSteps = 2.0 * integerParameter (parameterValues, swingPercent) / 100.0 - 1.0;
         const double samplesPerBeat = context.samplesPerBeat();
         const bool followHost = context.followsHostTransport();
-        const auto noteLengthInSamples = std::max<int64_t> (1, std::llround (0.5 * stepLength * samplesPerBeat) - 1);
+        const double noteLengthShare = integerParameter (parameterValues, noteLengthPercent) / 100.0;
+        const auto noteLengthInSamples =
+            std::max<int64_t> (1, std::llround (noteLengthShare * stepLength * samplesPerBeat) - 1);
 
         double blockStartBeat = followHost ? context.ppqPositionAtBlockStart : ownClockBeat;
         resyncGridIfNeeded (blockStartBeat, stepLength, swingDelayInSteps, followHost);
@@ -520,14 +523,29 @@ public:
                     blockStartBeat = ownClockBeat;
                     lastStepNumber = 0;
                 }
-                handleInputEvent (event, eventTime, noteLengthInSamples, output);
+                // Where the next two grid steps are, for the first hit's length and the double-trigger guard.
+                const auto timeOfStep = [&] (int64_t stepNumber)
+                {
+                    return context.blockStartSample +
+                           (int64_t) std::ceil (
+                               (stepBeat (stepNumber, stepLength, swingDelayInSteps) - blockStartBeat) *
+                                   samplesPerBeat -
+                               1.0e-6);
+                };
+                handleInputEvent (event, eventTime, noteLengthInSamples, timeOfStep (lastStepNumber + 1),
+                                  timeOfStep (lastStepNumber + 2), output);
             }
             else
             {
                 const int64_t stepTime = context.blockStartSample + nextStepPosition;
                 sendScheduledEventsUpTo (stepTime, context, output);
                 ++lastStepNumber;
-                playStep (lastStepNumber, stepTime, stepLength, noteLengthInSamples, parameterValues);
+                const auto samplesToNextStep =
+                    (int64_t) std::llround ((stepBeat (lastStepNumber + 1, stepLength, swingDelayInSteps) -
+                                             stepBeat (lastStepNumber, stepLength, swingDelayInSteps)) *
+                                            samplesPerBeat);
+                playStep (lastStepNumber, stepTime, stepLength, std::min (noteLengthInSamples, samplesToNextStep - 1),
+                          parameterValues);
             }
         }
 
@@ -542,7 +560,9 @@ private:
         rate,
         velocitySource,
         swingPercent,
-        accentPattern
+        accentPattern,
+        accentBoost,      ///< page 2
+        noteLengthPercent ///< page 2
     };
     enum VelocitySource
     {
@@ -559,7 +579,6 @@ private:
     };
 
     static constexpr int maxHeldNotes = 32;
-    static constexpr int accentVelocityBoost = 25;
     static constexpr int noPressure = -1;
     static constexpr int noMoreEvents = INT32_MAX;
     static constexpr int64_t noStepYet = std::numeric_limits<int64_t>::min();
@@ -569,7 +588,7 @@ private:
         uint8_t noteNumber;
         uint8_t channel;
         uint8_t ownVelocity;
-        int64_t lastHitTime; ///< Absolute sample time of the latest hit of this key
+        int64_t stepsBlockedUntil; ///< Grid steps before this absolute sample time are skipped for this key
     };
 
     /** Beat position of grid step n: n step lengths, odd steps delayed by the swing. */
@@ -604,8 +623,11 @@ private:
             lastStepNumber = (int64_t) std::ceil (blockStartBeat / stepLength - 1.0e-9) - 1;
     }
 
-    void handleInputEvent (const MidiEvent& event, int64_t eventTime, int64_t noteLengthInSamples,
-                           MidiEventList& output)
+    /**
+     * @param nextStepTime, stepAfterNextTime  Absolute times of the next two grid steps (for the first hit).
+     */
+    void handleInputEvent (const MidiEvent& event, int64_t eventTime, int64_t noteLengthInSamples, int64_t nextStepTime,
+                           int64_t stepAfterNextTime, MidiEventList& output)
     {
         if (event.isNoteOn())
         {
@@ -622,7 +644,16 @@ private:
             if (held != nullptr)
             {
                 held->ownVelocity = (uint8_t) event.velocity();
-                hit (*held, eventTime, event.velocity(), noteLengthInSamples); // the first hit: right away
+
+                // The first hit sounds right away. Pressed less than half a step before the next grid step,
+                // it takes that step's place (the step is skipped); either way it ends before the step after.
+                const int64_t halfStep = (stepAfterNextTime - nextStepTime) / 2;
+                const bool replacesNextStep = nextStepTime - eventTime < halfStep;
+                const int64_t endOfFirstHit = replacesNextStep ? stepAfterNextTime : nextStepTime;
+                const int64_t firstHitLength =
+                    std::clamp<int64_t> (endOfFirstHit - eventTime - 1, 1, noteLengthInSamples);
+                hit (*held, eventTime, event.velocity(), firstHitLength);
+                held->stepsBlockedUntil = replacesNextStep ? nextStepTime + 1 : eventTime + firstHitLength;
             }
             return;
         }
@@ -660,18 +691,18 @@ private:
 
         for (auto& held : heldNotes)
         {
-            if (stepTime < held.lastHitTime + noteLengthInSamples)
-                continue; // the previous hit of this key is still sounding
+            if (stepTime < held.stepsBlockedUntil)
+                continue; // the key's first hit took this step's place
             const int velocity = (usesAftertouch ? aftertouchVelocity (held) : lastPressedVelocity) +
-                                 (isAccented ? accentVelocityBoost : 0);
+                                 (isAccented ? integerParameter (parameterValues, accentBoost) : 0);
             hit (held, stepTime, velocity, noteLengthInSamples);
+            held.stepsBlockedUntil = stepTime + noteLengthInSamples;
         }
     }
 
-    /** Plays a held key at the given time, for half a step. */
-    void hit (HeldNote& held, int64_t time, int velocity, int64_t noteLengthInSamples)
+    /** Plays a held key at the given time for the given length. */
+    void hit (const HeldNote& held, int64_t time, int velocity, int64_t noteLengthInSamples)
     {
-        held.lastHitTime = time;
         scheduleEvent (time, MidiEvent::noteOn (0, held.channel, held.noteNumber, std::clamp (velocity, 1, 127)));
         scheduleEvent (time + noteLengthInSamples, MidiEvent::noteOff (0, held.channel, held.noteNumber));
     }

@@ -56,7 +56,12 @@ MIDI Forge does not process audio. Ableton Live cannot host MIDI-effect plug-ins
   - a **power switch** – a switched-off slot passes everything through unchanged,
   - the **module menu** – pick what this slot does; picking a module resets its knobs to their defaults,
   - a one-line **description** of the module,
-  - up to **four knobs** – drag up/down or left/right; **double-click** to reset a knob,
+  - **four knobs** – drag up/down or left/right; **double-click** to reset a knob. Knobs with fixed steps
+    (choices like *Scale*, whole numbers like *Octaves*) jump from step to step; the mouse wheel moves one
+    step per notch,
+  - **◀ ▶** page arrows, only for modules with more than four knobs (e.g. the Repeater): they switch between
+    page 1 (knobs A–D) and page 2 (E–H). The page you look at is saved with your project and presets.
+    A yellow dot on an arrow means an LFO or Random modulator moves a knob on the other page,
   - **▲ / ▼** buttons that move the module one slot up or down.
   - A knob that an LFO or Random modulator is moving gets a thin **yellow ring with a dot**: the knob shows your setting,
     the dot shows the value the module is using right now.
@@ -82,8 +87,8 @@ MIDI Forge takes care that no note gets stuck, even when you change modules whil
 
 ## Modules
 
-The four knobs of a slot are called **A, B, C, D** in your DAW's automation lists; what they mean depends
-on the module loaded in the slot.
+The knobs of a slot are called **A … H** in your DAW's automation lists (most modules use A … D; page 2 is
+E … H); what they mean depends on the module loaded in the slot.
 
 ### Filters (blue)
 
@@ -211,15 +216,19 @@ quieter, and optionally transposed. Every echo is as long as the original note.
 A held chord repeats as a chord. The key you press sounds **immediately**; the repeats then follow on the
 grid. While your DAW plays, the grid is locked to its bars; when it is stopped, the Repeater runs at the
 project tempo, counting from your first key press. Releasing a key stops its repeats. Each repeat lasts
-half a step. If you press a key just before a grid step, that step is skipped for this key, so it never
-double-triggers.
+the set *Length*, but always ends before the next repeat. If you press a key less than half a step before
+a grid step, that step is skipped for this key, so it never double-triggers.
+
+The Repeater has six knobs: use the **◀ ▶** arrows in its slot to switch between page 1 (A–D) and page 2 (E–F).
 
 | Knob | Range | Meaning |
 |------|-------|---------|
 | Rate | 1/4D, 1/4, 1/8D, 1/4T, 1/8, 1/16D, 1/8T, 1/16, 1/16T, 1/32, 1/32T, 1/64 | Distance between repeats (D = dotted, T = triplet); turning right makes it faster |
 | Velocity | Last Note / Aftertouch | *Last Note:* all repeats use the velocity of the key you pressed last. *Aftertouch:* how hard you press sets the velocity, live – per note if your keyboard sends polyphonic aftertouch, otherwise channel aftertouch; until you press, each note uses its own velocity. Aftertouch also still reaches your synth |
 | Swing | 50 … 75 % | Delays every second repeat. 50 % is straight, 66 % is a triplet feel, 75 % a heavy shuffle |
-| Accent | Off, Every 2nd, Every 3rd, Every 4th, On the Beat | Makes these repeats 25 velocity steps louder. Steps are counted on the grid (from your first key press when the transport is stopped). *On the Beat* accents repeats that fall on a quarter note |
+| Accent | Off, Every 2nd, Every 3rd, Every 4th, On Beat | Which repeats are accented (made louder by *Accent Boost*). Steps are counted on the grid (from your first key press when the transport is stopped). *On Beat* accents repeats that fall on a quarter note |
+| Accent Boost *(page 2)* | 0 … 64 | How many velocity steps louder accented repeats are (default 25) |
+| Length *(page 2)* | 10 … 100 % | How long each repeat lasts, as a share of a step (default 50 %). At 100 % repeats join up; with swing, a repeat before a short gap is shortened so repeats never overlap |
 
 Tip: an LFO on *Rate* makes the ratchet speed change on its own (see the *Ratchet Chords* preset).
 
@@ -302,7 +311,7 @@ The eight routes connect a source to a slot knob:
 | Control | Meaning |
 |---------|---------|
 | Source | LFO 1 … 4 or Random 1 … 4 |
-| Target | Which knob, named after the module in that slot, e.g. *Slot 2 · Gate*. *None* switches the route off |
+| Target | Which knob, named after the module in that slot, e.g. *Slot 2 · Gate*. The menu lists the knobs of every loaded module, slot by slot (both pages). *None* switches the route off |
 | **±** / **+** | Polarity. **±** (bipolar, the default): the source moves the knob below *and* above its position. **+** (unipolar): the source only pushes the knob **up** from its position (or only **down** with a negative amount). Click to switch |
 | Amount | −100 … +100 %. How far the source moves the knob. At 100 % it can sweep the knob's whole range; negative amounts turn the source upside down. Double-click: 50 % |
 
@@ -316,7 +325,7 @@ The eight routes connect a source to a slot knob:
   several routes.
 - On knobs with fixed choices (scale, chord type, arpeggiator pattern …) the source steps through the choices.
 - The module type and the slot's on/off switch cannot be modulated (switching them releases notes).
-- If you change the module in a slot, routes to that slot keep pointing at the same knob position (A … D),
+- If you change the module in a slot, routes to that slot keep pointing at the same knob position (A … H),
   which now belongs to the new module. The target name shows what it controls.
 - Modulation never changes your knob settings, and it never writes into your DAW's automation.
 - Values are taken at the exact moment a note arrives; notes the plug-in generates itself
@@ -378,14 +387,15 @@ Your DAW's own program list shows only the factory presets; your DAW's preset fu
 
 ## Automation
 
-Each slot has six automatable parameters: **Slot n Module**, **Slot n On** and **Slot n A … D**.
+Each slot has ten automatable parameters: **Slot n Module**, **Slot n On** and **Slot n A … H**.
 The LFOs (**LFO n Wave, Sync, Rate, Division, Phase, Pulse Width, Restart On Key**), the Random modulators
 (**Random n Chord Window, New Value On, Steps**) and the routes (**Route n Source, Target, Amount, Polarity**)
 can be automated too.
-Your DAW displays A … D in the units of the module currently loaded in that slot, and you can type
-values in those units (e.g. `+7 st`, `1/16`, `C3`, `75%`).
+Your DAW displays A … H in the units of the module currently loaded in that slot, and you can type
+values in those units (e.g. `+7 st`, `1/16`, `C3`, `75%`). Automation is not stepped: the modules round
+to the nearest step themselves.
 
-Automating **Slot n Module** works, but keep in mind that A … D keep their values when the module changes
+Automating **Slot n Module** works, but keep in mind that A … H keep their values when the module changes
 (choosing a module in the plug-in window resets them; automation does not).
 
 ## Panic and stuck notes
