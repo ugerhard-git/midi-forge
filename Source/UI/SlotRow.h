@@ -58,6 +58,10 @@ public:
     std::function<void()> onOpenBrowser;
     void showPopup() override
     {
+        // juce::ComboBox marks its menu as open before calling showPopup() and only clears that mark when
+        // its own menu closes. The browser is not that menu, so clear the mark right away; otherwise every
+        // further click on this menu would be ignored.
+        hidePopup();
         if (onOpenBrowser != nullptr)
             onOpenBrowser();
     }

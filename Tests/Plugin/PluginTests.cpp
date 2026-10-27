@@ -1013,6 +1013,37 @@ TEST_CASE ("module info: shows the details and one line per knob, with page hint
     EXPECT (! info.getPlainText().contains ("KNOBS"));
 }
 
+TEST_CASE ("module browser: the module menu opens the browser every time, not just once")
+{
+    MidiForgeProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditorAndMakeActive());
+    std::vector<ModuleMenu*> moduleMenus;
+    std::function<void (juce::Component&)> collect = [&] (juce::Component& component)
+    {
+        if (auto* menu = dynamic_cast<ModuleMenu*> (&component))
+            moduleMenus.push_back (menu);
+        for (auto* child : component.getChildren())
+            collect (*child);
+    };
+    collect (*editor);
+    EXPECT ((int) moduleMenus.size() == numSlots);
+    if (moduleMenus.empty())
+        return;
+
+    auto& menu = *moduleMenus[2];
+    int timesOpened = 0;
+    menu.onOpenBrowser = [&timesOpened] { ++timesOpened; };
+    for (int attempt = 0; attempt < 3; ++attempt)
+    {
+        // A click or Return marks the menu as open and then calls showPopup() (asynchronously).
+        EXPECT (menu.keyPressed (juce::KeyPress (juce::KeyPress::returnKey)));
+        EXPECT (menu.isPopupActive());
+        menu.showPopup();
+        EXPECT (! menu.isPopupActive()); // ready for the next click
+    }
+    EXPECT (timesOpened == 3);
+}
+
 TEST_CASE ("module info: the knobs of every module get their help text as tooltip")
 {
     MidiForgeProcessor processor;

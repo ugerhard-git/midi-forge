@@ -52,7 +52,8 @@ MIDI Forge does not process audio. Ableton Live cannot host MIDI-effect plug-ins
   - **◀ ▶** page arrows, only for modules with more than four knobs (e.g. the Repeater): they switch between
     page 1 (knobs A–D) and page 2 (E–H). The page you look at is saved with your project and presets.
     A yellow dot on an arrow means an LFO or Random modulator moves a knob on the other page,
-  - **▲ / ▼** buttons that move the module one slot up or down.
+  - **▲ / ▼** buttons that move the module one slot up or down. To insert a module between two others, move
+    an empty slot there and pick the module in it.
   - A knob that an LFO or Random modulator is moving gets a thin **yellow ring with a dot**: the knob shows your setting,
     the dot shows the value the module is using right now.
 - The **Modulation** tab holds the LFOs, the Random modulators and the modulation routes, see [Modulation (LFOs and Random)](#modulation-lfos-and-random).
