@@ -487,6 +487,7 @@ void MidiForgeProcessor::processBlock (juce::AudioBuffer<float>& audio, juce::Mi
 {
     juce::ScopedNoDenormals noDenormals;
     audio.clear();
+    lastBlockTimeMilliseconds.store (juce::Time::getMillisecondCounter(), std::memory_order_relaxed);
 
     readEngineSettings();
     const BlockContext context = readBlockContext (audio.getNumSamples());

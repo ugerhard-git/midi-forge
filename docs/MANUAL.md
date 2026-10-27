@@ -61,8 +61,9 @@ MIDI Forge does not process audio. Ableton Live cannot host MIDI-effect plug-ins
   - **▲ / ▼** buttons that move the module one slot up or down (its modulation routes move with it). To insert
     a module between two others, move
     an empty slot there and pick the module in it.
-  - A knob that an LFO or Random modulator is moving gets a thin **yellow ring with a dot**: the knob shows your setting,
-    the dot shows the value the module is using right now.
+  - A knob that a modulator is moving gets a thin **yellow ring with a dot**: the knob shows your setting,
+    the dot shows the value the module is using right now. Its value text then also shows the value in use
+    right now, in yellow; point at the knob (or turn it) to see your own setting in white.
 - The **Modulation** tab holds the LFOs, the Random modulators, the step modulators and the modulation routes, see [Modulation (LFOs, Random, Steps)](#modulation-lfos-random-steps).
 - **Footer:** the colour legend: blue = filters, green = transforms, orange = generators, purple = randomizers.
 

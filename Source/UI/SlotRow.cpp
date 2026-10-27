@@ -307,10 +307,20 @@ void SlotRow::updateValueTexts()
         const auto& parameter = description.parameters[parameterIndex];
         if (! parameter.isUsed())
             continue;
-        const juce::String text (
-            formatParameterValue (parameter, processor.getParameterValue (slotIndex, parameterIndex)));
-        if (parameterKnobs[knobIndex].valueLabel.getText() != text)
-            parameterKnobs[knobIndex].valueLabel.setText (text, juce::dontSendNotification);
+        // A modulated knob shows the value the module uses right now (in yellow), except while the user
+        // points at or turns it: then it shows the user's own setting.
+        auto& parameterKnob = parameterKnobs[knobIndex];
+        const bool showsLiveValue = displayedAsEnabled && processor.isEngineRunning() &&
+                                    processor.isParameterModulated (slotIndex, parameterIndex) &&
+                                    ! parameterKnob.isMouseOverOrDragging (true);
+        const float shownValue = showsLiveValue ? processor.getModulatedParameterValue (slotIndex, parameterIndex)
+                                                : processor.getParameterValue (slotIndex, parameterIndex);
+        const juce::String text (formatParameterValue (parameter, shownValue));
+        if (parameterKnob.valueLabel.getText() != text)
+            parameterKnob.valueLabel.setText (text, juce::dontSendNotification);
+        const auto colour = showsLiveValue ? Theme::Colours::modulation : Theme::Colours::primaryText;
+        if (parameterKnob.valueLabel.findColour (juce::Label::textColourId) != colour)
+            parameterKnob.valueLabel.setColour (juce::Label::textColourId, colour);
     }
 }
 

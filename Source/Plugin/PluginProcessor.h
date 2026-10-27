@@ -138,6 +138,16 @@ public:
     bool isSlotSwitchModulated (int slotIndex) const noexcept;
     /** @return Whether the slot was on after modulation, as last used by the engine. */
     bool isSlotEnabledAfterModulation (int slotIndex) const noexcept;
+    /**
+     * @return True if the host has run the engine recently (within half a second), so the modulated values
+     *         below are current. While the host is not processing they are stale.
+     */
+    bool isEngineRunning() const noexcept
+    {
+        return juce::Time::getMillisecondCounter() - lastBlockTimeMilliseconds.load (std::memory_order_relaxed) <
+               engineRunningTimeoutMilliseconds;
+    }
+    static constexpr juce::uint32 engineRunningTimeoutMilliseconds = 500;
     /** @return The value (0..1) of a slot parameter after modulation, as last used by the engine. */
     float getModulatedParameterValue (int slotIndex, int parameterIndex) const noexcept;
     /** @return An LFO's latest output (-1..+1). */
@@ -303,6 +313,7 @@ private:
     // Written by the audio thread after each block, read by the editor.
     std::array<std::atomic<float>, numSlots * numParametersPerSlot> modulatedValueReadouts {};
     std::array<std::atomic<bool>, numSlots> modulatedSwitchReadouts {};
+    std::atomic<juce::uint32> lastBlockTimeMilliseconds { 0 }; ///< When the host last called processBlock
     std::array<std::atomic<float>, numLfos> lfoValueReadouts {};
     std::array<std::atomic<float>, numLfos> lfoPhaseReadouts {};
     std::array<std::atomic<float>, numNoteRandoms> noteRandomValueReadouts {};

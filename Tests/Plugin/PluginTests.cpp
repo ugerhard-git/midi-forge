@@ -1465,6 +1465,52 @@ TEST_CASE ("mutate: the host shows its knobs; Reset is a button that is on while
     EXPECT (hostTextOf (processor, 0, 7) == "Off");
 }
 
+//==============================================================================
+// Live values on modulated knobs
+
+TEST_CASE ("live values: a modulated knob shows the value the module uses now, in the modulation colour")
+{
+    MidiForgeProcessor processor;
+    processor.loadModule (0, (int) ModuleType::Transpose);
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditorAndMakeActive());
+    auto* forgeEditor = dynamic_cast<MidiForgeEditor*> (editor.get());
+    if (forgeEditor == nullptr)
+        return;
+
+    std::vector<ParameterKnob*> knobs;
+    std::function<void (juce::Component&)> collect = [&] (juce::Component& component)
+    {
+        if (auto* knob = dynamic_cast<ParameterKnob*> (&component))
+            knobs.push_back (knob);
+        for (auto* child : component.getChildren())
+            collect (*child);
+    };
+    collect (*editor);
+    EXPECT (knobs.size() >= 1);
+    if (knobs.empty())
+        return;
+    auto& semitones = *knobs[0]; // slot 1, knob A
+
+    // A square LFO at 50 % on Semitones: the module uses +24 or 0 (the knob itself stays at 0).
+    auto* lfoWave = processor.parameters.getParameter (ParameterIds::lfoWaveform (0));
+    lfoWave->setValueNotifyingHost (lfoWave->convertTo0to1 ((float) LfoWaveform::Square));
+    setRoute (processor, 0, modulationTargetIndex (0, 0), 50.0f);
+
+    // Without the host processing, the knob shows the user's setting.
+    forgeEditor->refreshFromProcessor();
+    EXPECT (semitones.valueLabel.getText() == "0 st");
+    EXPECT (semitones.valueLabel.findColour (juce::Label::textColourId) == Theme::Colours::primaryText);
+
+    processor.prepareToPlay (testSampleRate, testBlockSize);
+    processBlock (processor, {});
+    forgeEditor->refreshFromProcessor();
+    const auto expected = juce::String (formatParameterValue (
+        getModuleDescription (ModuleType::Transpose).parameters[0], processor.getModulatedParameterValue (0, 0)));
+    EXPECT (semitones.valueLabel.getText() == expected);
+    EXPECT (expected == "+24 st" || expected == "0 st");
+    EXPECT (semitones.valueLabel.findColour (juce::Label::textColourId) == Theme::Colours::modulation);
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juceInitialiser;
