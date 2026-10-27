@@ -12,9 +12,11 @@ on:
 permissions:
   contents: read
 
+# Pull requests cancel their outdated runs; runs on main and tags always finish, so every commit on main
+# gets a complete build (a newer push waits until the running build is done).
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   engine-checks:
