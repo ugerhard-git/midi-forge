@@ -131,6 +131,15 @@ TEST_CASE ("chain: randomized stress test leaves no stuck notes and no pitch ben
                 noteRandom.trigger = (NoteRandomTrigger) randomInteger (0, 1);
                 noteRandom.numSteps = randomInteger (0, 1) == 0 ? 0 : randomInteger (2, 12);
             }
+            for (auto& stepModulator : rig.settings.stepModulators)
+            {
+                stepModulator.numSteps = randomInteger (minimumSteps, maximumSteps);
+                for (float& value : stepModulator.stepValues)
+                    value = 2.0f * randomUnit() - 1.0f;
+                stepModulator.divisionIndex = randomInteger (0, numStepDivisions - 1);
+                stepModulator.glide = randomInteger (0, 1) == 0 ? 0.0 : randomUnit();
+                stepModulator.restartsOnFirstKey = randomInteger (0, 1) == 1;
+            }
             for (auto& route : rig.settings.routes)
             {
                 route.sourceIndex = randomInteger (0, numModulationSources - 1);

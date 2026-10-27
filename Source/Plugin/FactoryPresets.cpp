@@ -32,6 +32,17 @@ NoteRandomSettings noteRandom (double chordWindowMilliseconds, NoteRandomTrigger
     settings.numSteps = numSteps;
     return settings;
 }
+/** A step modulator with the given step values (-100..+100); the number of steps is the number of values. */
+StepModulatorSettings steps (int divisionIndex, std::initializer_list<float> valuesPercent)
+{
+    StepModulatorSettings settings;
+    settings.divisionIndex = divisionIndex;
+    settings.numSteps = (int) valuesPercent.size();
+    int step = 0;
+    for (float value : valuesPercent)
+        settings.stepValues[step++] = value / 100.0f;
+    return settings;
+}
 } // namespace
 
 const std::vector<FactoryPreset>& getFactoryPresets()
@@ -49,6 +60,10 @@ const std::vector<FactoryPreset>& getFactoryPresets()
     constexpr int halfBar = 4;
     constexpr float closedHiHat = 42, thisOctave = 0; // General MIDI closed hi-hat: F#1
     constexpr int random1 = firstNoteRandomSource, random2 = firstNoteRandomSource + 1, velocityOutMaximum = 2;
+    constexpr int steps1 = firstStepModulatorSource, steps2 = firstStepModulatorSource + 1,
+                  steps3 = firstStepModulatorSource + 2;
+    constexpr int sixteenthStep = 2, barStep = 12; // indices into stepDivisions
+    constexpr float echoEighth = 5;
 
     static const std::vector<FactoryPreset> presets = {
         { "Init", {}, {}, {}, {} },
@@ -136,6 +151,20 @@ const std::vector<FactoryPreset>& getFactoryPresets()
             { random2, 1, velocityOutMaximum, 30.0f, false } }, // and its own loudness
           { { 0, noteRandom (30.0, NoteRandomTrigger::EveryNote, 4) },
             { 1, noteRandom (30.0, NoteRandomTrigger::EveryNote, 0) } } },
+
+        // Added in 0.14.0 ------------------------------------------------------------------------
+        { "Breathing Steps",
+          { { ModuleType::Arpeggiator, { sixteenthRate, upDownPattern, 2, 55 } },
+            { ModuleType::VelocityCurve, { 0, 40, 105, 0 } },
+            { ModuleType::NoteEcho, { echoEighth, 3, 60, 0 } } },
+          {},
+          { { steps1, 0, arpeggiatorGate, 40.0f },             // the gate breathes over 16 sixteenths
+            { steps2, 1, velocityOutMaximum, 25.0f },          // accents in a 7-step cycle against the bar
+            { steps3, 2, slotSwitchParameterIndex, 100.0f } }, // the echo only in every 4th bar
+          {},
+          { { 0, steps (sixteenthStep, { 60, -20, 20, -40, 80, -20, 0, -60, 60, -20, 30, -30, 90, -10, -50, 100 }) },
+            { 1, steps (sixteenthStep, { 100, -40, 20, -80, 50, 0, -30 }) },
+            { 2, steps (barStep, { -100, -100, -100, 100 }) } } },
     };
     return presets;
 }

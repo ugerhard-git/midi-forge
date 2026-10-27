@@ -51,12 +51,19 @@ struct PresetNoteRandom
     NoteRandomSettings settings;
 };
 
+/** A step modulator a preset sets up. Step modulators a preset does not mention get their defaults. */
+struct PresetStepModulator
+{
+    int stepModulatorIndex; ///< 0..numStepModulators-1
+    StepModulatorSettings settings;
+};
+
 /** A modulation route a preset sets up, filled from route 1 on; the remaining routes are cleared. */
 struct PresetRoute
 {
-    int sourceIndex;         ///< 0..3 for LFO 1..4, 4..7 for Random 1..4
+    int sourceIndex;         ///< 0..3 for LFO 1..4, 4..7 for Random 1..4, 8..11 for Steps 1..4
     int slotIndex;           ///< 0..numSlots-1
-    int parameterIndex;      ///< 0..3 for A..D
+    int parameterIndex;      ///< 0..7 for A..H, slotSwitchParameterIndex for the On/Off switch
     float amountPercent;     ///< -100..+100
     bool isUnipolar = false; ///< see ModulationRoute::isUnipolar
 };
@@ -68,6 +75,7 @@ struct FactoryPreset
     std::vector<PresetLfo> lfos;
     std::vector<PresetRoute> routes;
     std::vector<PresetNoteRandom> noteRandoms;
+    std::vector<PresetStepModulator> stepModulators = {}; ///< Added in 0.14.0
 };
 
 /** @return All factory presets. The first one ("Init") is an empty chain without modulation. */

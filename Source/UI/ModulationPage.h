@@ -1,10 +1,12 @@
 /**
  * @file ModulationPage.h
- * @brief The "Modulation" tab: four LFO panels, four Note Random panels and the eight modulation routes.
+ * @brief The "Modulation" tab: sub-tabs for the LFO, Note Random and step modulator panels, and the eight
+ *        modulation routes below them.
  */
 #pragma once
 
 #include "Plugin/PluginProcessor.h"
+#include "StepModulatorPanel.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -119,18 +121,45 @@ private:
     juce::Label amountLabel;
 };
 
-/** The whole "Modulation" tab. */
+/**
+ * The whole "Modulation" tab. The sources are on three sub-tabs (LFOs, Random, Steps), so each kind gets
+ * the full width; the routes stay visible below. A yellow dot on a sub-tab means one of its sources is
+ * routed somewhere.
+ */
 class ModulationPage final : public juce::Component
 {
 public:
     explicit ModulationPage (MidiForgeProcessor& processor);
     void paint (juce::Graphics& graphics) override;
+    void paintOverChildren (juce::Graphics& graphics) override;
     void resized() override;
     void refreshFromProcessor();
 
+    /** The sub-tabs of the sources area. */
+    enum class SourcePage
+    {
+        lfos,
+        randoms,
+        steps
+    };
+    /** Shows one sub-tab's panels and highlights its tab. */
+    void showSourcePage (SourcePage page);
+    SourcePage getShownSourcePage() const noexcept { return shownSourcePage; }
+    /** @return The panel of a step modulator (for tests). */
+    StepModulatorPanel& getStepModulatorPanel (int index) { return *stepModulatorPanels[(size_t) index]; }
+
 private:
+    /** @return True if any source of a sub-tab is routed somewhere. */
+    bool isAnySourceInUse (SourcePage page) const;
+
+    MidiForgeProcessor& processor;
+    juce::TextButton lfoTab { "LFOs" }, randomTab { "Random" }, stepsTab { "Steps" };
+    SourcePage shownSourcePage = SourcePage::lfos;
+    std::array<bool, 3> shownInUseDots {};
+
     std::vector<std::unique_ptr<LfoPanel>> lfoPanels;
     std::vector<std::unique_ptr<NoteRandomPanel>> noteRandomPanels;
+    std::vector<std::unique_ptr<StepModulatorPanel>> stepModulatorPanels;
     std::vector<std::unique_ptr<RouteRow>> routeRows;
     juce::Rectangle<int> routesArea;
 };

@@ -197,6 +197,16 @@ strip in the footer for 8 seconds. Removal history is not saved in projects.
 
 ## Modulation
 
+- `StepModulator` (Source/Engine/Modulation) plays 4 … 16 step values. Its clock works like a tempo-synced
+  LFO: the step position is the host position divided by the step length while the transport runs (so
+  step 1 sits on the bar grid), otherwise its own clock; "restart on key" re-anchors it. Glide slides to
+  the next value over the last part of a step (smoothstep). Sources 8..11 are Steps 1..4 (appended after
+  LFO 1..4 and Random 1..4). Host parameters `qn_steps`, `qn_rate`, `qn_glide`, `qn_restart`, `qn_v1..16`
+  (version 5) come after all older parameters.
+- The editor's Modulation tab has sub-tabs (`ModulationPage::SourcePage`: LFOs, Random, Steps); each gets the
+  whole sources area, the routes stay below. `StepModulatorPanel` and `StepEditor` draw and edit the steps;
+  each drawn value is one host parameter gesture.
+
 - Routes can also target a slot's on/off switch (targets 65..72, `ModulationRoute::targetsSlotSwitch()`,
   parameter index `slotSwitchParameterIndex`). `applyModulationRoutes()` adds the switch routes to 0 or 1 and
   applies hysteresis (on above `switchOnThreshold`, off below `switchOffThreshold`), remembering each slot's

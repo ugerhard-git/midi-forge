@@ -472,36 +472,95 @@ void RouteRow::refreshFromProcessor()
 //==============================================================================
 // ModulationPage
 
-ModulationPage::ModulationPage (MidiForgeProcessor& processor)
+ModulationPage::ModulationPage (MidiForgeProcessor& processorToControl) : processor (processorToControl)
 {
     for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
     {
         lfoPanels.push_back (std::make_unique<LfoPanel> (processor, lfoIndex));
-        addAndMakeVisible (*lfoPanels.back());
+        addChildComponent (*lfoPanels.back());
     }
     for (int randomIndex = 0; randomIndex < numNoteRandoms; ++randomIndex)
     {
         noteRandomPanels.push_back (std::make_unique<NoteRandomPanel> (processor, randomIndex));
-        addAndMakeVisible (*noteRandomPanels.back());
+        addChildComponent (*noteRandomPanels.back());
+    }
+    for (int stepIndex = 0; stepIndex < numStepModulators; ++stepIndex)
+    {
+        stepModulatorPanels.push_back (std::make_unique<StepModulatorPanel> (processor, stepIndex));
+        addChildComponent (*stepModulatorPanels.back());
     }
     for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
     {
         routeRows.push_back (std::make_unique<RouteRow> (processor, routeIndex));
         addAndMakeVisible (*routeRows.back());
     }
+
+    // The sub-tabs: three toggle buttons in one radio group.
+    constexpr int sourceTabsRadioGroup = 2001;
+    const std::pair<juce::TextButton*, SourcePage> tabs[] = { { &lfoTab, SourcePage::lfos },
+                                                              { &randomTab, SourcePage::randoms },
+                                                              { &stepsTab, SourcePage::steps } };
+    for (const auto& [tab, page] : tabs)
+    {
+        tab->setClickingTogglesState (true);
+        tab->setRadioGroupId (sourceTabsRadioGroup);
+        tab->setColour (juce::TextButton::buttonColourId, Theme::Colours::windowBackground);
+        tab->setColour (juce::TextButton::buttonOnColourId, Theme::Colours::selectedTab);
+        tab->setColour (juce::TextButton::textColourOffId, Theme::Colours::secondaryText);
+        tab->setColour (juce::TextButton::textColourOnId, Theme::Colours::primaryText);
+        tab->onClick = [this, sourcePage = page] { showSourcePage (sourcePage); };
+        addAndMakeVisible (*tab);
+    }
+    lfoTab.setTooltip ("The four LFOs");
+    randomTab.setTooltip ("The four Random modulators: a new value per played note or phrase");
+    stepsTab.setTooltip ("The four step modulators: sequences of 4 to 16 values in time with the song");
+    showSourcePage (SourcePage::lfos);
+}
+
+void ModulationPage::showSourcePage (SourcePage page)
+{
+    shownSourcePage = page;
+    for (auto& panel : lfoPanels)
+        panel->setVisible (page == SourcePage::lfos);
+    for (auto& panel : noteRandomPanels)
+        panel->setVisible (page == SourcePage::randoms);
+    for (auto& panel : stepModulatorPanels)
+        panel->setVisible (page == SourcePage::steps);
+    lfoTab.setToggleState (page == SourcePage::lfos, juce::dontSendNotification);
+    randomTab.setToggleState (page == SourcePage::randoms, juce::dontSendNotification);
+    stepsTab.setToggleState (page == SourcePage::steps, juce::dontSendNotification);
+}
+
+bool ModulationPage::isAnySourceInUse (SourcePage page) const
+{
+    const auto [first, count] = page == SourcePage::lfos ? std::pair<int, int> { 0, numLfos }
+                                : page == SourcePage::randoms
+                                    ? std::pair<int, int> { firstNoteRandomSource, numNoteRandoms }
+                                    : std::pair<int, int> { firstStepModulatorSource, numStepModulators };
+    for (int sourceIndex = first; sourceIndex < first + count; ++sourceIndex)
+        if (processor.isSourceInUse (sourceIndex))
+            return true;
+    return false;
 }
 
 void ModulationPage::paint (juce::Graphics& graphics)
 {
+    graphics.setColour (Theme::Colours::secondaryText);
+    graphics.setFont (Theme::font (11.0f));
+    graphics.drawText (juce::String::fromUTF8 ("Sources move slot knobs and switches through the routes below "
+                                               "\xc2\xb7 a dot: a source on that tab is in use"),
+                       getLocalBounds().removeFromTop (28).withTrimmedLeft (stepsTab.getRight() + 12),
+                       juce::Justification::centredRight);
+
     const auto area = routesArea.toFloat();
     graphics.setColour (Theme::Colours::slotBackground);
     graphics.fillRoundedRectangle (area, 8.0f);
     graphics.setColour (Theme::Colours::slotOutline);
     graphics.drawRoundedRectangle (area.reduced (0.5f), 8.0f, 1.0f);
 
-    auto titleArea = routesArea.reduced (12, 8).removeFromTop (20);
+    auto titleArea = routesArea.reduced (12, 6).removeFromTop (18);
     graphics.setColour (Theme::Colours::primaryText);
-    graphics.setFont (Theme::font (15.0f, true));
+    graphics.setFont (Theme::font (14.0f, true));
     graphics.drawText ("Modulation routes", titleArea, juce::Justification::centredLeft);
     graphics.setColour (Theme::Colours::secondaryText);
     graphics.setFont (Theme::font (11.5f));
@@ -510,28 +569,60 @@ void ModulationPage::paint (juce::Graphics& graphics)
         titleArea, juce::Justification::centredRight);
 }
 
+void ModulationPage::paintOverChildren (juce::Graphics& graphics)
+{
+    // The "in use" dots on the sub-tabs
+    const juce::TextButton* tabs[] = { &lfoTab, &randomTab, &stepsTab };
+    graphics.setColour (Theme::Colours::modulation);
+    for (size_t index = 0; index < 3; ++index)
+        if (shownInUseDots[index])
+            graphics.fillEllipse (juce::Rectangle<float> (6.0f, 6.0f)
+                                      .withCentre ({ (float) tabs[index]->getRight() - 9.0f,
+                                                     (float) tabs[index]->getBounds().getCentreY() }));
+}
+
 void ModulationPage::resized()
 {
     auto area = getLocalBounds();
-    constexpr int gap = 10;
+    constexpr int gap = 8;
 
-    const auto layOutRow = [gap] (juce::Rectangle<int> rowArea, auto& panels)
+    auto tabLine = area.removeFromTop (28);
+    for (auto* tab : { &lfoTab, &randomTab, &stepsTab })
     {
-        const int panelWidth = (rowArea.getWidth() - gap * ((int) panels.size() - 1)) / (int) panels.size();
-        for (auto& panel : panels)
+        tab->setBounds (tabLine.removeFromLeft (86).reduced (0, 1));
+        tabLine.removeFromLeft (6);
+    }
+    area.removeFromTop (6);
+
+    // Each sub-tab uses the whole sources area.
+    auto sourcesArea = area.removeFromTop (300);
+    area.removeFromTop (gap);
+
+    const auto layOutRow = [gap] (juce::Rectangle<int> rowArea, auto begin, auto end)
+    {
+        const int numPanels = (int) std::distance (begin, end);
+        const int panelWidth = (rowArea.getWidth() - gap * (numPanels - 1)) / numPanels;
+        for (auto panel = begin; panel != end; ++panel)
         {
-            panel->setBounds (rowArea.removeFromLeft (panelWidth));
+            (*panel)->setBounds (rowArea.removeFromLeft (panelWidth));
             rowArea.removeFromLeft (gap);
         }
     };
-    layOutRow (area.removeFromTop (220), lfoPanels);
-    area.removeFromTop (8);
-    layOutRow (area.removeFromTop (100), noteRandomPanels);
-    area.removeFromTop (8);
+    const auto layOutGrid = [&layOutRow, gap, sourcesArea] (auto& panels)
+    {
+        auto gridArea = sourcesArea;
+        const int rowHeight = (gridArea.getHeight() - gap) / 2;
+        layOutRow (gridArea.removeFromTop (rowHeight), panels.begin(), panels.begin() + 2);
+        gridArea.removeFromTop (gap);
+        layOutRow (gridArea, panels.begin() + 2, panels.end());
+    };
+    layOutRow (sourcesArea, lfoPanels.begin(), lfoPanels.end());
+    layOutGrid (noteRandomPanels);
+    layOutGrid (stepModulatorPanels);
 
     routesArea = area;
-    auto rowsArea = area.reduced (12, 6);
-    rowsArea.removeFromTop (24); // title
+    auto rowsArea = area.reduced (12, 4);
+    rowsArea.removeFromTop (22); // title
     const int rowHeight = juce::jmin (34, rowsArea.getHeight() / numModulationRoutes);
     for (auto& row : routeRows)
         row->setBounds (rowsArea.removeFromTop (rowHeight));
@@ -539,12 +630,26 @@ void ModulationPage::resized()
 
 void ModulationPage::refreshFromProcessor()
 {
-    for (auto& panel : lfoPanels)
-        panel->refreshFromProcessor();
-    for (auto& panel : noteRandomPanels)
-        panel->refreshFromProcessor();
+    // Only the visible panels need updating.
+    if (shownSourcePage == SourcePage::lfos)
+        for (auto& panel : lfoPanels)
+            panel->refreshFromProcessor();
+    if (shownSourcePage == SourcePage::randoms)
+        for (auto& panel : noteRandomPanels)
+            panel->refreshFromProcessor();
+    if (shownSourcePage == SourcePage::steps)
+        for (auto& panel : stepModulatorPanels)
+            panel->refreshFromProcessor();
     for (auto& row : routeRows)
         row->refreshFromProcessor();
+
+    const std::array<bool, 3> inUse { isAnySourceInUse (SourcePage::lfos), isAnySourceInUse (SourcePage::randoms),
+                                      isAnySourceInUse (SourcePage::steps) };
+    if (inUse != shownInUseDots)
+    {
+        shownInUseDots = inUse;
+        repaint();
+    }
 }
 
 } // namespace midiforge

@@ -148,6 +148,20 @@ public:
     LfoSettings getLfoSettings (int lfoIndex) const noexcept;
     /** @return The current settings of one Note Random modulator, read from the host parameters. */
     NoteRandomSettings getNoteRandomSettings (int randomIndex) const noexcept;
+    /** @return The current settings of one step modulator, read from the host parameters. */
+    StepModulatorSettings getStepModulatorSettings (int stepModulatorIndex) const noexcept;
+    /** @return A step modulator's latest output (-1..+1). */
+    float getStepModulatorValue (int stepModulatorIndex) const noexcept
+    {
+        return stepModulatorValueReadouts[(size_t) stepModulatorIndex].load();
+    }
+    /** @return The step (0-based) a step modulator played at the end of the last block. */
+    int getCurrentStep (int stepModulatorIndex) const noexcept
+    {
+        return currentStepReadouts[(size_t) stepModulatorIndex].load();
+    }
+    /** @return True if an active route uses this modulation source (for the dots on the sub-tabs). */
+    bool isSourceInUse (int sourceIndex) const noexcept;
     /** @return A Note Random modulator's current value (-1..+1). */
     float getNoteRandomValue (int randomIndex) const noexcept
     {
@@ -199,6 +213,8 @@ private:
     void addNoteRandomAndPolarityParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
     /** Added in 0.7.0, after all older parameters: slot parameters E-H. */
     void addSecondPageSlotParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
+    /** Added in 0.14.0, after all older parameters: the step modulators. */
+    void addStepModulatorParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
     std::unique_ptr<juce::AudioParameterFloat> createModuleParameter (int slotIndex, int parameterIndex, int version);
     /**
      * The parameter state plus the shown knob pages and the knob layout version, as saved in projects and
@@ -271,6 +287,16 @@ private:
     std::array<LfoParameterValues, numLfos> lfoParameterValues;
     std::array<RouteParameterValues, numModulationRoutes> routeParameterValues;
     std::array<NoteRandomParameterValues, numNoteRandoms> noteRandomParameterValues;
+
+    struct StepModulatorParameterValues
+    {
+        std::atomic<float>* numSteps = nullptr;
+        std::atomic<float>* division = nullptr;
+        std::atomic<float>* glidePercent = nullptr;
+        std::atomic<float>* restartsOnKey = nullptr;
+        std::atomic<float>* stepValuesPercent[maximumSteps] {};
+    };
+    std::array<StepModulatorParameterValues, numStepModulators> stepModulatorParameterValues;
     EngineSettings engineSettings;
     std::unique_ptr<MidiForgeEngine> engine;
 
@@ -280,6 +306,8 @@ private:
     std::array<std::atomic<float>, numLfos> lfoValueReadouts {};
     std::array<std::atomic<float>, numLfos> lfoPhaseReadouts {};
     std::array<std::atomic<float>, numNoteRandoms> noteRandomValueReadouts {};
+    std::array<std::atomic<float>, numStepModulators> stepModulatorValueReadouts {};
+    std::array<std::atomic<int>, numStepModulators> currentStepReadouts {};
     MidiEventList engineEvents;
     juce::MidiBuffer longMessagesPassedThrough; ///< SysEx and other messages the engine does not handle.
     int currentPresetIndex = 0;                 ///< Last factory preset, reported to the host as the current program

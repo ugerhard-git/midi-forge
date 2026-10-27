@@ -10,7 +10,7 @@ stack in **slots**.
 - [The window](#the-window)
 - [How the chain works](#how-the-chain-works)
 - [Modules](#modules)
-- [Modulation (LFOs and Random)](#modulation-lfos-and-random)
+- [Modulation (LFOs, Random, Steps)](#modulation-lfos-random-steps)
 - [Presets](#presets)
 - [Automation](#automation)
 - [Panic and stuck notes](#panic-and-stuck-notes)
@@ -63,7 +63,7 @@ MIDI Forge does not process audio. Ableton Live cannot host MIDI-effect plug-ins
     an empty slot there and pick the module in it.
   - A knob that an LFO or Random modulator is moving gets a thin **yellow ring with a dot**: the knob shows your setting,
     the dot shows the value the module is using right now.
-- The **Modulation** tab holds the LFOs, the Random modulators and the modulation routes, see [Modulation (LFOs and Random)](#modulation-lfos-and-random).
+- The **Modulation** tab holds the LFOs, the Random modulators, the step modulators and the modulation routes, see [Modulation (LFOs, Random, Steps)](#modulation-lfos-random-steps).
 - **Footer:** the colour legend: blue = filters, green = transforms, orange = generators, purple = randomizers.
 
 ### Picking a module: the module browser
@@ -332,19 +332,24 @@ The Pitch Slide has seven knobs on two pages (A–D, E–G):
 
 Tip: Slide Out with a Delay of 1/8 and a negative Offset makes notes fall off after being held for a moment.
 
-## Modulation (LFOs and Random)
+## Modulation (LFOs, Random, Steps)
 
 ![Modulation tab](images/modulation.png)
 
-Two kinds of **modulation sources** move slot knobs automatically, without DAW automation:
+Three kinds of **modulation sources** move slot knobs (and switch slots on and off) automatically, without
+DAW automation:
 
 - four **LFOs** (low-frequency oscillators) that move continuously: an LFO on *Note Echo · Pitch* makes the
   echoes rise and fall, an LFO on *Arpeggiator · Gate* lets the notes breathe;
 - four **Random** modulators that pick a new random value every time you play a note: every chord gets its
-  own inversion, every note a slightly different loudness.
+  own inversion, every note a slightly different loudness;
+- four **step modulators** that play a sequence of 4 … 16 values you draw, in time with the song: accents,
+  fills, a module that only joins in every fourth bar.
 
 They make no sound themselves; they only move the settings of the MIDI modules. All of this lives on the
-**Modulation** tab, and the eight **routes** at the bottom connect sources to knobs.
+**Modulation** tab: the three small tabs at the top (**LFOs · Random · Steps**) switch between the sources,
+and the eight **routes** below connect sources to knobs and switches. A yellow dot on one of the small tabs
+means one of its sources is used by a route.
 
 ### LFOs
 
@@ -380,13 +385,39 @@ The bar and number at the top show the current value (−100 … +100). Only not
 Forge pick new values; notes the plug-in generates itself (arpeggio steps, repeats, echoes) keep the value
 of the note that started them.
 
+### Step modulators
+
+![Steps tab](images/modulation-steps.png)
+
+Each **step modulator** plays its steps one after another, each for the length set by *Rate*, and starts
+again after the last one. While your DAW plays, the steps are locked to its bars (step 1 on the bar grid);
+when it is stopped, they run at the project tempo.
+
+- **Draw the steps** with the mouse: click or drag over the bars. Values go from −100 (bottom) to +100 (top).
+  Hold **Shift** to snap to quarters (−100, −75 … +100); **double-click** a step to set it to 0.
+- The step playing right now is highlighted; the top line shows it with the current value, e.g.
+  *step 6 / 16 · −20* (or *not routed* when no route uses the modulator).
+- Like the LFOs, a **±** route uses the values as they are; a **+** route reads them as 0 … 100 % (−100 = 0 %,
+  +100 = 100 %).
+
+| Control | Range | Meaning |
+|---------|-------|---------|
+| Steps | 4 … 16 (default 16) | How many steps the sequence has. Counts that don't fit the bar (e.g. 7 sixteenths) make the pattern shift against the beat every bar – good for uneven, evolving rhythms |
+| Rate | 1/32 … 1 Bar (incl. triplets T and dotted D) | How long each step lasts (default 1/16) |
+| Glide | Off, 1 … 100 % | *Off:* the value jumps from step to step. Higher: during that last part of each step it slides smoothly to the next step's value |
+| Restart | on / off | Start again at step 1 when you press the first key after all keys were released |
+
+Ideas: 16 steps on *Arpeggiator · Gate* for a breathing groove; 7 steps on *Velocity Curve · Out Max* for
+accents that move against the bar; 4 steps of 1 bar (−100, −100, −100, +100) on a slot's *On/Off* at ±100 %
+for a module that plays only in every fourth bar (see the *Breathing Steps* preset).
+
 ### Modulation routes
 
 The eight routes connect a source to a slot knob:
 
 | Control | Meaning |
 |---------|---------|
-| Source | LFO 1 … 4 or Random 1 … 4 |
+| Source | LFO 1 … 4, Random 1 … 4 or Steps 1 … 4 |
 | Target | Which knob, named after the module in that slot, e.g. *Slot 2 · Gate*, or a slot's power switch (*Slot 2 · On/Off*). The menu lists the knobs of every loaded module, slot by slot (both pages), followed by its On/Off switch. *None* switches the route off |
 | **±** / **+** | Polarity. **±** (bipolar, the default): the source moves the knob below *and* above its position. **+** (unipolar): the source only pushes the knob **up** from its position (or only **down** with a negative amount). Click to switch |
 | Amount | −100 … +100 %. How far the source moves the knob. At 100 % it can sweep the knob's whole range; negative amounts turn the source upside down. Double-click: 50 % |
@@ -464,6 +495,7 @@ than 256 KB are refused, and values outside a parameter's range are limited to t
 | Ratchet Chords | Chord (Min7, open voicing) → Repeater (1/16, swing 58 %, accents on the beat); LFO 1 (S&H, 1/2 bar) switches the ratchet speed between 1/8T, 1/16 and 1/16T |
 | Hi-Hat Ratchet (Drums) | Note Split (F#1, the General MIDI closed hi-hat) → Repeater (1/16, swing 56 %, accents on the beat) → Humanize; kick, snare and everything else pass untouched |
 | Random Voicings | Chord (Maj7) → Velocity Curve (40–100) → Humanize; Random 1 (4 steps, **+**) gives every chord one of the four inversions, Random 2 (smooth, **±**) gives it its own loudness |
+| Breathing Steps | Arpeggiator (1/16, Up/Down, 2 octaves) → Velocity Curve (40–105) → Note Echo (1/8); Steps 1 (16 steps) shapes the arpeggio's gate, Steps 2 (7 steps) adds accents that move against the bar, Steps 3 (4 steps of 1 bar) switches the echo on only in every fourth bar |
 
 Your current settings are also saved with your DAW project, together with the name of the loaded preset.
 Your DAW's own program list shows only the factory presets; your DAW's preset functions keep working too.
@@ -472,8 +504,8 @@ Your DAW's own program list shows only the factory presets; your DAW's preset fu
 
 Each slot has ten automatable parameters: **Slot n Module**, **Slot n On** and **Slot n A … H**.
 The LFOs (**LFO n Wave, Sync, Rate, Division, Phase, Pulse Width, Restart On Key**), the Random modulators
-(**Random n Chord Window, New Value On, Steps**) and the routes (**Route n Source, Target, Amount, Polarity**)
-can be automated too.
+(**Random n Chord Window, New Value On, Steps**), the step modulators (**Steps n Count, Rate, Glide, Restart On
+Key, Step 1 … 16**) and the routes (**Route n Source, Target, Amount, Polarity**) can be automated too.
 Your DAW displays A … H in the units of the module currently loaded in that slot, and you can type
 values in those units (e.g. `+7 st`, `1/16`, `C3`, `75%`). Automation is not stepped: the modules round
 to the nearest step themselves.

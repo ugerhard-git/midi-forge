@@ -47,6 +47,8 @@ void MidiForgeEngine::reset()
         lfo.reset();
     for (auto& noteRandom : noteRandoms)
         noteRandom.reset();
+    for (auto& stepModulator : stepModulators)
+        stepModulator.reset();
     samplesProcessed = 0;
     isKeyHeld.fill (false);
     numKeysHeld = 0;
@@ -76,9 +78,14 @@ void MidiForgeEngine::handleNotesForModulators (const MidiEventList& segmentInpu
         {
             const bool isFirstKeyOfPhrase = numKeysHeld == 0;
             if (isFirstKeyOfPhrase)
+            {
                 for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
                     if (settings.lfos[lfoIndex].restartsOnFirstKey)
                         lfos[lfoIndex].restart (segmentContext);
+                for (int stepIndex = 0; stepIndex < numStepModulators; ++stepIndex)
+                    if (settings.stepModulators[stepIndex].restartsOnFirstKey)
+                        stepModulators[stepIndex].restart (segmentContext);
+            }
 
             // Every played note-on is a note event for the Note Random modulators (also a repeated key).
             for (int randomIndex = 0; randomIndex < numNoteRandoms; ++randomIndex)
@@ -112,6 +119,12 @@ void MidiForgeEngine::computeSourceValues (const BlockContext& segmentContext, c
         const float value = noteRandoms[randomIndex].getValue();
         sourceValues.bipolar[firstNoteRandomSource + randomIndex] = value;
         sourceValues.unipolar[firstNoteRandomSource + randomIndex] = (value + 1.0f) * 0.5f;
+    }
+    for (int stepIndex = 0; stepIndex < numStepModulators; ++stepIndex)
+    {
+        const float value = stepModulators[stepIndex].valueAt (settings.stepModulators[stepIndex], segmentContext);
+        sourceValues.bipolar[firstStepModulatorSource + stepIndex] = value;
+        sourceValues.unipolar[firstStepModulatorSource + stepIndex] = (value + 1.0f) * 0.5f;
     }
 }
 
@@ -156,6 +169,8 @@ void MidiForgeEngine::processSegment (int segmentStart, int segmentLength, const
 
     for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
         lfos[lfoIndex].advance (settings.lfos[lfoIndex], segmentContext);
+    for (int stepIndex = 0; stepIndex < numStepModulators; ++stepIndex)
+        stepModulators[stepIndex].advance (settings.stepModulators[stepIndex], segmentContext);
 }
 
 void MidiForgeEngine::process (MidiEventList& events, const BlockContext& context, const EngineSettings& settings)
@@ -201,6 +216,12 @@ void MidiForgeEngine::updateLfoReadouts (const BlockContext& endOfBlockContext, 
         const double cyclePosition = lfos[lfoIndex].cyclePositionAt (settings.lfos[lfoIndex], endOfBlockContext);
         lfoPhases[lfoIndex] = cyclePosition - std::floor (cyclePosition);
         lfoValues[lfoIndex] = lfos[lfoIndex].valueAt (settings.lfos[lfoIndex], endOfBlockContext);
+    }
+    for (int stepIndex = 0; stepIndex < numStepModulators; ++stepIndex)
+    {
+        const auto& stepSettings = settings.stepModulators[stepIndex];
+        stepModulatorValues[stepIndex] = stepModulators[stepIndex].valueAt (stepSettings, endOfBlockContext);
+        currentSteps[stepIndex] = stepModulators[stepIndex].currentStepAt (stepSettings, endOfBlockContext);
     }
 }
 

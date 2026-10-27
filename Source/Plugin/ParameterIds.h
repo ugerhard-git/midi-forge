@@ -7,6 +7,7 @@
  * Per LFO n (1..4):    ln_wave, ln_sync, ln_rate, ln_div, ln_phase, ln_width, ln_restart
  * Per route n (1..8):  rn_source, rn_target, rn_amount, rn_polarity
  * Per Note Random n (1..4): nn_window, nn_trigger, nn_steps
+ * Per step modulator n (1..4, added in 0.14.0): qn_steps, qn_rate, qn_glide, qn_restart, qn_v1 .. qn_v16
  */
 #pragma once
 
@@ -102,10 +103,34 @@ inline juce::String noteRandomSteps (int randomIndex)
     return makeId ("n", randomIndex, "steps");
 }
 
+// Step modulators ("q" for seQuence; "s" is taken by the slots) ----------------------------------
+inline juce::String stepCount (int stepModulatorIndex)
+{
+    return makeId ("q", stepModulatorIndex, "steps");
+}
+inline juce::String stepRate (int stepModulatorIndex)
+{
+    return makeId ("q", stepModulatorIndex, "rate");
+}
+inline juce::String stepGlide (int stepModulatorIndex)
+{
+    return makeId ("q", stepModulatorIndex, "glide");
+}
+inline juce::String stepRestartOnKey (int stepModulatorIndex)
+{
+    return makeId ("q", stepModulatorIndex, "restart");
+}
+/** The value of one step (stepIndex 0..15), e.g. "q1_v3". */
+inline juce::String stepValue (int stepModulatorIndex, int stepIndex)
+{
+    return makeId ("q", stepModulatorIndex, ("v" + juce::String (stepIndex + 1)).toRawUTF8());
+}
+
 /** Version hints for the hosts' parameter caching (see juce::ParameterID). */
-inline constexpr int slotParameterVersion = 1;       ///< Version 0.1.0: slot parameters
-inline constexpr int modulationParameterVersion = 2; ///< Version 0.2.0: LFOs and routes
-inline constexpr int noteRandomParameterVersion = 3; ///< Version 0.6.0: route polarity, Note Random
-inline constexpr int secondPageParameterVersion = 4; ///< Version 0.7.0: slot parameters E-H
+inline constexpr int slotParameterVersion = 1;          ///< Version 0.1.0: slot parameters
+inline constexpr int modulationParameterVersion = 2;    ///< Version 0.2.0: LFOs and routes
+inline constexpr int noteRandomParameterVersion = 3;    ///< Version 0.6.0: route polarity, Note Random
+inline constexpr int secondPageParameterVersion = 4;    ///< Version 0.7.0: slot parameters E-H
+inline constexpr int stepModulatorParameterVersion = 5; ///< Version 0.14.0: step modulators
 
 } // namespace midiforge::ParameterIds

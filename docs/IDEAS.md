@@ -16,11 +16,11 @@ When a feature is implemented, remove it here and describe it in [MANUAL.md](MAN
 
 ## Ideas
 
-### Step modulator (being designed)
+### Step modulator: ties
 
-A new modulation source: a sequence of 4 … 16 steps, each with its own value, played in time with the song
-and routed like an LFO (knobs and On/Off switches), e.g. for fills, phrase endings and uneven rhythms.
-Design in progress, see the discussion of 27 Oct 2026.
+Let a step last two or more steps' worth ("tie" it to the previous one), so one step modulator can play
+uneven rhythms like long-short-short within one sequence. Agreed as a later addition to the step modulators
+(0.14.0).
 
 ### Groove
 

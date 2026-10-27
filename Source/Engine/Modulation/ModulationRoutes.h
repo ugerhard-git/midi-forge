@@ -14,9 +14,14 @@ namespace midiforge
 
 constexpr int numLfos = 4;
 constexpr int numNoteRandoms = 4;
-/** Sources are numbered: LFO 1..4 first, then Random 1..4. The numbers are stored in projects. */
-constexpr int numModulationSources = numLfos + numNoteRandoms;
+constexpr int numStepModulators = 4;
+/**
+ * Sources are numbered: LFO 1..4 first, then Random 1..4, then Steps 1..4 (added in 0.14.0). The numbers
+ * are stored in projects, so new sources are appended.
+ */
+constexpr int numModulationSources = numLfos + numNoteRandoms + numStepModulators;
 constexpr int firstNoteRandomSource = numLfos;
+constexpr int firstStepModulatorSource = numLfos + numNoteRandoms;
 constexpr int numModulationRoutes = 8;
 /**
  * Targets are numbered: 0 = none, then slot 1 A, slot 1 B, ... slot 8 D (1..32, since 0.2.0), then
@@ -40,7 +45,7 @@ constexpr float switchOffThreshold = 0.45f;
 /** One modulation route. */
 struct ModulationRoute
 {
-    int sourceIndex = 0; ///< 0..numModulationSources-1: LFO 1..4, then Random 1..4
+    int sourceIndex = 0; ///< 0..numModulationSources-1: LFO 1..4, then Random 1..4, then Steps 1..4
     int targetIndex = 0; ///< 0 = none, otherwise see targetSlotIndex() / targetParameterIndex()
     float amount = 0.5f; ///< -1..+1: how far the source moves the parameter (1 = the full parameter range)
     /**

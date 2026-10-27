@@ -7,6 +7,7 @@
 #include "Modulation/Lfo.h"
 #include "Modulation/ModulationRoutes.h"
 #include "Modulation/NoteRandom.h"
+#include "Modulation/StepModulator.h"
 #include "ModuleChain.h"
 
 namespace midiforge
@@ -18,11 +19,12 @@ struct EngineSettings
     SlotSettings slots[numSlots];
     LfoSettings lfos[numLfos];
     NoteRandomSettings noteRandoms[numNoteRandoms];
+    StepModulatorSettings stepModulators[numStepModulators];
     ModulationRoute routes[numModulationRoutes];
 };
 
 /**
- * @brief Runs the modulation sources (LFOs, Note Random) and the module chain together.
+ * @brief Runs the modulation sources (LFOs, Note Random, step modulators) and the module chain together.
  *
  * When modulation is active, a block is processed in short pieces ("segments"): one starts at every
  * incoming event and at least every maxSegmentLength samples. The sources are evaluated at the start of
@@ -62,6 +64,10 @@ public:
     const double* getLastLfoPhases() const noexcept { return lfoPhases; }
     /** @return Each Note Random modulator's current value (-1..+1). */
     float getNoteRandomValue (int randomIndex) const noexcept { return noteRandoms[randomIndex].getValue(); }
+    /** @return Each step modulator's output (-1..+1) at the end of the last block. */
+    const float* getLastStepModulatorValues() const noexcept { return stepModulatorValues; }
+    /** @return The step (0-based) each step modulator was playing at the end of the last block. */
+    const int* getLastSteps() const noexcept { return currentSteps; }
 
 private:
     void processSegment (int segmentStart, int segmentLength, const BlockContext& blockContext,
@@ -76,6 +82,9 @@ private:
     ModuleChain moduleChain;
     Lfo lfos[numLfos];
     NoteRandom noteRandoms[numNoteRandoms];
+    StepModulator stepModulators[numStepModulators];
+    float stepModulatorValues[numStepModulators] {};
+    int currentSteps[numStepModulators] {};
     ModulationSourceValues sourceValues;
     int64_t samplesProcessed = 0;
     SlotSettings modulatedSlots[numSlots] {};

@@ -4,7 +4,8 @@
  *
  * Usage: midi_forge_plugin_tests [name filter] [--snapshot-dir folder]
  * With --snapshot-dir both editor pages are rendered to editor.png and modulation.png in that folder,
- * plus the module browser (module-browser.png) and the module info pop-up (module-info.png). CI publishes
+ * plus the Steps sub-tab with the "Breathing Steps" preset (modulation-steps.png), the module browser
+ * (module-browser.png) and the module info pop-up (module-info.png). CI publishes
  * them for visual review and they are used in the manual.
  */
 #include "../TestFramework.h"
@@ -57,19 +58,24 @@ TEST_CASE ("plugin: exposes slot, LFO and route parameters with stable IDs")
     for (auto* parameter : processor.getParameters())
         if (dynamic_cast<juce::AudioProcessorParameterWithID*> (parameter) != nullptr)
             ++numOurParameters;
-    constexpr int parametersPerSlot = 10, parametersPerLfo = 7, parametersPerRoute = 4, parametersPerRandom = 3;
+    constexpr int parametersPerSlot = 10, parametersPerLfo = 7, parametersPerRoute = 4, parametersPerRandom = 3,
+                  parametersPerStepModulator = 4 + maximumSteps;
     EXPECT (numOurParameters == numSlots * parametersPerSlot + numLfos * parametersPerLfo +
-                                    numModulationRoutes * parametersPerRoute + numNoteRandoms * parametersPerRandom);
+                                    numModulationRoutes * parametersPerRoute + numNoteRandoms * parametersPerRandom +
+                                    numStepModulators * parametersPerStepModulator);
 
     // Parameters added later are appended: older ones keep their position, the newest come last.
     const auto idAt = [&processor] (int index)
     { return dynamic_cast<juce::AudioProcessorParameterWithID*> (processor.getParameters()[index])->paramID; };
-    EXPECT (idAt (numSlots * 6 + numLfos * 7 + numModulationRoutes * 3 - 1) == "r8_amount"); // last of 0.2.0
-    EXPECT (idAt (numOurParameters - 1 - numSlots * 4) == "r8_polarity");                    // last of 0.6.0
-    EXPECT (idAt (numOurParameters - 1) == "s8_h");                                          // E-H (0.7.0) come last
+    const int numStepParameters = numStepModulators * parametersPerStepModulator;
+    EXPECT (idAt (numSlots * 6 + numLfos * 7 + numModulationRoutes * 3 - 1) == "r8_amount");  // last of 0.2.0
+    EXPECT (idAt (numOurParameters - 1 - numStepParameters - numSlots * 4) == "r8_polarity"); // last of 0.6.0
+    EXPECT (idAt (numOurParameters - 1 - numStepParameters) == "s8_h");                       // last of 0.7.0
+    EXPECT (idAt (numOurParameters - 1) == "q4_v16");                                         // steps (0.14.0) last
 
-    for (const char* id : { "s1_type", "s8_d", "l1_wave", "l4_restart", "r1_source", "r8_amount", "r1_polarity",
-                            "n1_window", "n4_steps", "s1_e", "s8_h" })
+    for (const char* id :
+         { "s1_type", "s8_d", "l1_wave", "l4_restart", "r1_source", "r8_amount", "r1_polarity", "n1_window", "n4_steps",
+           "s1_e", "s8_h", "q1_steps", "q2_rate", "q3_glide", "q4_restart", "q1_v1", "q4_v16" })
         EXPECT (processor.parameters.getParameter (id) != nullptr);
     EXPECT (processor.isMidiEffect() && processor.acceptsMidi() && processor.producesMidi());
 
@@ -682,6 +688,34 @@ void writePopupSnapshots (const juce::File& directory)
     info.showModule ((int) ModuleType::Repeater);
     info.setSize (380, info.getHeightForWidth (380));
     writeComponentSnapshot (info, directory.getChildFile ("module-info.png"));
+}
+
+/** The Steps sub-tab of the Modulation tab, with the "Breathing Steps" preset playing for a moment. */
+void writeStepsSnapshot (const juce::File& directory)
+{
+    MidiForgeProcessor processor;
+    const auto& presets = getFactoryPresets();
+    for (int index = 0; index < (int) presets.size(); ++index)
+        if (juce::String (presets[(size_t) index].name) == "Breathing Steps")
+            processor.setCurrentProgram (index);
+    processor.prepareToPlay (testSampleRate, testBlockSize);
+    for (int block = 0; block < 60; ++block)
+        processBlock (processor, {});
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditorAndMakeActive());
+    auto* forgeEditor = dynamic_cast<MidiForgeEditor*> (editor.get());
+    if (forgeEditor == nullptr)
+        return;
+    forgeEditor->showPage (MidiForgeEditor::Page::modulation);
+    forgeEditor->getModulationPage().showSourcePage (ModulationPage::SourcePage::steps);
+    forgeEditor->refreshFromProcessor();
+
+    const auto image = editor->createComponentSnapshot (editor->getLocalBounds(), true, 2.0f);
+    const auto file = directory.getChildFile ("modulation-steps.png");
+    file.deleteFile();
+    juce::FileOutputStream stream (file);
+    juce::PNGImageFormat().writeImageToStream (image, stream);
+    std::printf ("Editor snapshot written to %s\n", file.getFullPathName().toRawUTF8());
 }
 
 /** Loads a preset with LFOs and runs the engine for a moment, so the snapshots show modulation. */
@@ -1299,6 +1333,98 @@ TEST_CASE ("switch targets: a route switches a slot off, and the editor's readou
     EXPECT (processor.isSlotEnabled (0)); // the switch itself stays as the user set it
 }
 
+//==============================================================================
+// Step modulators
+
+TEST_CASE ("step modulators: host parameters map to the engine settings; Steps are new route sources")
+{
+    MidiForgeProcessor processor;
+    const auto setPlain = [&processor] (const juce::String& id, float plainValue)
+    {
+        auto* parameter = processor.parameters.getParameter (id);
+        parameter->setValueNotifyingHost (parameter->convertTo0to1 (plainValue));
+    };
+    setPlain (ParameterIds::stepCount (1), 7);
+    setPlain (ParameterIds::stepRate (1), 5); // 1/8
+    setPlain (ParameterIds::stepGlide (1), 25);
+    setPlain (ParameterIds::stepRestartOnKey (1), 1);
+    setPlain (ParameterIds::stepValue (1, 2), -40);
+
+    const auto settings = processor.getStepModulatorSettings (1);
+    EXPECT (settings.numSteps == 7);
+    EXPECT (juce::String (stepDivisions[settings.divisionIndex].name) == "1/8");
+    EXPECT (std::abs (settings.glide - 0.25) < 1.0e-6);
+    EXPECT (settings.restartsOnFirstKey);
+    EXPECT (std::abs (settings.stepValues[2] - -0.4f) < 1.0e-6f);
+    EXPECT (processor.parameters.getParameter (ParameterIds::stepGlide (0))->getCurrentValueAsText() == "Off");
+
+    // Old projects keep their sources (LFO 1-4 = 0-3, Random 1-4 = 4-7); Steps 1-4 are 8-11.
+    auto* source = processor.parameters.getParameter (ParameterIds::routeSource (0));
+    source->setValueNotifyingHost (source->getValueForText ("Steps 3"));
+    EXPECT ((int) std::lround (processor.parameters.getRawParameterValue (ParameterIds::routeSource (0))->load()) ==
+            firstStepModulatorSource + 2);
+
+    setRoute (processor, 0, modulationTargetIndex (0, 0));
+    EXPECT (processor.isSourceInUse (firstStepModulatorSource + 2));
+    EXPECT (! processor.isSourceInUse (0));
+}
+
+TEST_CASE ("step modulators: their steps drive a knob and show the current step")
+{
+    MidiForgeProcessor processor;
+    processor.loadModule (0, (int) ModuleType::Transpose);
+    const auto setPlain = [&processor] (const juce::String& id, float plainValue)
+    {
+        auto* parameter = processor.parameters.getParameter (id);
+        parameter->setValueNotifyingHost (parameter->convertTo0to1 (plainValue));
+    };
+    setPlain (ParameterIds::stepCount (0), 4);
+    for (int step = 0; step < 4; ++step)
+        setPlain (ParameterIds::stepValue (0, step), step % 2 == 0 ? 100.0f : -100.0f);
+    setPlain (ParameterIds::routeSource (0), (float) firstStepModulatorSource);
+    setRoute (processor, 0, modulationTargetIndex (0, 0), 50.0f);
+    processor.prepareToPlay (testSampleRate, testBlockSize);
+
+    std::set<int> stepsSeen;
+    bool sawHigh = false, sawLow = false;
+    for (int block = 0; block < 200; ++block)
+    {
+        processBlock (processor, {});
+        stepsSeen.insert (processor.getCurrentStep (0));
+        const float knob = processor.getModulatedParameterValue (0, 0);
+        sawHigh = sawHigh || knob > 0.9f;
+        sawLow = sawLow || knob < 0.1f;
+    }
+    EXPECT (stepsSeen == std::set<int> ({ 0, 1, 2, 3 }));
+    EXPECT (sawHigh && sawLow);
+}
+
+TEST_CASE ("step modulators: the Steps sub-tab shows the panels, and drawing sets the step values")
+{
+    MidiForgeProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditorAndMakeActive());
+    auto* forgeEditor = dynamic_cast<MidiForgeEditor*> (editor.get());
+    EXPECT (forgeEditor != nullptr);
+    if (forgeEditor == nullptr)
+        return;
+    forgeEditor->showPage (MidiForgeEditor::Page::modulation);
+    auto& page = forgeEditor->getModulationPage();
+    EXPECT (page.getShownSourcePage() == ModulationPage::SourcePage::lfos);
+    page.showSourcePage (ModulationPage::SourcePage::steps);
+    auto& stepEditor = page.getStepModulatorPanel (1).editor;
+    EXPECT (page.getStepModulatorPanel (1).isVisible());
+
+    // 16 steps across the editor: the 4th step is under x at 3.5/16 of the bar area, full height is +100.
+    const float width = (float) stepEditor.getWidth();
+    EXPECT (stepEditor.stepAt (4.0f + (width - 8.0f) * 3.5f / 16.0f) == 3);
+    EXPECT (std::abs (stepEditor.valueAt (4.0f, false) - 100.0f) < 0.5f);
+    EXPECT (std::abs (stepEditor.valueAt ((float) stepEditor.getHeight() / 2.0f, false)) < 1.0f);
+    EXPECT (std::abs (std::fmod (stepEditor.valueAt (17.0f, true), 25.0f)) < 1.0e-3f); // snapped with Shift
+
+    stepEditor.setStepValue (3, -60.0f);
+    EXPECT (std::abs (processor.getStepModulatorSettings (1).stepValues[3] - -0.6f) < 1.0e-6f);
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juceInitialiser;
@@ -1322,6 +1448,7 @@ int main (int argc, char** argv)
         MidiForgeProcessor processor;
         prepareProcessorForSnapshots (processor);
         writeEditorSnapshots (processor, snapshotDirectory);
+        writeStepsSnapshot (snapshotDirectory);
         writePopupSnapshots (snapshotDirectory);
     }
     return result;

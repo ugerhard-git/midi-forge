@@ -32,6 +32,8 @@ public:
     /** Shows one page and highlights its tab. */
     void showPage (Page page);
     Page getShownPage() const noexcept { return shownPage; }
+    /** The Modulation tab (for switching its sub-tabs, e.g. from the tests). */
+    ModulationPage& getModulationPage() noexcept { return modulationPage; }
 
     /** Brings the visible page and the preset menu up to date with the processor. Called by the timer. */
     void refreshFromProcessor();
