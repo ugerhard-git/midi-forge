@@ -50,6 +50,8 @@ const char* const slideDivisionLabels[] = { "1/64", "1/32T", "1/32", "1/16T", "1
                                             "1/4T", "1/8D",  "1/4",  "1/2T",  "1/4D",  "1/2",  "1/2D", "1 Bar" };
 const char* const slideDelayLabels[] = { "Off", "1/64", "1/32T", "1/32", "1/16T", "1/32D", "1/16", "1/8T", "1/16D",
                                          "1/8", "1/4T", "1/8D",  "1/4",  "1/2T",  "1/4D",  "1/2",  "1/2D", "1 Bar" };
+const char* const dispatchAlgorithmLabels[] = { "Round Robin", "Random", "Ping Pong" };
+const char* const dispatchModeLabels[] = { "Single Notes", "Chords" };
 const char* const echoDivisionLabels[] = { "1/32", "1/16T", "1/16", "1/16D", "1/8T", "1/8",
                                            "1/8D", "1/4T",  "1/4",  "1/4D",  "1/2",  "1 Bar" };
 const char* const arpeggiatorDivisionLabels[] = { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
@@ -305,6 +307,27 @@ const ModuleDescription* createModuleTable()
           "pitch; Slide Out starts at the note's pitch and glides to Offset. Pitch bend moves the whole channel, "
           "so a chord slides together (notes within 30 ms count as one chord). Set Bend Range to your synth's "
           "pitch bend range. Your own pitch bend is added to the slide." },
+
+        // Added in 0.12.0 --------------------------------------------------------------------------
+        { "Note Dispatcher",
+          ModuleCategory::Transform,
+          "Spreads notes over several channels, one free channel at a time.",
+          { choiceParameter ("Algorithm", dispatchAlgorithmLabels, 0)
+                .withHelp ("How the next free channel is chosen: in turn, at random, or up and down."),
+            choiceParameter ("Mode", dispatchModeLabels, 0)
+                .withHelp ("Single Notes: each note gets a channel. Chords: a whole chord shares one channel."),
+            integerParameter ("First Channel", 1, 16, 1).withHelp ("The first channel notes are sent to."),
+            integerParameter ("Channels", 2, 16, 4).withHelp ("How many channels are used (up to channel 16)."),
+            // Page 2
+            integerParameter ("Input", 0, 16, 0, "", "All")
+                .withHelp ("Which incoming channel is dispatched; other channels pass unchanged."),
+            integerParameter ("Chord Window", 0, 100, 30, " ms")
+                .withHelp ("Notes starting this close together count as one chord (Chords mode).") },
+          "Sends every note (or chord) to one of several MIDI channels, for example to play several mono "
+          "synths as one polyphonic instrument. A channel is free when none of its notes are held. Round "
+          "Robin takes the next free channel in turn, Random any free one, Ping Pong goes up and down. When "
+          "every channel is busy, the oldest note is ended to make room. Controllers, pitch bend and "
+          "aftertouch are copied to every channel." },
     };
     return table;
 }

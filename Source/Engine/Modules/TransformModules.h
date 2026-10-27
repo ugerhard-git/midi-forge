@@ -1,6 +1,6 @@
 /**
  * @file TransformModules.h
- * @brief Factory for the transform modules (Transpose, Scale Quantize, Velocity Curve, Channel Remap).
+ * @brief Factory for the transform modules (Transpose, Scale Quantize, Velocity Curve, Channel Remap, Note Dispatcher).
  */
 #pragma once
 

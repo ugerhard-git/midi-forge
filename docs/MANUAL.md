@@ -194,6 +194,33 @@ If two keys land on the same scale note, it keeps sounding until both keys are r
 | From | All, 1 … 16 | Which channel to move (All = every channel) |
 | To | 1 … 16 | Target channel |
 
+**Note Dispatcher** – spreads notes over several MIDI channels, picking a **free** channel for every note
+(or every chord). Use it to play several mono synths as one polyphonic instrument, or to alternate between
+sounds on different channels. A channel is free when none of the notes sent to it are still held.
+
+- **Round Robin** takes the next free channel above the one used last and wraps around at the end.
+- **Random** picks any free channel.
+- **Ping Pong** goes up and down through the channels without repeating the ends (1 2 3 4 3 2 1 2 …).
+- When **every channel is busy**, the note (or chord) that started first is ended and its channel reused.
+- In **Chords** mode, notes starting within the *Chord Window* count as one chord and all go to the same
+  channel; the next chord goes to the next free channel.
+- A note's note-off and polyphonic aftertouch always go to the channel the note went to, even if you change
+  the knobs while holding it.
+- Controllers (mod wheel, sustain pedal …), pitch bend, channel aftertouch and program changes are **copied
+  to every channel** of the range, so all synths follow the wheels and pedals.
+
+| Knob | Range | Meaning |
+|------|-------|---------|
+| Algorithm | Round Robin / Random / Ping Pong | How the next free channel is chosen |
+| Mode | Single Notes / Chords | One channel per note, or one channel per chord |
+| First Channel | 1 … 16 | The first channel notes are sent to |
+| Channels | 2 … 16 | How many channels are used; the range stops at channel 16 (First Channel 15 with 4 channels uses 15 and 16) |
+| Input *(page 2)* | All, 1 … 16 | Which incoming channel is dispatched; notes and messages on other channels pass unchanged |
+| Chord Window *(page 2)* | 0 … 100 ms | Notes starting this close together count as one chord in Chords mode (default 30 ms) |
+
+Tip: put a *Pitch Slide* after a Note Dispatcher and each synth gets its own slides, because every chord
+sits on its own channel.
+
 ### Generators (orange)
 
 **Arpeggiator** – plays the keys you hold one after another. While your DAW's transport runs, the steps

@@ -46,6 +46,8 @@ enum class ModuleType : int
     NoteSplit, ///< Filter
     // Added in 0.10.0
     PitchSlide, ///< Randomizer
+    // Added in 0.12.0
+    NoteDispatcher, ///< Transform
 
     Count
 };

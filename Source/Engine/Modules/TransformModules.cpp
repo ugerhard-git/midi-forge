@@ -1,10 +1,12 @@
 /**
  * @file TransformModules.cpp
- * @brief Modules that change events: Transpose, Scale Quantize, Velocity Curve, Channel Remap.
+ * @brief Modules that change events: Transpose, Scale Quantize, Velocity Curve, Channel Remap,
+ *        Note Dispatcher.
  */
 #include "TransformModules.h"
 
 #include <cmath>
+#include <limits>
 
 namespace midiforge
 {
@@ -189,6 +191,298 @@ private:
     }
 };
 
+/**
+ * Sends incoming notes to a range of channels, picking a free channel for every note (or every chord).
+ * A channel is free when no note this module sent to it is still held. When all are busy, the channel
+ * whose notes started longest ago is freed (its notes end) and reused.
+ *
+ * Every input key remembers the channel its note went to, so its note-off and poly pressure follow, even
+ * if the knobs change while it is held. Other channel messages of the dispatched input are copied to every
+ * target channel, so all synths follow the wheels and pedals.
+ */
+class NoteDispatcher final : public MidiModule
+{
+public:
+    NoteDispatcher() : MidiModule (ModuleType::NoteDispatcher) { reset(); }
+
+    void reset() override
+    {
+        channelOfInputKey.fill (notMapped);
+        numNotesOnChannel.fill (0);
+        startOrderOfChannel.fill (0);
+        nextStartOrder = 1;
+        lastPosition = -1;
+        isPingPongGoingDown = false;
+        chordStartTime = std::numeric_limits<int64_t>::min() / 2;
+        chordChannel = -1;
+        soundingNotes.clear();
+    }
+
+    void process (const MidiEventList& input, MidiEventList& output, const BlockContext& context,
+                  const float* parameterValues) override
+    {
+        const int inputSetting = integerParameter (parameterValues, inputChannel); // 0 = all
+        for (const auto& event : input)
+        {
+            const bool isFromDispatchedInput =
+                event.isChannelMessage() && (inputSetting == 0 || event.channel() == inputSetting - 1);
+            if (event.isNoteOn())
+            {
+                // A key played again ends whatever its previous note-on started (a synth would do the same).
+                endKey (event.channel(), event.noteNumber(), event.samplePosition, output);
+                if (isFromDispatchedInput)
+                {
+                    dispatchNoteOn (event, context.blockStartSample + event.samplePosition, context, parameterValues,
+                                    output);
+                }
+                else
+                {
+                    keyState (event) = passedThrough;
+                    output.push_back (event);
+                }
+            }
+            else if (event.isNoteOff())
+            {
+                // Note-offs follow their note-on, whatever the Input knob says now.
+                handleNoteOff (event, output);
+            }
+            else if (event.isPolyPressure())
+            {
+                handlePolyPressure (event, output);
+            }
+            else if (isFromDispatchedInput)
+            {
+                copyToEveryChannel (event, parameterValues, output);
+            }
+            else
+            {
+                output.push_back (event);
+            }
+        }
+    }
+
+private:
+    enum Parameter
+    {
+        algorithm,
+        dispatchMode,
+        firstChannel,
+        numberOfChannels,
+        inputChannel,   ///< page 2
+        chordWindowInMs ///< page 2
+    };
+    enum Algorithm
+    {
+        roundRobin,
+        random,
+        pingPong
+    };
+    enum DispatchMode
+    {
+        singleNotes,
+        chords
+    };
+
+    // What happened to an input key's note (otherwise: the zero-based channel it was dispatched to).
+    static constexpr int16_t notMapped = -1;     ///< Nothing known (a note from before this module): note-off passes
+    static constexpr int16_t wasStolen = -2;     ///< Its note was ended to free the channel: its note-off is dropped
+    static constexpr int16_t passedThrough = -3; ///< Not on the Input channel: passed unchanged, and so is its note-off
+
+    int16_t& keyState (const MidiEvent& event) noexcept
+    {
+        return channelOfInputKey[channelNoteIndex (event.channel(), event.noteNumber())];
+    }
+
+    /** Ends the note an input key is still sounding (dispatched or passed through), before it plays again. */
+    void endKey (int channelOfKey, int noteNumber, int samplePosition, MidiEventList& output)
+    {
+        auto& state = channelOfInputKey[channelNoteIndex (channelOfKey, noteNumber)];
+        if (state >= 0)
+            endNote (noteNumber, state, samplePosition, output);
+        else if (state == passedThrough)
+            output.push_back (MidiEvent::noteOff (samplePosition, channelOfKey, noteNumber));
+        state = notMapped;
+    }
+
+    /** The channels in use: [first, first + count), zero based, never past channel 16. */
+    struct ChannelRange
+    {
+        int first;
+        int count;
+    };
+    ChannelRange channelRange (const float* parameterValues) const noexcept
+    {
+        const int first = std::clamp (integerParameter (parameterValues, firstChannel) - 1, 0, numMidiChannels - 1);
+        const int count = std::clamp (integerParameter (parameterValues, numberOfChannels), 1, numMidiChannels - first);
+        return { first, count };
+    }
+
+    void dispatchNoteOn (const MidiEvent& noteOn, int64_t eventTime, const BlockContext& context,
+                         const float* parameterValues, MidiEventList& output)
+    {
+        auto& keyChannel = keyState (noteOn); // notMapped: endKey() ran before
+
+        const auto range = channelRange (parameterValues);
+        const bool isChordMode = integerParameter (parameterValues, dispatchMode) == chords;
+        const auto chordWindow =
+            (int64_t) (integerParameter (parameterValues, chordWindowInMs) / 1000.0 * context.sampleRate);
+        const bool joinsChord = isChordMode && chordChannel >= 0 && eventTime - chordStartTime <= chordWindow;
+
+        int channel = joinsChord ? chordChannel
+                                 : pickChannel (range, integerParameter (parameterValues, algorithm),
+                                                noteOn.samplePosition, output);
+        if (! joinsChord)
+        {
+            chordStartTime = eventTime;
+            chordChannel = channel;
+            startOrderOfChannel[(size_t) channel] = nextStartOrder++;
+        }
+
+        keyChannel = (int16_t) channel;
+        ++numNotesOnChannel[(size_t) channel];
+        auto dispatched = noteOn;
+        dispatched.setChannel (channel);
+        soundingNotes.noteStarted (channel, noteOn.noteNumber());
+        output.push_back (dispatched);
+    }
+
+    /** Picks a free channel with the chosen algorithm, or frees the one used longest ago. */
+    int pickChannel (const ChannelRange& range, int chosenAlgorithm, int samplePosition, MidiEventList& output)
+    {
+        const auto isFree = [&] (int position)
+        { return numNotesOnChannel[(size_t) range.first + (size_t) position] == 0; };
+        int position = -1;
+
+        if (chosenAlgorithm == random)
+        {
+            int freePositions[numMidiChannels];
+            int numFree = 0;
+            for (int candidate = 0; candidate < range.count; ++candidate)
+                if (isFree (candidate))
+                    freePositions[numFree++] = candidate;
+            if (numFree > 0)
+                position = freePositions[randomInteger (0, numFree - 1)];
+        }
+        else if (chosenAlgorithm == pingPong)
+        {
+            // Walk up and down from the last position, turning at the ends without repeating them.
+            int candidate = std::clamp (lastPosition, -1, range.count - 1);
+            bool goingDown = isPingPongGoingDown;
+            for (int step = 0; step < 2 * range.count && position < 0; ++step)
+            {
+                if (range.count == 1)
+                {
+                    candidate = 0;
+                }
+                else if (goingDown && candidate <= 0)
+                {
+                    goingDown = false; // bottom reached: turn up
+                    candidate = 1;
+                }
+                else if (! goingDown && candidate >= range.count - 1)
+                {
+                    goingDown = true; // top reached: turn down
+                    candidate = range.count - 2;
+                }
+                else
+                {
+                    candidate += goingDown ? -1 : 1;
+                }
+                if (isFree (candidate))
+                    position = candidate;
+            }
+            if (position >= 0)
+                isPingPongGoingDown = goingDown;
+        }
+        else
+        {
+            for (int step = 1; step <= range.count && position < 0; ++step)
+            {
+                const int candidate = (std::max (lastPosition, -1) + step) % range.count;
+                if (isFree (candidate))
+                    position = candidate;
+            }
+        }
+
+        if (position < 0)
+            position = stealOldestChannel (range, samplePosition, output);
+        lastPosition = position;
+        return range.first + position;
+    }
+
+    /** Ends every note on the channel whose notes started first, and returns its position in the range. */
+    int stealOldestChannel (const ChannelRange& range, int samplePosition, MidiEventList& output)
+    {
+        int oldestPosition = 0;
+        for (int position = 1; position < range.count; ++position)
+            if (startOrderOfChannel[(size_t) range.first + (size_t) position] <
+                startOrderOfChannel[(size_t) range.first + (size_t) oldestPosition])
+                oldestPosition = position;
+
+        const int channel = range.first + oldestPosition;
+        for (size_t key = 0; key < channelOfInputKey.size(); ++key)
+        {
+            if (channelOfInputKey[key] == channel)
+            {
+                endNote ((int) key % numMidiNotes, channel, samplePosition, output);
+                channelOfInputKey[key] = wasStolen; // its note-off is swallowed when it comes
+            }
+        }
+        return oldestPosition;
+    }
+
+    void handleNoteOff (const MidiEvent& noteOff, MidiEventList& output)
+    {
+        auto& keyChannel = keyState (noteOff);
+        if (keyChannel >= 0)
+            endNote (noteOff.noteNumber(), keyChannel, noteOff.samplePosition, output, noteOff.velocity());
+        else if (keyChannel != wasStolen)
+            output.push_back (noteOff); // passed through, or from before this module was there (rule 1)
+        keyChannel = notMapped;
+    }
+
+    /** Sends the note-off of a dispatched note and frees its place on the channel. */
+    void endNote (int noteNumber, int channel, int samplePosition, MidiEventList& output, int releaseVelocity = 0)
+    {
+        auto& count = numNotesOnChannel[(size_t) channel];
+        count = std::max (0, count - 1);
+        if (soundingNotes.noteEnded (channel, noteNumber))
+            output.push_back (MidiEvent::noteOff (samplePosition, channel, noteNumber, releaseVelocity));
+    }
+
+    void handlePolyPressure (const MidiEvent& pressure, MidiEventList& output)
+    {
+        const int keyChannel = keyState (pressure);
+        if (keyChannel == wasStolen)
+            return;
+        auto followed = pressure;
+        if (keyChannel >= 0)
+            followed.setChannel (keyChannel);
+        output.push_back (followed);
+    }
+
+    void copyToEveryChannel (const MidiEvent& event, const float* parameterValues, MidiEventList& output)
+    {
+        const auto range = channelRange (parameterValues);
+        for (int position = 0; position < range.count; ++position)
+        {
+            auto copy = event;
+            copy.setChannel (range.first + position);
+            output.push_back (copy);
+        }
+    }
+
+    std::array<int16_t, numChannelNoteCombinations> channelOfInputKey {};
+    std::array<int, numMidiChannels> numNotesOnChannel {};
+    std::array<uint64_t, numMidiChannels> startOrderOfChannel {}; ///< When a channel last got a note (or chord)
+    uint64_t nextStartOrder = 1;
+    int lastPosition = -1; ///< Position (in the range) of the channel used last
+    bool isPingPongGoingDown = false;
+    int64_t chordStartTime = 0;
+    int chordChannel = -1;
+    SoundingNoteCounter soundingNotes;
+};
+
 } // namespace
 
 std::unique_ptr<MidiModule> createTransformModule (ModuleType type)
@@ -199,6 +493,7 @@ std::unique_ptr<MidiModule> createTransformModule (ModuleType type)
         case ModuleType::ScaleQuantize: return std::make_unique<ScaleQuantize>();
         case ModuleType::VelocityCurve: return std::make_unique<VelocityCurve>();
         case ModuleType::ChannelRemap: return std::make_unique<ChannelRemap>();
+        case ModuleType::NoteDispatcher: return std::make_unique<NoteDispatcher>();
         default: return nullptr;
     }
 }

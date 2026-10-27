@@ -134,6 +134,12 @@ on all channels. The stress test also checks that no channel is left bent.
   and optionally `transformOtherEvent()`. Used by filters, transforms, Chord, Probability, Random Pitch.
 - **`SchedulingModule`** – sends events in the future using a queue of absolute sample times
   (`BlockContext::blockStartSample`). Used by Arpeggiator, Repeater, Note Echo and Humanize.
+- **Note Dispatcher** derives from `MidiModule` directly. Every input key remembers what happened to its note
+  (`channelOfInputKey`: the channel it was sent to, *passed through* when it was not on the Input channel,
+  or *stolen* when its channel was freed for a newer note), so note-offs and poly pressure always follow
+  their note, whatever the knobs say by then. A key that sounds again ends its previous note first, as a
+  synth would. Free channels are counted per channel (`numNotesOnChannel`); the oldest is found by the order
+  in which channels last got a note or chord.
 - **Pitch Slide** derives from `MidiModule` directly: notes pass through on time, and the module adds pitch
   bend messages per channel (about one per millisecond while a slide moves, only when the value changes).
   It remembers the player's bend and adds the slide to it; when a channel's last held key ends, it sends the

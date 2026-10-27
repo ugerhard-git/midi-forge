@@ -147,7 +147,8 @@ TEST_CASE ("chain: randomized stress test leaves no stuck notes and no pitch ben
             for (const auto& slot : rig.slots)
                 chainMayHoldBackBends = chainMayHoldBackBends || slot.moduleType == (int) ModuleType::EventBlocker ||
                                         slot.moduleType == (int) ModuleType::ChannelFilter ||
-                                        slot.moduleType == (int) ModuleType::ChannelRemap;
+                                        slot.moduleType == (int) ModuleType::ChannelRemap ||
+                                        slot.moduleType == (int) ModuleType::NoteDispatcher;
         };
         noteModulesThatMoveOrBlockBends();
 

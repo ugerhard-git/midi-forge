@@ -1230,6 +1230,31 @@ TEST_CASE ("remove module: the editor shows the undo strip, and Undo hides it")
     EXPECT (! forgeEditor->isUndoStripVisible());
 }
 
+//==============================================================================
+// Note Dispatcher
+
+TEST_CASE ("note dispatcher: the host shows its knobs, and notes leave on the dispatched channels")
+{
+    MidiForgeProcessor processor;
+    processor.loadModule (0, (int) ModuleType::NoteDispatcher);
+    EXPECT (hostTextOf (processor, 0, 0) == "Round Robin");
+    EXPECT (hostTextOf (processor, 0, 1) == "Single Notes");
+    EXPECT (hostTextOf (processor, 0, 3) == "4");
+    EXPECT (hostTextOf (processor, 0, 4) == "All");
+    EXPECT (hostTextOf (processor, 0, 5) == "30 ms");
+
+    processor.prepareToPlay (testSampleRate, testBlockSize);
+    juce::MidiBuffer input;
+    input.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+    input.addEvent (juce::MidiMessage::noteOn (1, 64, (juce::uint8) 100), 1);
+    input.addEvent (juce::MidiMessage::noteOn (1, 67, (juce::uint8) 100), 2);
+    std::vector<int> channels;
+    for (const auto& message : toMessages (processBlock (processor, input)))
+        if (message.isNoteOn())
+            channels.push_back (message.getChannel());
+    EXPECT (channels == std::vector<int> ({ 1, 2, 3 }));
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juceInitialiser;
