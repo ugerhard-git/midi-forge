@@ -125,9 +125,16 @@ TEST_CASE ("chain: randomized stress test leaves no stuck notes")
         {
             for (auto& lfo : rig.lfos)
                 randomizeLfo (lfo);
+            for (auto& noteRandom : rig.noteRandoms)
+            {
+                noteRandom.chordWindowMilliseconds = 100.0 * randomUnit();
+                noteRandom.trigger = (NoteRandomTrigger) randomInteger (0, 1);
+                noteRandom.numSteps = randomInteger (0, 1) == 0 ? 0 : randomInteger (2, 12);
+            }
             for (auto& route : rig.settings.routes)
             {
-                route.lfoIndex = randomInteger (0, numLfos - 1);
+                route.sourceIndex = randomInteger (0, numModulationSources - 1);
+                route.isUnipolar = randomInteger (0, 1) == 1;
                 route.targetIndex = randomInteger (0, numModulationTargets - 1);
                 route.amount = 2.0f * randomUnit() - 1.0f;
             }

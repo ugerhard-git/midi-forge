@@ -76,6 +76,12 @@ public:
     /** @return The LFO output (-1..+1) at the start of the given stretch of time. */
     float valueAt (const LfoSettings& settings, const BlockContext& context) const noexcept;
 
+    /**
+     * @return The LFO output for unipolar routes (0..+1) at the start of the given stretch of time.
+     *         Sine and Triangle are read a quarter cycle earlier, so their cycle starts at the lowest point.
+     */
+    float unipolarValueAt (const LfoSettings& settings, const BlockContext& context) const noexcept;
+
     /** @return The position in cycles (including the phase offset) at the start of the given stretch. */
     double cyclePositionAt (const LfoSettings& settings, const BlockContext& context) const noexcept;
 

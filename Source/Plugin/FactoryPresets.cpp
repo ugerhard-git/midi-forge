@@ -23,6 +23,15 @@ LfoSettings syncedLfo (LfoWaveform waveform, int divisionIndex)
     settings.divisionIndex = divisionIndex;
     return settings;
 }
+/** A Note Random modulator. */
+NoteRandomSettings noteRandom (double chordWindowMilliseconds, NoteRandomTrigger trigger, int numSteps)
+{
+    NoteRandomSettings settings;
+    settings.chordWindowMilliseconds = chordWindowMilliseconds;
+    settings.trigger = trigger;
+    settings.numSteps = numSteps;
+    return settings;
+}
 } // namespace
 
 const std::vector<FactoryPreset>& getFactoryPresets()
@@ -39,14 +48,16 @@ const std::vector<FactoryPreset>& getFactoryPresets()
     constexpr float repeaterSixteenth = 7, repeaterLastNote = 0, repeaterOnTheBeat = 4;
     constexpr int halfBar = 4;
     constexpr float closedHiHat = 42, thisOctave = 0; // General MIDI closed hi-hat: F#1
+    constexpr int random1 = firstNoteRandomSource, random2 = firstNoteRandomSource + 1, velocityOutMaximum = 2;
 
     static const std::vector<FactoryPreset> presets = {
-        { "Init", {}, {}, {} },
+        { "Init", {}, {}, {}, {} },
 
         { "Chord Arp",
           { { ModuleType::Chord, { minor7Chord, 0, 0, 90 } },
             { ModuleType::Arpeggiator, { sixteenthRate, upDownPattern, 2, 60 } },
             { ModuleType::Humanize, { 4, 8, keep, keep } } },
+          {},
           {},
           {} },
 
@@ -54,11 +65,13 @@ const std::vector<FactoryPreset>& getFactoryPresets()
           { { ModuleType::ScaleQuantize, { rootC, minorScale, 0, keep } },
             { ModuleType::VelocityCurve, { -30, 20, 120, 0 } } },
           {},
+          {},
           {} },
 
         { "Echo Cascade",
           { { ModuleType::NoteEcho, { dottedEighth, 6, 65, 7 } },
             { ModuleType::ScaleQuantize, { rootC, minorPentatonicScale, 0, keep } } },
+          {},
           {},
           {} },
 
@@ -69,12 +82,14 @@ const std::vector<FactoryPreset>& getFactoryPresets()
             { ModuleType::NoteEcho, { quarterTriplet, 3, 70, 0 } },
             { ModuleType::Humanize, { 8, 12, keep, keep } } },
           {},
+          {},
           {} },
 
         { "Bass Split to Ch 2",
           { { ModuleType::NoteRange, { 0, 59, 0, keep } },
             { ModuleType::ChannelRemap, { 0, 2, keep, keep } },
             { ModuleType::VelocityCurve, { 0, 1, 127, 100 } } },
+          {},
           {},
           {} },
 
@@ -83,21 +98,24 @@ const std::vector<FactoryPreset>& getFactoryPresets()
           { { ModuleType::Chord, { major7Chord, 0, 0, 85 } },
             { ModuleType::Arpeggiator, { sixteenthRate, upDownPattern, 2, 50 } } },
           { { 0, syncedLfo (LfoWaveform::Triangle, twoBars) }, { 1, syncedLfo (LfoWaveform::SampleAndHold, oneBar) } },
-          { { 0, 1, arpeggiatorGate, 45.0f },    // gate swells over two bars
-            { 1, 0, chordInversion, 40.0f } } }, // a new inversion every bar
+          { { 0, 1, arpeggiatorGate, 45.0f },  // gate swells over two bars
+            { 1, 0, chordInversion, 40.0f } }, // a new inversion every bar
+          {} },
 
         { "Wandering Echo",
           { { ModuleType::NoteEcho, { dottedEighth, 5, 70, 0 } },
             { ModuleType::ScaleQuantize, { rootC, minorPentatonicScale, 0, keep } } },
           { { 0, syncedLfo (LfoWaveform::SmoothRandom, oneBar) } },
-          { { 0, 0, echoPitch, 25.0f } } }, // echo pitch step drifts up and down
+          { { 0, 0, echoPitch, 25.0f } }, // echo pitch step drifts up and down
+          {} },
 
         // Added in 0.4.0 -------------------------------------------------------------------------
         { "Ratchet Chords",
           { { ModuleType::Chord, { minor7Chord, 0, 1, 80 } },
             { ModuleType::Repeater, { repeaterSixteenth, repeaterLastNote, 58, repeaterOnTheBeat } } },
           { { 0, syncedLfo (LfoWaveform::SampleAndHold, halfBar) } },
-          { { 0, 1, repeaterRate, 12.0f } } }, // the ratchet speed jumps every half bar
+          { { 0, 1, repeaterRate, 12.0f } }, // the ratchet speed jumps every half bar
+          {} },
 
         // Added in 0.5.0 -------------------------------------------------------------------------
         { "Hi-Hat Ratchet (Drums)",
@@ -105,7 +123,19 @@ const std::vector<FactoryPreset>& getFactoryPresets()
             { ModuleType::Repeater, { repeaterSixteenth, repeaterLastNote, 56, repeaterOnTheBeat } },
             { ModuleType::Humanize, { 3, 10, keep, keep } } },
           {},
+          {},
           {} }, // kick, snare and everything else pass untouched
+
+        // Added in 0.6.0 -------------------------------------------------------------------------
+        { "Random Voicings",
+          { { ModuleType::Chord, { major7Chord, 0, 0, 85 } },
+            { ModuleType::VelocityCurve, { 0, 40, 100, 0 } },
+            { ModuleType::Humanize, { 6, 6, keep, keep } } },
+          {},
+          { { random1, 0, chordInversion, 100.0f, true },       // every chord gets one of four inversions
+            { random2, 1, velocityOutMaximum, 30.0f, false } }, // and its own loudness
+          { { 0, noteRandom (30.0, NoteRandomTrigger::EveryNote, 4) },
+            { 1, noteRandom (30.0, NoteRandomTrigger::EveryNote, 0) } } },
     };
     return presets;
 }

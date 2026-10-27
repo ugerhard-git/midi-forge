@@ -88,6 +88,15 @@ MidiForgeProcessor::MidiForgeProcessor()
         values.source = parameters.getRawParameterValue (ParameterIds::routeSource (routeIndex));
         values.target = parameters.getRawParameterValue (ParameterIds::routeTarget (routeIndex));
         values.amountPercent = parameters.getRawParameterValue (ParameterIds::routeAmount (routeIndex));
+        values.polarity = parameters.getRawParameterValue (ParameterIds::routePolarity (routeIndex));
+    }
+
+    for (int randomIndex = 0; randomIndex < numNoteRandoms; ++randomIndex)
+    {
+        auto& values = noteRandomParameterValues[(size_t) randomIndex];
+        values.chordWindowMilliseconds = parameters.getRawParameterValue (ParameterIds::noteRandomWindow (randomIndex));
+        values.trigger = parameters.getRawParameterValue (ParameterIds::noteRandomTrigger (randomIndex));
+        values.steps = parameters.getRawParameterValue (ParameterIds::noteRandomSteps (randomIndex));
     }
 
     for (auto& readout : modulatedValueReadouts)
@@ -95,6 +104,8 @@ MidiForgeProcessor::MidiForgeProcessor()
     for (auto& readout : lfoValueReadouts)
         readout.store (0.0f);
     for (auto& readout : lfoPhaseReadouts)
+        readout.store (0.0f);
+    for (auto& readout : noteRandomValueReadouts)
         readout.store (0.0f);
 
     rememberValuesOfCurrentPreset(); // the "Init" state everything starts with
@@ -110,6 +121,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout MidiForgeProcessor::createPa
     addSlotParameters (layout);
     addLfoParameters (layout);
     addRouteParameters (layout);
+    addNoteRandomAndPolarityParameters (layout);
     return layout;
 }
 
@@ -216,9 +228,12 @@ void MidiForgeProcessor::addLfoParameters (juce::AudioProcessorValueTreeState::P
 void MidiForgeProcessor::addRouteParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
 {
     constexpr int version = ParameterIds::modulationParameterVersion;
+    // LFO 1..4 first, then Random 1..4 (added in 0.6.0, appended so stored indices keep their meaning).
     juce::StringArray sourceNames;
     for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
         sourceNames.add ("LFO " + juce::String (lfoIndex + 1));
+    for (int randomIndex = 0; randomIndex < numNoteRandoms; ++randomIndex)
+        sourceNames.add ("Random " + juce::String (randomIndex + 1));
     const juce::StringArray targetNames = fixedModulationTargetNames();
 
     for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
@@ -262,6 +277,41 @@ void MidiForgeProcessor::addRouteParameters (juce::AudioProcessorValueTreeState:
     }
 }
 
+void MidiForgeProcessor::addNoteRandomAndPolarityParameters (
+    juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+{
+    constexpr int version = ParameterIds::noteRandomParameterVersion;
+    juce::StringArray stepNames { "Smooth" };
+    for (int steps = minimumNoteRandomSteps; steps <= maximumNoteRandomSteps; ++steps)
+        stepNames.add (juce::String (steps));
+
+    for (int randomIndex = 0; randomIndex < numNoteRandoms; ++randomIndex)
+    {
+        const juce::String randomName = "Random " + juce::String (randomIndex + 1);
+        auto group = std::make_unique<juce::AudioProcessorParameterGroup> ("random" + juce::String (randomIndex + 1),
+                                                                           randomName, " | ");
+        group->addChild (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIds::noteRandomWindow (randomIndex), version }, randomName + " Chord Window",
+            juce::NormalisableRange<float> (0.0f, (float) maximumChordWindowMilliseconds, 1.0f), 30.0f,
+            juce::AudioParameterFloatAttributes().withStringFromValueFunction (
+                [] (float milliseconds, int) { return juce::String (juce::roundToInt (milliseconds)) + " ms"; })));
+        group->addChild (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIds::noteRandomTrigger (randomIndex), version }, randomName + " New Value On",
+            juce::StringArray { "Every note", "Phrase" }, 0));
+        group->addChild (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIds::noteRandomSteps (randomIndex), version }, randomName + " Steps",
+            stepNames, 0));
+        layout.add (std::move (group));
+    }
+
+    auto polarityGroup = std::make_unique<juce::AudioProcessorParameterGroup> ("polarity", "Route Polarity", " | ");
+    for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
+        polarityGroup->addChild (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIds::routePolarity (routeIndex), version },
+            "Route " + juce::String (routeIndex + 1) + " Polarity", juce::StringArray { "Bipolar", "Unipolar" }, 0));
+    layout.add (std::move (polarityGroup));
+}
+
 //==============================================================================
 // Audio thread
 
@@ -294,12 +344,15 @@ void MidiForgeProcessor::readEngineSettings()
 
     for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
         engineSettings.lfos[lfoIndex] = getLfoSettings (lfoIndex);
+    for (int randomIndex = 0; randomIndex < numNoteRandoms; ++randomIndex)
+        engineSettings.noteRandoms[randomIndex] = getNoteRandomSettings (randomIndex);
 
     for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
     {
         const auto& values = routeParameterValues[(size_t) routeIndex];
         auto& route = engineSettings.routes[routeIndex];
-        route.lfoIndex = juce::jlimit (0, numLfos - 1, (int) std::lround (values.source->load()));
+        route.sourceIndex = juce::jlimit (0, numModulationSources - 1, (int) std::lround (values.source->load()));
+        route.isUnipolar = values.polarity->load() >= 0.5f;
         route.targetIndex = juce::jlimit (0, numModulationTargets - 1, (int) std::lround (values.target->load()));
         route.amount = juce::jlimit (-1.0f, 1.0f, values.amountPercent->load() / 100.0f);
     }
@@ -385,6 +438,9 @@ void MidiForgeProcessor::publishReadoutsForEditor()
         lfoPhaseReadouts[(size_t) lfoIndex].store ((float) engine->getLastLfoPhases()[lfoIndex],
                                                    std::memory_order_relaxed);
     }
+    for (int randomIndex = 0; randomIndex < numNoteRandoms; ++randomIndex)
+        noteRandomValueReadouts[(size_t) randomIndex].store (engine->getNoteRandomValue (randomIndex),
+                                                             std::memory_order_relaxed);
 }
 
 //==============================================================================
@@ -402,6 +458,20 @@ LfoSettings MidiForgeProcessor::getLfoSettings (int lfoIndex) const noexcept
     settings.phaseDegrees = juce::jlimit (0.0, 360.0, (double) values.phaseDegrees->load());
     settings.pulseWidth = juce::jlimit (0.05, 0.95, (double) values.pulseWidthPercent->load() / 100.0);
     settings.restartsOnFirstKey = values.restartsOnKey->load() >= 0.5f;
+    return settings;
+}
+
+NoteRandomSettings MidiForgeProcessor::getNoteRandomSettings (int randomIndex) const noexcept
+{
+    const auto& values = noteRandomParameterValues[(size_t) randomIndex];
+    NoteRandomSettings settings;
+    settings.chordWindowMilliseconds =
+        juce::jlimit (0.0, maximumChordWindowMilliseconds, (double) values.chordWindowMilliseconds->load());
+    settings.trigger =
+        std::lround (values.trigger->load()) == 1 ? NoteRandomTrigger::FirstNoteOfPhrase : NoteRandomTrigger::EveryNote;
+    // Choice 0 is "Smooth", choice n is n + 1 steps.
+    const int stepsChoice = juce::jlimit (0, maximumNoteRandomSteps - 1, (int) std::lround (values.steps->load()));
+    settings.numSteps = stepsChoice == 0 ? 0 : stepsChoice + 1;
     return settings;
 }
 
@@ -570,7 +640,10 @@ void MidiForgeProcessor::resetModulationToDefaults()
                         ParameterIds::lfoRestartOnKey (lfoIndex) });
     for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
         ids.addArray ({ ParameterIds::routeSource (routeIndex), ParameterIds::routeTarget (routeIndex),
-                        ParameterIds::routeAmount (routeIndex) });
+                        ParameterIds::routeAmount (routeIndex), ParameterIds::routePolarity (routeIndex) });
+    for (int randomIndex = 0; randomIndex < numNoteRandoms; ++randomIndex)
+        ids.addArray ({ ParameterIds::noteRandomWindow (randomIndex), ParameterIds::noteRandomTrigger (randomIndex),
+                        ParameterIds::noteRandomSteps (randomIndex) });
 
     for (const auto& id : ids)
         if (auto* parameter = parameters.getParameter (id))
@@ -604,10 +677,22 @@ void MidiForgeProcessor::applyPresetModulation (const FactoryPreset& preset)
     for (int routeIndex = 0; routeIndex < (int) preset.routes.size() && routeIndex < numModulationRoutes; ++routeIndex)
     {
         const auto& presetRoute = preset.routes[(size_t) routeIndex];
-        setPlainParameterValue (ParameterIds::routeSource (routeIndex), (float) presetRoute.lfoIndex);
+        setPlainParameterValue (ParameterIds::routeSource (routeIndex), (float) presetRoute.sourceIndex);
+        setPlainParameterValue (ParameterIds::routePolarity (routeIndex), presetRoute.isUnipolar ? 1.0f : 0.0f);
         setPlainParameterValue (ParameterIds::routeTarget (routeIndex),
                                 (float) modulationTargetIndex (presetRoute.slotIndex, presetRoute.parameterIndex));
         setPlainParameterValue (ParameterIds::routeAmount (routeIndex), presetRoute.amountPercent);
+    }
+
+    for (const auto& presetRandom : preset.noteRandoms)
+    {
+        const int randomIndex = presetRandom.randomIndex;
+        const auto& settings = presetRandom.settings;
+        setPlainParameterValue (ParameterIds::noteRandomWindow (randomIndex), (float) settings.chordWindowMilliseconds);
+        setPlainParameterValue (ParameterIds::noteRandomTrigger (randomIndex),
+                                settings.trigger == NoteRandomTrigger::FirstNoteOfPhrase ? 1.0f : 0.0f);
+        setPlainParameterValue (ParameterIds::noteRandomSteps (randomIndex),
+                                settings.numSteps < minimumNoteRandomSteps ? 0.0f : (float) (settings.numSteps - 1));
     }
 }
 

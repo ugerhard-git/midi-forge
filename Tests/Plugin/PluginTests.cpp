@@ -17,6 +17,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include <cmath>
+#include <set>
 
 using namespace midiforge;
 
@@ -50,11 +51,18 @@ TEST_CASE ("plugin: exposes slot, LFO and route parameters with stable IDs")
     for (auto* parameter : processor.getParameters())
         if (dynamic_cast<juce::AudioProcessorParameterWithID*> (parameter) != nullptr)
             ++numOurParameters;
-    constexpr int parametersPerSlot = 6, parametersPerLfo = 7, parametersPerRoute = 3;
-    EXPECT (numOurParameters ==
-            numSlots * parametersPerSlot + numLfos * parametersPerLfo + numModulationRoutes * parametersPerRoute);
+    constexpr int parametersPerSlot = 6, parametersPerLfo = 7, parametersPerRoute = 4, parametersPerRandom = 3;
+    EXPECT (numOurParameters == numSlots * parametersPerSlot + numLfos * parametersPerLfo +
+                                    numModulationRoutes * parametersPerRoute + numNoteRandoms * parametersPerRandom);
 
-    for (const char* id : { "s1_type", "s8_d", "l1_wave", "l4_restart", "r1_source", "r8_amount" })
+    // Parameters added later are appended: older ones keep their position, the newest come last.
+    const auto idAt = [&processor] (int index)
+    { return dynamic_cast<juce::AudioProcessorParameterWithID*> (processor.getParameters()[index])->paramID; };
+    EXPECT (idAt (numSlots * 6 + numLfos * 7 + numModulationRoutes * 3 - 1) == "r8_amount"); // last of 0.2.0
+    EXPECT (idAt (numOurParameters - 1) == "r8_polarity");
+
+    for (const char* id : { "s1_type", "s8_d", "l1_wave", "l4_restart", "r1_source", "r8_amount", "r1_polarity",
+                            "n1_window", "n4_steps" })
         EXPECT (processor.parameters.getParameter (id) != nullptr);
     EXPECT (processor.isMidiEffect() && processor.acceptsMidi() && processor.producesMidi());
 
@@ -521,6 +529,72 @@ TEST_CASE ("plugin: an LFO route changes what the chain plays, the knob itself s
     EXPECT (std::abs (processor.getParameterValue (0, 0) - 0.5f) < 1.0e-6f);           // the knob: unchanged
     EXPECT (std::abs (processor.getModulatedParameterValue (0, 0) - 0.75f) < 1.0e-3f); // what the chain used
     EXPECT (processor.getLfoValue (0) > 0.99f);
+}
+
+TEST_CASE ("plugin: route sources list the LFOs and the Random modulators; old projects keep their sources")
+{
+    MidiForgeProcessor processor;
+    auto* source = processor.parameters.getParameter (ParameterIds::routeSource (0));
+    source->setValueNotifyingHost (source->getValueForText ("Random 3"));
+    EXPECT (source->getCurrentValueAsText() == "Random 3");
+
+    // A project saved by 0.5.0: source index 2 (LFO 3), no polarity parameter yet.
+    juce::MemoryBlock oldProject;
+    juce::XmlElement oldState ("MidiForge");
+    auto* oldSource = oldState.createNewChildElement ("PARAM");
+    oldSource->setAttribute ("id", "r1_source");
+    oldSource->setAttribute ("value", 2);
+    juce::AudioProcessor::copyXmlToBinary (oldState, oldProject);
+    processor.setStateInformation (oldProject.getData(), (int) oldProject.getSize());
+    EXPECT (source->getCurrentValueAsText() == "LFO 3");
+    EXPECT (processor.parameters.getParameter (ParameterIds::routePolarity (0))->getCurrentValueAsText() == "Bipolar");
+}
+
+TEST_CASE ("plugin: Note Random settings map to the engine, and the preset uses them")
+{
+    MidiForgeProcessor processor;
+    auto setPlain = [&] (const juce::String& id, float plainValue)
+    {
+        auto* parameter = processor.parameters.getParameter (id);
+        parameter->setValueNotifyingHost (parameter->convertTo0to1 (plainValue));
+    };
+    EXPECT (processor.getNoteRandomSettings (0).numSteps == 0);
+    EXPECT (std::abs (processor.getNoteRandomSettings (0).chordWindowMilliseconds - 30.0) < 1.0e-3);
+    setPlain (ParameterIds::noteRandomSteps (0), 3.0f); // choices: Smooth, 2, 3, 4 ...
+    setPlain (ParameterIds::noteRandomTrigger (0), 1.0f);
+    setPlain (ParameterIds::noteRandomWindow (0), 75.0f);
+    EXPECT (processor.getNoteRandomSettings (0).numSteps == 4);
+    EXPECT (processor.getNoteRandomSettings (0).trigger == NoteRandomTrigger::FirstNoteOfPhrase);
+    EXPECT (std::abs (processor.getNoteRandomSettings (0).chordWindowMilliseconds - 75.0) < 1.0e-3);
+
+    const auto& presets = getFactoryPresets();
+    for (int index = 0; index < (int) presets.size(); ++index)
+        if (juce::String (presets[(size_t) index].name) == "Random Voicings")
+            processor.setCurrentProgram (index);
+    EXPECT (processor.getCurrentPresetName() == "Random Voicings");
+    EXPECT (processor.isParameterModulated (0, 1)); // chord inversion
+    EXPECT (processor.parameters.getParameter (ParameterIds::routeSource (0))->getCurrentValueAsText() == "Random 1");
+    EXPECT (processor.parameters.getParameter (ParameterIds::routePolarity (0))->getCurrentValueAsText() == "Unipolar");
+    EXPECT (processor.getNoteRandomSettings (0).numSteps == 4);
+    EXPECT (processor.getNoteRandomSettings (0).trigger == NoteRandomTrigger::EveryNote); // reset by the preset
+
+    // Playing notes rolls values the editor can show.
+    processor.prepareToPlay (testSampleRate, testBlockSize);
+    std::set<float> values;
+    for (int note = 0; note < 10; ++note)
+    {
+        juce::MidiBuffer input;
+        input.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+        processBlock (processor, input);
+        values.insert (processor.getNoteRandomValue (0));
+        juce::MidiBuffer release;
+        release.addEvent (juce::MidiMessage::noteOff (1, 60), 0);
+        for (int block = 0; block < 10; ++block)
+            processBlock (processor, block == 0 ? release : juce::MidiBuffer());
+    }
+    EXPECT (values.size() > 1);
+    for (float value : values)
+        EXPECT (std::abs (std::abs (value) - 1.0f) < 1.0e-5f || std::abs (std::abs (value) - 1.0f / 3.0f) < 1.0e-5f);
 }
 
 TEST_CASE ("plugin: LFO and route settings survive a save and load round-trip")

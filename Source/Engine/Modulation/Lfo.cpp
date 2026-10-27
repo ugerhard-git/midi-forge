@@ -78,6 +78,15 @@ float Lfo::valueAt (const LfoSettings& settings, const BlockContext& context) co
     return waveformValue (settings.waveform, cyclePositionAt (settings, context), settings.pulseWidth);
 }
 
+float Lfo::unipolarValueAt (const LfoSettings& settings, const BlockContext& context) const noexcept
+{
+    const bool startsInTheMiddle = settings.waveform == LfoWaveform::Sine || settings.waveform == LfoWaveform::Triangle;
+    const double quarterCycleEarlier = startsInTheMiddle ? 0.25 : 0.0;
+    const float bipolar = waveformValue (settings.waveform, cyclePositionAt (settings, context) - quarterCycleEarlier,
+                                         settings.pulseWidth);
+    return (bipolar + 1.0f) * 0.5f;
+}
+
 void Lfo::advance (const LfoSettings& settings, const BlockContext& context) noexcept
 {
     if (settings.isTempoSynced && context.followsHostTransport())

@@ -26,6 +26,8 @@ MidiForgeEngine::MidiForgeEngine()
 {
     for (auto& lfo : lfos)
         lfo = Lfo (takeNextRandomSeed());
+    for (auto& noteRandom : noteRandoms)
+        noteRandom = NoteRandom (takeNextRandomSeed());
 
     for (auto* buffer : { &blockInput, &segmentEvents, &blockOutput })
         buffer->reserve (reservedEventsPerBuffer);
@@ -42,6 +44,9 @@ void MidiForgeEngine::reset()
     moduleChain.reset();
     for (auto& lfo : lfos)
         lfo.reset();
+    for (auto& noteRandom : noteRandoms)
+        noteRandom.reset();
+    samplesProcessed = 0;
     isKeyHeld.fill (false);
     numKeysHeld = 0;
 }
@@ -56,8 +61,8 @@ BlockContext MidiForgeEngine::contextForSegment (const BlockContext& blockContex
     return segmentContext;
 }
 
-void MidiForgeEngine::restartLfosIfFirstKeyPressed (const MidiEventList& segmentInput,
-                                                    const BlockContext& segmentContext, const EngineSettings& settings)
+void MidiForgeEngine::handleNotesForModulators (const MidiEventList& segmentInput, const BlockContext& segmentContext,
+                                                int64_t segmentStartSample, const EngineSettings& settings)
 {
     for (const auto& event : segmentInput)
     {
@@ -65,20 +70,46 @@ void MidiForgeEngine::restartLfosIfFirstKeyPressed (const MidiEventList& segment
             continue;
 
         bool& isHeld = isKeyHeld[channelNoteIndex (event.channel(), event.noteNumber())];
-        if (event.isNoteOn() && ! isHeld)
+        if (event.isNoteOn())
         {
-            if (numKeysHeld == 0)
+            const bool isFirstKeyOfPhrase = numKeysHeld == 0;
+            if (isFirstKeyOfPhrase)
                 for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
                     if (settings.lfos[lfoIndex].restartsOnFirstKey)
                         lfos[lfoIndex].restart (segmentContext);
-            isHeld = true;
-            ++numKeysHeld;
+
+            // Every played note-on is a note event for the Note Random modulators (also a repeated key).
+            for (int randomIndex = 0; randomIndex < numNoteRandoms; ++randomIndex)
+                noteRandoms[randomIndex].noteStarted (segmentStartSample + event.samplePosition, isFirstKeyOfPhrase,
+                                                      settings.noteRandoms[randomIndex], segmentContext.sampleRate);
+
+            if (! isHeld)
+            {
+                isHeld = true;
+                ++numKeysHeld;
+            }
         }
-        else if (event.isNoteOff() && isHeld)
+        else if (isHeld)
         {
             isHeld = false;
             --numKeysHeld;
         }
+    }
+}
+
+void MidiForgeEngine::computeSourceValues (const BlockContext& segmentContext, const EngineSettings& settings)
+{
+    for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
+    {
+        lfoValues[lfoIndex] = lfos[lfoIndex].valueAt (settings.lfos[lfoIndex], segmentContext);
+        sourceValues.bipolar[lfoIndex] = lfoValues[lfoIndex];
+        sourceValues.unipolar[lfoIndex] = lfos[lfoIndex].unipolarValueAt (settings.lfos[lfoIndex], segmentContext);
+    }
+    for (int randomIndex = 0; randomIndex < numNoteRandoms; ++randomIndex)
+    {
+        const float value = noteRandoms[randomIndex].getValue();
+        sourceValues.bipolar[firstNoteRandomSource + randomIndex] = value;
+        sourceValues.unipolar[firstNoteRandomSource + randomIndex] = (value + 1.0f) * 0.5f;
     }
 }
 
@@ -98,13 +129,11 @@ void MidiForgeEngine::processSegment (int segmentStart, int segmentLength, const
     }
 
     const BlockContext segmentContext = contextForSegment (blockContext, segmentStart, segmentLength);
-    restartLfosIfFirstKeyPressed (segmentEvents, segmentContext, settings);
-
-    for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
-        lfoValues[lfoIndex] = lfos[lfoIndex].valueAt (settings.lfos[lfoIndex], segmentContext);
+    handleNotesForModulators (segmentEvents, segmentContext, samplesProcessed + segmentStart, settings);
+    computeSourceValues (segmentContext, settings);
 
     if (isModulationActive)
-        applyModulationRoutes (lfoValues, settings.routes, settings.slots, modulatedSlots);
+        applyModulationRoutes (sourceValues, settings.routes, settings.slots, modulatedSlots);
     else
         std::copy (std::begin (settings.slots), std::end (settings.slots), modulatedSlots);
 
@@ -153,6 +182,7 @@ void MidiForgeEngine::process (MidiEventList& events, const BlockContext& contex
     }
 
     updateLfoReadouts (contextForSegment (context, blockLength, 0), settings);
+    samplesProcessed += blockLength;
     events.assign (blockOutput.begin(), blockOutput.end());
 }
 

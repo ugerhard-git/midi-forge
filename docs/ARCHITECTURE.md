@@ -37,12 +37,13 @@ from `clap-juce-extensions`.
 | `Source/Engine/ModuleChain.*` | The eight-slot chain |
 | `Source/Engine/MidiForgeEngine.*` | The complete engine: LFOs, modulation routes and the chain |
 | `Source/Engine/Modulation/Lfo.*` | `Lfo`: waveforms, tempo sync, phase, restart; LFO division table |
-| `Source/Engine/Modulation/ModulationRoutes.h` | `ModulationRoute`, target numbering, `applyModulationRoutes()` |
+| `Source/Engine/Modulation/NoteRandom.*` | `NoteRandom`: a random value per played note, chord window, phrase mode, steps |
+| `Source/Engine/Modulation/ModulationRoutes.h` | `ModulationRoute` (source, target, amount, polarity), source and target numbering, `applyModulationRoutes()` |
 | `Source/Plugin/PluginProcessor.*` | `MidiForgeProcessor`: host parameters, presets, state, MidiBuffer ↔ engine |
 | `Source/Plugin/ParameterIds.h` | Host parameter IDs (stored in projects – never rename) |
 | `Source/Plugin/FactoryPresets.*` | The factory presets (JUCE-free, so the engine tests can check them too) |
 | `Source/Plugin/UserPresetLibrary.*` | User preset files: folder, save/load/rename/delete/import, validation, name cleaning |
-| `Source/UI/*` | Editor: `MidiForgeEditor` (tabs), `SlotRow` + `ParameterKnob` (Chain tab), `ModulationPage` with `LfoPanel`, `WaveformPreview`, `RouteRow`, `CompactKnob` (Modulation tab), `PresetBar` (◀ menu ▶, Save, ⋯ menu with async dialogs), `ForgeLookAndFeel`, `Theme` |
+| `Source/UI/*` | Editor: `MidiForgeEditor` (tabs), `SlotRow` + `ParameterKnob` (Chain tab), `ModulationPage` with `LfoPanel`, `WaveformPreview`, `NoteRandomPanel`, `RouteRow`, `CompactKnob` (Modulation tab), `PresetBar` (◀ menu ▶, Save, ⋯ menu with async dialogs), `ForgeLookAndFeel`, `Theme` |
 | `Tests/Engine/*` | Engine tests (no JUCE) |
 | `Tests/Plugin/*` | Tests of the JUCE layer; can also render both editor pages to PNGs |
 | `docs/` | This document, the user manual, images |
@@ -58,7 +59,11 @@ display text. The host display, the editor and the modules all read from that on
 
 LFOs and routes have their own host parameters (`lN_wave`, `lN_sync`, `lN_rate`, `lN_div`, `lN_phase`,
 `lN_width`, `lN_restart`, `rN_source`, `rN_target`, `rN_amount`), appended after the slot parameters.
-A route's target is a number: 0 = none, then slot 1 A … slot 8 D (`modulationTargetIndex()`).
+Version 0.6.0 appended the Note Random parameters (`nN_window`, `nN_trigger`, `nN_steps`) and the route
+polarities (`rN_polarity`, in a group "Route Polarity" at the very end so older parameters keep their
+positions). A route's source is a number: 0–3 = LFO 1–4, 4–7 = Random 1–4 (appended to the source
+choices, so stored projects keep their sources). A route's target is a number: 0 = none, then slot 1 A …
+slot 8 D (`modulationTargetIndex()`).
 
 **Compatibility rules** (projects and automation store these values):
 
@@ -136,8 +141,18 @@ module menu groups modules by category, so a new Generator still appears under *
   position while following it so stopping the transport causes no jump.
 - The random waves derive their value from a hash of (seed, cycle number), so they need no state and
   give the same values when the host jumps back to the same position.
-- `applyModulationRoutes()` adds `lfoValue × amount` to each target's normalised value (0..1), sums
-  routes on the same target and clamps. The user's own settings are never changed.
+- **Sources:** `MidiForgeEngine` computes every source in both polarities per segment
+  (`ModulationSourceValues`): bipolar −1 … +1 and unipolar 0 … +1. For LFOs the unipolar value reads Sine
+  and Triangle a quarter cycle earlier (`Lfo::unipolarValueAt()`), so their cycle starts at the lowest point.
+  Note Random values map as (v + 1) / 2.
+- **Note Random:** `MidiForgeEngine::handleNotesForModulators()` tells each `NoteRandom` about every note-on
+  played into the plug-in (with the absolute sample time and whether it is the first key of a phrase).
+  A new value is rolled unless the note lies within the chord window after the last roll (or, in phrase
+  mode, other keys are held). Because blocks are already split at every input event, the new value
+  applies from that very note on. Values come from a SplitMix64 generator seeded per modulator.
+- `applyModulationRoutes()` adds `sourceValue × amount` (bipolar or unipolar value, per route) to each
+  target's normalised value (0..1), sums routes on the same target and clamps. The user's own settings are
+  never changed.
 - **Segments:** with at least one active route, `MidiForgeEngine` splits each block at every input event
   and at least every 32 samples (`maxSegmentLength`), evaluates the LFOs at the start of each segment and
   runs the chain on each segment with its own `BlockContext` (shifted host position, segment length).

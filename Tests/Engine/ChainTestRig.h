@@ -111,18 +111,25 @@ public:
         return noteNumbers;
     }
 
-    /** Routes one LFO to a slot parameter. @param amountPercent -100..+100 */
-    void routeLfo (int routeIndex, int lfoIndex, int slotIndex, int parameterIndex, float amountPercent)
+    /**
+     * Routes a modulation source to a slot parameter.
+     * @param sourceIndex    0..3 for LFO 1..4, 4..7 for Random 1..4
+     * @param amountPercent  -100..+100
+     */
+    void routeLfo (int routeIndex, int sourceIndex, int slotIndex, int parameterIndex, float amountPercent,
+                   bool isUnipolar = false)
     {
-        settings.routes[routeIndex].lfoIndex = lfoIndex;
+        settings.routes[routeIndex].sourceIndex = sourceIndex;
+        settings.routes[routeIndex].isUnipolar = isUnipolar;
         settings.routes[routeIndex].targetIndex = modulationTargetIndex (slotIndex, parameterIndex);
         settings.routes[routeIndex].amount = amountPercent / 100.0f;
     }
 
     MidiForgeEngine engine;
     EngineSettings settings;
-    SlotSettings (&slots)[numSlots] = settings.slots; ///< Shortcut to settings.slots
-    LfoSettings (&lfos)[numLfos] = settings.lfos;     ///< Shortcut to settings.lfos
+    SlotSettings (&slots)[numSlots] = settings.slots;                         ///< Shortcut to settings.slots
+    LfoSettings (&lfos)[numLfos] = settings.lfos;                             ///< Shortcut to settings.lfos
+    NoteRandomSettings (&noteRandoms)[numNoteRandoms] = settings.noteRandoms; ///< Shortcut
     BlockContext context;
     MidiEventList everyOutputEvent; ///< samplePosition holds the absolute time in samples
     int64_t samplesElapsed = 0;

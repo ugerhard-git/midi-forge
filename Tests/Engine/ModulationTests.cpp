@@ -224,9 +224,12 @@ TEST_CASE ("routes: add LFO times amount to the knob value, sum up and clamp")
     routes[3] = { 0, 0, 1.0f };                             // no target: ignored
     routes[4] = { 2, modulationTargetIndex (0, 0), 0.0f };  // zero amount: inactive
 
+    ModulationSourceValues sourceValues;
     const float lfoValues[numLfos] = { 1.0f, 0.5f, -1.0f, 0.0f };
+    for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
+        sourceValues.bipolar[lfoIndex] = lfoValues[lfoIndex];
     SlotSettings modulated[numSlots];
-    applyModulationRoutes (lfoValues, routes, base, modulated);
+    applyModulationRoutes (sourceValues, routes, base, modulated);
 
     EXPECT (isClose (modulated[2].parameterValues[1], 0.5 + 0.25 - 0.25));
     EXPECT (modulated[5].parameterValues[3] == 1.0f);

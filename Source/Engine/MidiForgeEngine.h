@@ -1,11 +1,12 @@
 /**
  * @file MidiForgeEngine.h
- * @brief The complete engine: the module chain plus the LFO modulation that drives it.
+ * @brief The complete engine: the module chain plus the modulation (LFOs, Note Random) that drives it.
  */
 #pragma once
 
 #include "Modulation/Lfo.h"
 #include "Modulation/ModulationRoutes.h"
+#include "Modulation/NoteRandom.h"
 #include "ModuleChain.h"
 
 namespace midiforge
@@ -16,16 +17,18 @@ struct EngineSettings
 {
     SlotSettings slots[numSlots];
     LfoSettings lfos[numLfos];
+    NoteRandomSettings noteRandoms[numNoteRandoms];
     ModulationRoute routes[numModulationRoutes];
 };
 
 /**
- * @brief Runs the LFOs and the module chain together.
+ * @brief Runs the modulation sources (LFOs, Note Random) and the module chain together.
  *
  * When modulation is active, a block is processed in short pieces ("segments"): one starts at every
- * incoming event and at least every maxSegmentLength samples. The LFOs are evaluated at the start of
- * each segment, so incoming notes see the LFO value at their exact sample position and generated notes
- * (arpeggio steps, echoes) see a value at most maxSegmentLength samples old.
+ * incoming event and at least every maxSegmentLength samples. The sources are evaluated at the start of
+ * each segment, so incoming notes see the LFO value at their exact sample position (and a Note Random
+ * value rolled for that very note), and generated notes (arpeggio steps, echoes) see a value at most
+ * maxSegmentLength samples old.
  *
  * Real-time safe: no allocation after construction.
  */
@@ -57,17 +60,24 @@ public:
     const float* getLastLfoValues() const noexcept { return lfoValues; }
     /** @return Each LFO's position in its cycle (0..1, including phase) at the end of the last block. */
     const double* getLastLfoPhases() const noexcept { return lfoPhases; }
+    /** @return Each Note Random modulator's current value (-1..+1). */
+    float getNoteRandomValue (int randomIndex) const noexcept { return noteRandoms[randomIndex].getValue(); }
 
 private:
     void processSegment (int segmentStart, int segmentLength, const BlockContext& blockContext,
                          const EngineSettings& settings, bool isModulationActive);
     BlockContext contextForSegment (const BlockContext& blockContext, int segmentStart, int segmentLength) const;
-    void restartLfosIfFirstKeyPressed (const MidiEventList& segmentInput, const BlockContext& segmentContext,
-                                       const EngineSettings& settings);
+    /** Restarts LFOs on the first key and lets the Note Random modulators roll for played notes. */
+    void handleNotesForModulators (const MidiEventList& segmentInput, const BlockContext& segmentContext,
+                                   int64_t segmentStartSample, const EngineSettings& settings);
+    void computeSourceValues (const BlockContext& segmentContext, const EngineSettings& settings);
     void updateLfoReadouts (const BlockContext& endOfBlockContext, const EngineSettings& settings);
 
     ModuleChain moduleChain;
     Lfo lfos[numLfos];
+    NoteRandom noteRandoms[numNoteRandoms];
+    ModulationSourceValues sourceValues;
+    int64_t samplesProcessed = 0;
     SlotSettings modulatedSlots[numSlots] {};
     float lfoValues[numLfos] {};
     double lfoPhases[numLfos] {};

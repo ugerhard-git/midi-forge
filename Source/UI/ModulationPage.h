@@ -1,6 +1,6 @@
 /**
  * @file ModulationPage.h
- * @brief The "Modulation" tab: four LFO panels and the eight modulation routes.
+ * @brief The "Modulation" tab: four LFO panels, four Note Random panels and the eight modulation routes.
  */
 #pragma once
 
@@ -66,7 +66,27 @@ private:
     juce::Label restartLabel;
 };
 
-/** One modulation route: LFO -> target parameter, with an amount. */
+/** All controls of one Note Random modulator, and its current value. */
+class NoteRandomPanel final : public juce::Component
+{
+public:
+    NoteRandomPanel (MidiForgeProcessor& processor, int randomIndex);
+    void paint (juce::Graphics& graphics) override;
+    void resized() override;
+    /** Updates the value display. Call regularly from a timer. */
+    void refreshFromProcessor();
+
+private:
+    MidiForgeProcessor& processor;
+    const int randomIndex;
+    float displayedValue = 0.0f;
+
+    CompactKnob windowKnob;
+    juce::ComboBox triggerMenu, stepsMenu;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> triggerAttachment, stepsAttachment;
+};
+
+/** One modulation route: source (LFO or Random) -> target parameter, with polarity and amount. */
 class RouteRow final : public juce::Component
 {
 public:
@@ -82,6 +102,8 @@ private:
 
     juce::ComboBox sourceMenu, targetMenu;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> sourceAttachment, targetAttachment;
+    juce::TextButton polarityButton;
+    juce::AudioProcessorValueTreeState::ButtonAttachment polarityAttachment;
     juce::Slider amountSlider;
     juce::AudioProcessorValueTreeState::SliderAttachment amountAttachment;
     juce::Label amountLabel;
@@ -98,6 +120,7 @@ public:
 
 private:
     std::vector<std::unique_ptr<LfoPanel>> lfoPanels;
+    std::vector<std::unique_ptr<NoteRandomPanel>> noteRandomPanels;
     std::vector<std::unique_ptr<RouteRow>> routeRows;
     juce::Rectangle<int> routesArea;
 };

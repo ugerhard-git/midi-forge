@@ -1,6 +1,7 @@
 /**
  * @file ModulationPage.cpp
- * @brief Implementation of the "Modulation" tab: CompactKnob, WaveformPreview, LfoPanel, RouteRow, ModulationPage.
+ * @brief Implementation of the "Modulation" tab: CompactKnob, WaveformPreview, LfoPanel, NoteRandomPanel,
+ *        RouteRow, ModulationPage.
  */
 #include "ModulationPage.h"
 
@@ -189,21 +190,21 @@ void LfoPanel::paint (juce::Graphics& graphics)
 void LfoPanel::resized()
 {
     auto area = getLocalBounds().reduced (10, 8);
-    area.removeFromTop (26); // title
-    preview.setBounds (area.removeFromTop (70));
-    area.removeFromTop (8);
-    waveformMenu.setBounds (area.removeFromTop (26));
+    area.removeFromTop (22); // title
+    preview.setBounds (area.removeFromTop (42));
     area.removeFromTop (6);
+    waveformMenu.setBounds (area.removeFromTop (24));
+    area.removeFromTop (5);
 
-    auto syncLine = area.removeFromTop (26);
+    auto syncLine = area.removeFromTop (24);
     syncModeMenu.setBounds (syncLine.removeFromLeft (78));
     syncLine.removeFromLeft (6);
     restartSwitch.setBounds (syncLine.removeFromLeft (34));
     restartLabel.setBounds (syncLine);
-    area.removeFromTop (6);
+    area.removeFromTop (4);
 
     const int knobWidth = area.getWidth() / 3;
-    auto knobLine = area.removeFromTop (84);
+    auto knobLine = area;
     const auto rateArea = knobLine.removeFromLeft (knobWidth);
     rateKnob.setBounds (rateArea);
     divisionKnob.setBounds (rateArea);
@@ -228,10 +229,93 @@ void LfoPanel::refreshFromProcessor()
 }
 
 //==============================================================================
+// NoteRandomPanel
+
+NoteRandomPanel::NoteRandomPanel (MidiForgeProcessor& processorToControl, int randomIndexToShow)
+    : processor (processorToControl), randomIndex (randomIndexToShow),
+      windowKnob (processor.parameters, ParameterIds::noteRandomWindow (randomIndex), "Chord window")
+{
+    windowKnob.knob.setTooltip ("Notes played within this time after the first one count as one chord "
+                                "and share its random value");
+    addAndMakeVisible (windowKnob);
+
+    fillWithChoices (triggerMenu, processor.parameters.getParameter (ParameterIds::noteRandomTrigger (randomIndex)));
+    fillWithChoices (stepsMenu, processor.parameters.getParameter (ParameterIds::noteRandomSteps (randomIndex)));
+    triggerAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
+        processor.parameters, ParameterIds::noteRandomTrigger (randomIndex), triggerMenu);
+    stepsAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
+        processor.parameters, ParameterIds::noteRandomSteps (randomIndex), stepsMenu);
+    triggerMenu.setTooltip ("New value on every played note, or only on the first note of a phrase "
+                            "(a key pressed while no other key is held)");
+    stepsMenu.setTooltip ("Smooth: any value. 2-12: only that many evenly spaced values "
+                          "(good for knobs with choices, like Scale or Chord type)");
+    addAndMakeVisible (triggerMenu);
+    addAndMakeVisible (stepsMenu);
+}
+
+void NoteRandomPanel::paint (juce::Graphics& graphics)
+{
+    const auto area = getLocalBounds().toFloat();
+    graphics.setColour (Theme::Colours::slotBackground);
+    graphics.fillRoundedRectangle (area, 8.0f);
+    graphics.setColour (Theme::Colours::slotOutline);
+    graphics.drawRoundedRectangle (area.reduced (0.5f), 8.0f, 1.0f);
+
+    auto titleArea = getLocalBounds().reduced (10, 6).removeFromTop (18);
+    graphics.setColour (Theme::Colours::primaryText);
+    graphics.setFont (Theme::font (14.0f, true));
+    graphics.drawText ("Random " + juce::String (randomIndex + 1), titleArea, juce::Justification::centredLeft);
+
+    // Current value as a number and as a bar growing from the centre
+    const int valuePercent = juce::roundToInt (displayedValue * 100.0f);
+    graphics.setColour (Theme::Colours::secondaryText);
+    graphics.setFont (Theme::font (11.5f));
+    graphics.drawText ((valuePercent > 0 ? "+" : "") + juce::String (valuePercent), titleArea,
+                       juce::Justification::centredRight);
+
+    const auto meter = titleArea.withTrimmedLeft (78).withTrimmedRight (36).toFloat().withSizeKeepingCentre (
+        (float) titleArea.withTrimmedLeft (78).withTrimmedRight (36).getWidth(), 4.0f);
+    graphics.setColour (Theme::Colours::controlTrack);
+    graphics.fillRoundedRectangle (meter, 2.0f);
+    const float centreX = meter.getCentreX();
+    const float valueX = centreX + displayedValue * meter.getWidth() / 2.0f;
+    graphics.setColour (Theme::Colours::modulation);
+    graphics.fillRoundedRectangle (
+        juce::Rectangle<float>::leftTopRightBottom (juce::jmin (centreX, valueX), meter.getY(),
+                                                    juce::jmax (centreX, valueX), meter.getBottom()),
+        2.0f);
+}
+
+void NoteRandomPanel::resized()
+{
+    auto area = getLocalBounds().reduced (10, 6);
+    area.removeFromTop (22); // title and value
+    windowKnob.setBounds (area.removeFromLeft (76));
+    area.removeFromLeft (6);
+    area = area.withSizeKeepingCentre (area.getWidth(), juce::jmin (area.getHeight(), 56));
+    const int menuHeight = (area.getHeight() - 6) / 2;
+    triggerMenu.setBounds (area.removeFromTop (menuHeight));
+    area.removeFromTop (6);
+    stepsMenu.setBounds (area.removeFromTop (menuHeight));
+}
+
+void NoteRandomPanel::refreshFromProcessor()
+{
+    windowKnob.refresh();
+    const float value = processor.getNoteRandomValue (randomIndex);
+    if (std::abs (value - displayedValue) > 1.0e-4f)
+    {
+        displayedValue = value;
+        repaint (getLocalBounds().removeFromTop (30));
+    }
+}
+
+//==============================================================================
 // RouteRow
 
 RouteRow::RouteRow (MidiForgeProcessor& processorToControl, int routeIndexToShow)
     : processor (processorToControl), routeIndex (routeIndexToShow),
+      polarityAttachment (processor.parameters, ParameterIds::routePolarity (routeIndex), polarityButton),
       amountAttachment (processor.parameters, ParameterIds::routeAmount (routeIndex), amountSlider)
 {
     fillWithChoices (sourceMenu, processor.parameters.getParameter (ParameterIds::routeSource (routeIndex)));
@@ -241,16 +325,26 @@ RouteRow::RouteRow (MidiForgeProcessor& processorToControl, int routeIndexToShow
         processor.parameters, ParameterIds::routeSource (routeIndex), sourceMenu);
     targetAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
         processor.parameters, ParameterIds::routeTarget (routeIndex), targetMenu);
-    sourceMenu.setTooltip ("Which LFO drives this route");
-    targetMenu.setTooltip ("Which slot parameter the LFO moves");
+    sourceMenu.setTooltip ("Which LFO or Random modulator drives this route");
+    targetMenu.setTooltip ("Which slot parameter the source moves");
+
+    polarityButton.setClickingTogglesState (true);
+    polarityButton.setTooltip (juce::String::fromUTF8 (
+        "Polarity. \xc2\xb1 Bipolar: the value swings below and above the knob position. "
+        "+ Unipolar: it is only pushed up from the knob position (or down with a negative amount); "
+        "sine and triangle LFOs then start their cycle at the lowest point."));
+    polarityButton.setColour (juce::TextButton::buttonColourId, Theme::Colours::controlTrack.darker (0.2f));
+    polarityButton.setColour (juce::TextButton::buttonOnColourId, Theme::Colours::controlTrack.darker (0.2f));
+    polarityButton.setColour (juce::TextButton::textColourOnId, Theme::Colours::modulation);
+    addAndMakeVisible (polarityButton);
     addAndMakeVisible (sourceMenu);
     addAndMakeVisible (targetMenu);
 
     amountSlider.setSliderStyle (juce::Slider::LinearHorizontal);
     amountSlider.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
     amountSlider.setDoubleClickReturnValue (true, 50.0);
-    amountSlider.setTooltip ("How far the LFO moves the parameter. 100% sweeps the whole range; "
-                             "negative values invert the LFO. Double-click: 50%.");
+    amountSlider.setTooltip ("How far the source moves the parameter. 100% sweeps the whole range; "
+                             "negative values invert it. Double-click: 50%.");
     amountSlider.getProperties().set (Theme::bipolarSliderProperty, true);
     addAndMakeVisible (amountSlider);
 
@@ -283,7 +377,9 @@ void RouteRow::resized()
     sourceMenu.setBounds (area.removeFromLeft (96));
     area.removeFromLeft (18); // arrow
     targetMenu.setBounds (area.removeFromLeft (240));
-    area.removeFromLeft (20);
+    area.removeFromLeft (10);
+    polarityButton.setBounds (area.removeFromLeft (30));
+    area.removeFromLeft (12);
     amountLabel.setBounds (area.removeFromRight (52));
     area.removeFromRight (8);
     amountSlider.setBounds (area);
@@ -301,12 +397,17 @@ void RouteRow::refreshFromProcessor()
     if (targetMenu.getText() != targetMenu.getItemText (targetMenu.getSelectedItemIndex()))
         targetMenu.setText (targetMenu.getItemText (targetMenu.getSelectedItemIndex()), juce::dontSendNotification);
 
+    const auto polarityText = juce::String::fromUTF8 (polarityButton.getToggleState() ? "+" : "\xc2\xb1");
+    if (polarityButton.getButtonText() != polarityText)
+        polarityButton.setButtonText (polarityText);
+
     const auto amountText = amountSlider.getTextFromValue (amountSlider.getValue());
     if (amountLabel.getText() != amountText)
         amountLabel.setText (amountText, juce::dontSendNotification);
 
     const bool isActive = targetMenu.getSelectedItemIndex() > 0;
-    for (auto* component : std::initializer_list<juce::Component*> { &amountSlider, &amountLabel, &sourceMenu })
+    for (auto* component :
+         std::initializer_list<juce::Component*> { &amountSlider, &amountLabel, &sourceMenu, &polarityButton })
         component->setAlpha (isActive ? 1.0f : 0.45f);
 }
 
@@ -319,6 +420,11 @@ ModulationPage::ModulationPage (MidiForgeProcessor& processor)
     {
         lfoPanels.push_back (std::make_unique<LfoPanel> (processor, lfoIndex));
         addAndMakeVisible (*lfoPanels.back());
+    }
+    for (int randomIndex = 0; randomIndex < numNoteRandoms; ++randomIndex)
+    {
+        noteRandomPanels.push_back (std::make_unique<NoteRandomPanel> (processor, randomIndex));
+        addAndMakeVisible (*noteRandomPanels.back());
     }
     for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
     {
@@ -341,8 +447,9 @@ void ModulationPage::paint (juce::Graphics& graphics)
     graphics.drawText ("Modulation routes", titleArea, juce::Justification::centredLeft);
     graphics.setColour (Theme::Colours::secondaryText);
     graphics.setFont (Theme::font (11.5f));
-    graphics.drawText ("LFO moves a slot parameter around its knob value by the amount", titleArea,
-                       juce::Justification::centredRight);
+    graphics.drawText (
+        juce::String::fromUTF8 ("A source moves a slot knob by the amount:  \xc2\xb1 both ways,  + only one way"),
+        titleArea, juce::Justification::centredRight);
 }
 
 void ModulationPage::resized()
@@ -350,18 +457,23 @@ void ModulationPage::resized()
     auto area = getLocalBounds();
     constexpr int gap = 10;
 
-    auto lfoArea = area.removeFromTop (266);
-    const int panelWidth = (lfoArea.getWidth() - gap * (numLfos - 1)) / numLfos;
-    for (auto& panel : lfoPanels)
+    const auto layOutRow = [gap] (juce::Rectangle<int> rowArea, auto& panels)
     {
-        panel->setBounds (lfoArea.removeFromLeft (panelWidth));
-        lfoArea.removeFromLeft (gap);
-    }
+        const int panelWidth = (rowArea.getWidth() - gap * ((int) panels.size() - 1)) / (int) panels.size();
+        for (auto& panel : panels)
+        {
+            panel->setBounds (rowArea.removeFromLeft (panelWidth));
+            rowArea.removeFromLeft (gap);
+        }
+    };
+    layOutRow (area.removeFromTop (220), lfoPanels);
+    area.removeFromTop (8);
+    layOutRow (area.removeFromTop (100), noteRandomPanels);
+    area.removeFromTop (8);
 
-    area.removeFromTop (gap);
     routesArea = area;
-    auto rowsArea = area.reduced (12, 8);
-    rowsArea.removeFromTop (28); // title
+    auto rowsArea = area.reduced (12, 6);
+    rowsArea.removeFromTop (24); // title
     const int rowHeight = juce::jmin (34, rowsArea.getHeight() / numModulationRoutes);
     for (auto& row : routeRows)
         row->setBounds (rowsArea.removeFromTop (rowHeight));
@@ -370,6 +482,8 @@ void ModulationPage::resized()
 void ModulationPage::refreshFromProcessor()
 {
     for (auto& panel : lfoPanels)
+        panel->refreshFromProcessor();
+    for (auto& panel : noteRandomPanels)
         panel->refreshFromProcessor();
     for (auto& row : routeRows)
         row->refreshFromProcessor();

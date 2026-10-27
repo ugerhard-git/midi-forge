@@ -114,6 +114,13 @@ public:
     float getLfoPhase (int lfoIndex) const noexcept { return lfoPhaseReadouts[(size_t) lfoIndex].load(); }
     /** @return The current settings of one LFO, read from the host parameters. */
     LfoSettings getLfoSettings (int lfoIndex) const noexcept;
+    /** @return The current settings of one Note Random modulator, read from the host parameters. */
+    NoteRandomSettings getNoteRandomSettings (int randomIndex) const noexcept;
+    /** @return A Note Random modulator's current value (-1..+1). */
+    float getNoteRandomValue (int randomIndex) const noexcept
+    {
+        return noteRandomValueReadouts[(size_t) randomIndex].load();
+    }
     /**
      * @return A readable name for a modulation target, using the module currently in that slot,
      *         e.g. "Slot 2 · Gate". Target 0 is "None".
@@ -130,6 +137,8 @@ private:
     void addSlotParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
     void addLfoParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
     void addRouteParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
+    /** Added in 0.6.0, after all older parameters: Note Random modulators and the route polarities. */
+    void addNoteRandomAndPolarityParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
     void readEngineSettings();
     BlockContext readBlockContext (int numSamples);
     void publishReadoutsForEditor();
@@ -171,11 +180,20 @@ private:
         std::atomic<float>* source = nullptr;
         std::atomic<float>* target = nullptr;
         std::atomic<float>* amountPercent = nullptr;
+        std::atomic<float>* polarity = nullptr;
+    };
+
+    struct NoteRandomParameterValues
+    {
+        std::atomic<float>* chordWindowMilliseconds = nullptr;
+        std::atomic<float>* trigger = nullptr;
+        std::atomic<float>* steps = nullptr;
     };
 
     std::array<SlotParameterValues, numSlots> slotParameterValues;
     std::array<LfoParameterValues, numLfos> lfoParameterValues;
     std::array<RouteParameterValues, numModulationRoutes> routeParameterValues;
+    std::array<NoteRandomParameterValues, numNoteRandoms> noteRandomParameterValues;
     EngineSettings engineSettings;
     std::unique_ptr<MidiForgeEngine> engine;
 
@@ -183,6 +201,7 @@ private:
     std::array<std::atomic<float>, numSlots * numParametersPerSlot> modulatedValueReadouts {};
     std::array<std::atomic<float>, numLfos> lfoValueReadouts {};
     std::array<std::atomic<float>, numLfos> lfoPhaseReadouts {};
+    std::array<std::atomic<float>, numNoteRandoms> noteRandomValueReadouts {};
     MidiEventList engineEvents;
     juce::MidiBuffer longMessagesPassedThrough; ///< SysEx and other messages the engine does not handle.
     int currentPresetIndex = 0;                 ///< Last factory preset, reported to the host as the current program

@@ -4,7 +4,8 @@
  *
  * Per slot n (1..8):   sn_type (module), sn_on (on/off), sn_a .. sn_d (the four module parameters)
  * Per LFO n (1..4):    ln_wave, ln_sync, ln_rate, ln_div, ln_phase, ln_width, ln_restart
- * Per route n (1..8):  rn_source, rn_target, rn_amount
+ * Per route n (1..8):  rn_source, rn_target, rn_amount, rn_polarity
+ * Per Note Random n (1..4): nn_window, nn_trigger, nn_steps
  */
 #pragma once
 
@@ -81,9 +82,28 @@ inline juce::String routeAmount (int routeIndex)
 {
     return makeId ("r", routeIndex, "amount");
 }
+inline juce::String routePolarity (int routeIndex)
+{
+    return makeId ("r", routeIndex, "polarity");
+}
+
+// Note Random modulators -------------------------------------------------------------------------
+inline juce::String noteRandomWindow (int randomIndex)
+{
+    return makeId ("n", randomIndex, "window");
+}
+inline juce::String noteRandomTrigger (int randomIndex)
+{
+    return makeId ("n", randomIndex, "trigger");
+}
+inline juce::String noteRandomSteps (int randomIndex)
+{
+    return makeId ("n", randomIndex, "steps");
+}
 
 /** Version hints for the hosts' parameter caching (see juce::ParameterID). */
 inline constexpr int slotParameterVersion = 1;       ///< Version 0.1.0: slot parameters
 inline constexpr int modulationParameterVersion = 2; ///< Version 0.2.0: LFOs and routes
+inline constexpr int noteRandomParameterVersion = 3; ///< Version 0.6.0: route polarity, Note Random
 
 } // namespace midiforge::ParameterIds
