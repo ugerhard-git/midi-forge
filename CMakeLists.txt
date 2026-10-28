@@ -207,10 +207,13 @@ if(MIDI_FORGE_BUILD_PLUGIN)
 
     target_sources(MidiForge PRIVATE ${MIDI_FORGE_PLUGIN_SOURCES})
     target_compile_definitions(MidiForge PUBLIC ${MIDI_FORGE_JUCE_DEFINITIONS})
+    # JUCE modules: juce_audio_processors (plug-in wrapper, parameters; brings juce_audio_basics, juce_events,
+    # juce_core …) and juce_gui_basics (the editor). juce_audio_utils is deliberately left out: it pulls in
+    # juce_audio_formats (audio file codecs) and juce_audio_devices (audio/MIDI drivers), which a MIDI effect
+    # never uses, so they are neither compiled nor scanned.
     target_link_libraries(MidiForge
         PRIVATE
             midi_forge_engine
-            juce::juce_audio_utils
             juce::juce_audio_processors
             juce::juce_gui_basics
         PUBLIC
@@ -233,9 +236,8 @@ if(MIDI_FORGE_BUILD_PLUGIN)
             ${MIDI_FORGE_JUCE_DEFINITIONS}
             JucePlugin_Name="MIDI Forge"
             JucePlugin_VersionString="${PROJECT_VERSION}")
-        target_link_libraries(midi_forge_plugin_tests PRIVATE
+        target_link_libraries(midi_forge_plugin_tests PRIVATE # the same JUCE modules as the plug-in (see above)
             midi_forge_engine
-            juce::juce_audio_utils
             juce::juce_audio_processors
             juce::juce_gui_basics
             juce::juce_recommended_config_flags

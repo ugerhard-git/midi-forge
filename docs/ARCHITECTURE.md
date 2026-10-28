@@ -346,6 +346,13 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md#building) for commands. The workflow
    a pre-release for versions below 1.0 or tags with a suffix. If a release for the tag exists already, it
    only uploads the zips (`--clobber`).
 
+**JUCE modules linked** (plug-in and plug-in tests): `juce_audio_processors` – the plug-in wrapper (VST3),
+host parameters and state; it brings `juce_audio_processors_headless`, `juce_audio_basics`, `juce_events`,
+`juce_gui_extra`, `juce_data_structures` and `juce_core` along – and `juce_gui_basics` for the editor.
+`juce_audio_utils` is deliberately **not** linked: it pulls in `juce_audio_formats` (audio file codecs such as
+MP3, Ogg Vorbis, FLAC, Opus) and `juce_audio_devices` (audio and MIDI drivers), which a MIDI effect never
+uses. Leaving it out means less third-party code compiled, scanned and trusted.
+
 Dependencies (JUCE 9.0.4; clap-juce-extensions only with CLAP switched on) are fetched by CMake at pinned versions; GitHub
 Actions are pinned to commit SHAs and updated by Dependabot.
 
