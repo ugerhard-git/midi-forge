@@ -59,6 +59,7 @@ const char* const grooveGridLabels[] = { "1/8", "1/16", "1/32" };
 const char* const strumDirectionLabels[] = { "Up", "Down", "Alternate", "Random" };
 const char* const ghostPositionLabels[] = { "After", "Before", "Both" };
 const char* const ghostDistanceLabels[] = { "1/32", "1/16T", "1/16", "1/8" };
+const char* const stepGridLabels[] = { "Steady", "Bar" };
 const char* const meterGroupingLabels[] = { "3 Last (2+2+3)", "3 First (3+2+2)", "3 Middle (2+3+2)" };
 const char* const harmonyIntervalLabels[] = { "Oct Down", "7th Down", "6th Down", "5th Down", "4th Down",
                                               "3rd Down", "2nd Down", "Off",      "2nd Up",   "3rd Up",
@@ -209,7 +210,11 @@ const ModuleDescription* createModuleTable()
           { choiceParameter ("Rate", arpeggiatorDivisionLabels, 3).withHelp ("Step length (T = triplet)."),
             choiceParameter ("Pattern", arpeggiatorPatternLabels, 0).withHelp ("Order in which the notes play."),
             integerParameter ("Octaves", 1, 4, 1).withHelp ("How many octaves the pattern spans."),
-            percentParameter ("Gate", 5, 100, 50).withHelp ("Note length as a share of the step.") },
+            percentParameter ("Gate", 5, 100, 50).withHelp ("Note length as a share of the step."),
+            // Page 2 (added in 0.19.1)
+            choiceParameter ("Grid", stepGridLabels, 0)
+                .withHelp ("Steady: steps run on from the song start. Bar: they start again at every bar line.")
+                .addedInLayout (3) },
           "Plays the keys you hold (a chord, say) one after another. While the DAW plays, the steps lock to its bars; "
           "when it is "
           "stopped, the arpeggiator runs at the project tempo from your first key. Only the arpeggio is passed "
@@ -283,7 +288,12 @@ const ModuleDescription* createModuleTable()
             // Added in 0.9.0
             percentParameter ("Chance", 0, 100, 100)
                 .withHelp ("Probability that a repeat plays; the key you press always sounds.")
-                .addedInLayout (2) },
+                .addedInLayout (2),
+            // Added in 0.19.1
+            choiceParameter ("Grid", stepGridLabels, 0)
+                .withHelp ("Steady: repeats run on from the song start. Bar: they (and swing and accents) start "
+                           "again at every bar line.")
+                .addedInLayout (3) },
           "Ratchets: every held note is played again and again on the tempo grid, a held chord repeats as a "
           "chord. The key you press sounds immediately, the repeats follow on the grid. Releasing a key stops "
           "its repeats. Below 100 % Chance, some repeats rest, so the ratchet gets gaps." },

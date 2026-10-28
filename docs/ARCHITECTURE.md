@@ -178,7 +178,8 @@ groups modules by category, so a new Generator still appears under *Generators*.
 
 ### Knobs added to existing modules
 
-A module may gain knobs in a later version (Repeater: E and F in 0.7.0, G in 0.9.0). Old projects and presets
+A module may gain knobs in a later version (Repeater: E and F in 0.7.0, G in 0.9.0, H in 0.19.1; Arpeggiator:
+E in 0.19.1). Old projects and presets
 hold 0 for such a knob (its value while unused), which can be a bad setting (Chance 0 %). So every
 `ParameterDescription` names the knob layout version that added it (`addedInKnobLayout`), states store
 `knobLayout` (= `currentKnobLayoutVersion`), and after loading a project or user preset
@@ -217,7 +218,10 @@ strip in the footer for 8 seconds. Removal history is not saved in projects.
 
 - The chain counts samples since `prepare()`; scheduled events use that absolute time.
 - The Arpeggiator and the Repeater follow the host's quarter-note position (`ppqPositionAtBlockStart`)
-  while the transport runs, and their own clock otherwise. The Repeater numbers its grid steps (swing
+  while the transport runs, and their own clock otherwise. `StepGrid` (GeneratorModules.cpp) maps step
+  numbers to host positions: steadily from the song start, or (Grid *Bar*) restarting at every bar start,
+  with bar b holding steps b × stepsPerBar …; the last step of a bar may be shorter. Swing parity and
+  accents use the step number within the bar (`stepInBar()`). The Repeater numbers its grid steps (swing
   delays odd steps, accents are chosen by step number) and re-synchronises after transport jumps or a
   switch between host and own clock, so steps are never replayed or fired in a burst. Gate lengths are capped one sample short of the step so
   a note always ends before the next starts.

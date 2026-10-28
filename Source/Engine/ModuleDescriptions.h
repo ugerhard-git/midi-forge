@@ -74,9 +74,10 @@ constexpr int numParameterPages = numParametersPerSlot / numParametersPerPage;
  * Knob layout versions: projects and presets store the version they were saved with, so knobs that a
  * module gained later can be set to their defaults when an older state is loaded (an older state holds
  * 0 for them, which may be a bad value, e.g. a Chance of 0 %).
- * 0 = up to 0.6.0, 1 = 0.7.0 (Repeater page 2: Accent Boost, Length), 2 = 0.9.0 (Repeater: Chance).
+ * 0 = up to 0.6.0, 1 = 0.7.0 (Repeater page 2: Accent Boost, Length), 2 = 0.9.0 (Repeater: Chance),
+ * 3 = 0.19.1 (Arpeggiator and Repeater: Grid).
  */
-constexpr int currentKnobLayoutVersion = 2;
+constexpr int currentKnobLayoutVersion = 3;
 
 /** How a parameter's normalised value is turned into a plain value and displayed. */
 enum class ParameterKind

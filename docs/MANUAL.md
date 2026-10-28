@@ -121,7 +121,8 @@ How a bar is felt: its counts (quarter notes in x/4, eighth notes in x/8) are gr
 | 5/8, 7/8, 5/4, 7/4 … | twos and one three, e.g. 2+2+3 | every group after the first |
 
 Beat Thinning has a *Grouping* knob for odd meters (2+2+3, 3+2+2 or 2+3+2); elsewhere the long group comes
-last. The Arpeggiator's and Repeater's steps run on a steady grid from the song start, whatever the meter.
+last. The Arpeggiator and the Repeater can run their steps steadily or start them again at every bar (their
+*Grid* knob).
 
 ## Modules
 
@@ -308,6 +309,7 @@ and starts the moment you press the first key. The keys you hold are not passed 
 | Pattern | Up, Down, Up/Down, Random, As Played | Order of the notes. *Up/Down* doesn't repeat the top and bottom note; *As Played* follows the order you pressed the keys |
 | Octaves | 1 … 4 | How many octaves the pattern spans |
 | Gate | 5 … 100 % | Note length as a share of the step |
+| Grid *(page 2)* | Steady / Bar | Where the steps fall while the DAW plays, see [Grid](#grid-steady-or-bar) (default Steady) |
 
 Up to 32 keys are tracked at once.
 
@@ -348,11 +350,25 @@ The Repeater has seven knobs: use the **◀ ▶** arrows in its slot to switch b
 | Accent Boost *(page 2)* | 0 … 64 | How many velocity steps louder accented repeats are (default 25) |
 | Length *(page 2)* | 10 … 100 % | How long each repeat lasts, as a share of a step (default 50 %). At 100 % repeats join up; with swing, a repeat before a short gap is shortened so repeats never overlap |
 | Chance *(page 2)* | 0 … 100 % | Probability that a repeat plays (default 100 %). Below 100 % some repeats rest, so the ratchet gets gaps. The key you press always sounds; a held chord plays or rests as a whole; accented repeats can rest too |
+| Grid *(page 2)* | Steady / Bar | Where the repeats fall while the DAW plays, see [Grid](#grid-steady-or-bar) (default Steady). With *Bar*, swing and the *Every 2nd/3rd/4th* and *On Beat* accents count from every bar start too |
 
 Tip: an LFO on *Rate* makes the ratchet speed change on its own (see the *Ratchet Chords* preset). A Random
 modulator on *Chance* makes some phrases busy and others sparse.
 
-Projects and presets from older versions open with *Chance* at 100 %, so they sound as before.
+Projects and presets from older versions open with *Chance* at 100 % and *Grid* on Steady, so they sound as
+before.
+
+#### Grid: Steady or Bar
+
+The Arpeggiator and the Repeater put their steps on a grid that follows the DAW while it plays.
+
+- **Steady:** the steps run on evenly from the song start, ignoring bar lines.
+- **Bar:** the grid starts again at every bar line. When a bar is not a whole number of steps – quarter-note
+  steps in 7/8, dotted steps in 4/4 – the bar's last step is shorter, and the next bar starts with a step
+  on its first beat.
+
+In 4/4 with straight steps (1/8, 1/16 …) both are the same. While the DAW is stopped, the steps run on their
+own clock from the first key, as always.
 
 **Strum** – plays chords as strums: the notes of a chord start one after another instead of together, like a
 strummed guitar or a rolled piano chord. Single notes pass unchanged. Each note's note-off is delayed as much

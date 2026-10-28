@@ -197,3 +197,80 @@ TEST_CASE ("meter: Mutate remembers places per real bar, and forgets them when t
     rig.context.timeSignature = { 4, 4 };
     EXPECT (playAtBeat (8.0) == 62); // new meter: memory cleared
 }
+
+namespace
+{
+/** Holds a key from the song start for a while (DAW playing in 7/8) and returns the note-on times in quarters. */
+std::vector<double> stepTimesInSevenEight (ModuleType type, std::initializer_list<float> knobs, double seconds)
+{
+    ChainTestRig rig;
+    rig.context.isPlaying = rig.context.hasPpqPosition = true;
+    rig.context.timeSignature = { 7, 8 };
+    rig.loadModule (0, type, knobs);
+    rig.processBlock ({ noteOnAt (0, 60) });
+    rig.processSeconds (seconds);
+    rig.processBlock ({ noteOffAt (0, 60) });
+    rig.processSeconds (0.5);
+    EXPECT (rig.notesStillSounding().empty());
+    std::vector<double> times;
+    for (const auto& event : rig.everyOutputEvent)
+        if (event.isNoteOn())
+            times.push_back (std::round (event.samplePosition / (double) samplesPerQuarter * 1000.0) / 1000.0);
+    return times;
+}
+} // namespace
+
+TEST_CASE ("meter: the Arpeggiator's Grid runs steadily or starts again at every bar")
+{
+    // Quarter-note steps in 7/8 (bars of 3.5 quarters). Knobs: Rate 1/4, Up, 1 octave, Gate 50 %, Grid.
+    const auto steady = stepTimesInSevenEight (ModuleType::Arpeggiator, { 0, 0, 1, 50, 0 }, 2.9);
+    EXPECT ((steady == std::vector<double> { 0, 1, 2, 3, 4, 5 }));
+    const auto bar = stepTimesInSevenEight (ModuleType::Arpeggiator, { 0, 0, 1, 50, 1 }, 2.9);
+    EXPECT ((bar == std::vector<double> { 0, 1, 2, 3, 3.5, 4.5, 5.5 }));
+
+    // With a full gate the shortened last step of the bar still ends before the bar's first step.
+    ChainTestRig rig;
+    rig.context.isPlaying = rig.context.hasPpqPosition = true;
+    rig.context.timeSignature = { 7, 8 };
+    rig.loadModule (0, ModuleType::Arpeggiator, { 0, 0, 1, 100, 1 });
+    rig.processBlock ({ noteOnAt (0, 60) });
+    rig.processSeconds (2.0);
+    int64_t lastNoteOffBeforeBar2 = -1;
+    for (const auto& event : rig.everyOutputEvent)
+        if (event.isNoteOff() && event.samplePosition <= (int) (3.5 * samplesPerQuarter))
+            lastNoteOffBeforeBar2 = event.samplePosition;
+    EXPECT (lastNoteOffBeforeBar2 > 3 * samplesPerQuarter && lastNoteOffBeforeBar2 < (int) (3.5 * samplesPerQuarter));
+}
+
+TEST_CASE ("meter: the Repeater's Grid starts repeats, swing and accents again at every bar")
+{
+    // Quarter-note repeats in 7/8. Knobs: Rate 1/4, last velocity, straight, no accent, boost, length, chance, Grid.
+    const auto steady = stepTimesInSevenEight (ModuleType::Repeater, { 1, 0, 50, 0, 25, 50, 100, 0 }, 2.4);
+    EXPECT ((steady == std::vector<double> { 0, 1, 2, 3, 4 }));
+    const auto bar = stepTimesInSevenEight (ModuleType::Repeater, { 1, 0, 50, 0, 25, 50, 100, 1 }, 2.4);
+    EXPECT ((bar == std::vector<double> { 0, 1, 2, 3, 3.5, 4.5 }));
+
+    // Eighth repeats, accent on every 2nd: in 7/8 the bar's last eighth (step 7) and the next bar's first are
+    // both accented on a Bar grid (steps 1, 3, 5, 7 | 1 …), but not on a steady grid.
+    for (const float gridMode : { 0.0f, 1.0f })
+    {
+        ChainTestRig rig;
+        rig.context.isPlaying = rig.context.hasPpqPosition = true;
+        rig.context.timeSignature = { 7, 8 };
+        rig.loadModule (0, ModuleType::Repeater, { 4, 0, 50, 1, 25, 50, 100, gridMode }); // 1/8, every 2nd
+        rig.processBlock ({ noteOnAt (0, 60, 80) });
+        rig.processSeconds (2.0);
+        rig.processBlock ({ noteOffAt (0, 60) });
+        std::vector<int> velocities;
+        for (const auto& event : rig.everyOutputEvent)
+            if (event.isNoteOn())
+                velocities.push_back (event.velocity());
+        EXPECT (velocities.size() > 8);
+        if (velocities.size() > 8)
+        {
+            const bool lastEighthAccented = velocities[6] == 105;
+            const bool nextBarAccented = velocities[7] == 105;
+            EXPECT (lastEighthAccented && nextBarAccented == (gridMode == 1.0f));
+        }
+    }
+}

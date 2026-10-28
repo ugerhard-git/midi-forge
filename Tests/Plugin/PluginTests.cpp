@@ -740,10 +740,10 @@ TEST_CASE ("pages: the Repeater's page-2 knobs exist on the host with their own 
 {
     MidiForgeProcessor processor;
     processor.loadModule (0, (int) ModuleType::Repeater);
-    EXPECT (processor.parameters.getParameter ("s1_e")->getCurrentValueAsText() == "25");   // accent boost
-    EXPECT (processor.parameters.getParameter ("s1_f")->getCurrentValueAsText() == "50%");  // note length
-    EXPECT (processor.parameters.getParameter ("s1_g")->getCurrentValueAsText() == "100%"); // chance
-    EXPECT (processor.parameters.getParameter ("s1_h")->getCurrentValueAsText() == "-");    // unused
+    EXPECT (processor.parameters.getParameter ("s1_e")->getCurrentValueAsText() == "25");     // accent boost
+    EXPECT (processor.parameters.getParameter ("s1_f")->getCurrentValueAsText() == "50%");    // note length
+    EXPECT (processor.parameters.getParameter ("s1_g")->getCurrentValueAsText() == "100%");   // chance
+    EXPECT (processor.parameters.getParameter ("s1_h")->getCurrentValueAsText() == "Steady"); // grid
 
     // Factory presets with a Repeater keep the module defaults on page 2.
     const auto& presets = getFactoryPresets();
@@ -1040,7 +1040,12 @@ TEST_CASE ("module info: shows the details and one line per knob, with page hint
     EXPECT (text.contains (juce::String ("E  Accent Boost (page 2)")));
     EXPECT (text.contains (repeater.parameters[5].helpText));
     EXPECT (text.contains (juce::String ("G  Chance (page 2)")));
-    EXPECT (! text.contains ("H  "));
+    EXPECT (text.contains (juce::String ("H  Grid (page 2)")));
+
+    info.showModule ((int) ModuleType::Arpeggiator); // unused knobs (F … H) are not listed
+    EXPECT (info.getPlainText().contains (juce::String ("E  Grid (page 2)")));
+    EXPECT (! info.getPlainText().contains ("F  "));
+    info.showModule ((int) ModuleType::Repeater);
     EXPECT (info.getHeightForWidth (380) > info.getHeightForWidth (2000));
 
     info.showModule (-5); // out of range shows the Empty slot

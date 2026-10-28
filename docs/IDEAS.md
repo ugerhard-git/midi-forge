@@ -24,14 +24,7 @@ Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 
 ## Planned
 
-### Grid switch for Arpeggiator and Repeater (0.19.1)
-
-Owner's choice (28 Oct 2026): a switch per module. New choice knob **Grid** with *Steady* (steps run on one
-grid from the song start, as before; default, so existing projects sound the same) and *Bar* (the grid
-restarts at every bar start; a step that would cross the bar line is shortened). Arpeggiator: knob E
-(page 2). Repeater: knob H (page 2); with *Bar*, its step numbering (swing, Every 2nd/3rd/4th accents) also
-restarts every bar. Both marked `addedInLayout (3)`, `currentKnobLayoutVersion` 3. Only matters while the
-DAW plays.
+(nothing at the moment)
 
 ## Ideas
 

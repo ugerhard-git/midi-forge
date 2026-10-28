@@ -219,9 +219,86 @@ private:
 
 //==============================================================================
 /**
+ * Where the steps of a tempo grid fall (Arpeggiator, Repeater): steadily every step length from the song
+ * start, or restarting at every bar start (the Grid knob's *Bar*), where the last step of a bar is shortened
+ * when the bar is not a whole number of steps (1/4 steps in 7/8). Steps are numbered so that bar b holds
+ * steps b × stepsPerBar … b × stepsPerBar + stepsPerBar − 1. Only meaningful while following the host.
+ */
+struct StepGrid
+{
+    double stepLength = 0.25;      ///< In quarter notes
+    bool restartsEveryBar = false; ///< False: steady grid from the song start
+    double anchorBarStart = 0.0;   ///< Host position of the start of the bar numbered anchorBar
+    int64_t anchorBar = 0;
+    double barLength = 4.0;
+    int64_t stepsPerBar = 16;
+
+    /** @return The grid for this block; a bar grid only while the host transport runs. */
+    static StepGrid forBlock (double stepLengthInBeats, bool wantsBarGrid, const BlockContext& context) noexcept
+    {
+        StepGrid grid;
+        grid.stepLength = stepLengthInBeats;
+        grid.restartsEveryBar = wantsBarGrid && context.followsHostTransport();
+        if (grid.restartsEveryBar)
+        {
+            const auto bar = context.barPositionAtBeat (context.ppqPositionAtBlockStart);
+            grid.anchorBar = bar.barNumber;
+            grid.anchorBarStart = context.ppqPositionAtBlockStart - bar.positionInBar;
+            grid.barLength = bar.barLength;
+            grid.stepsPerBar = std::max<int64_t> (1, (int64_t) std::ceil (bar.barLength / stepLengthInBeats - 1.0e-9));
+        }
+        return grid;
+    }
+
+    /** @return The host position (quarter notes) of a step. */
+    double beatOfStep (int64_t step) const noexcept
+    {
+        if (! restartsEveryBar)
+            return (double) step * stepLength;
+        const int64_t bar = floorDivide (step, stepsPerBar);
+        return anchorBarStart + (double) (bar - anchorBar) * barLength +
+               (double) (step - bar * stepsPerBar) * stepLength;
+    }
+
+    /** @return The first step at or after a host position. */
+    int64_t firstStepAtOrAfter (double beat) const noexcept
+    {
+        if (! restartsEveryBar)
+            return (int64_t) std::ceil (beat / stepLength - 1.0e-9);
+        const double barsFromAnchor = std::floor ((beat - anchorBarStart) / barLength + 1.0e-9);
+        const double positionInBar = beat - anchorBarStart - barsFromAnchor * barLength;
+        int64_t bar = anchorBar + (int64_t) barsFromAnchor;
+        auto stepInBar = (int64_t) std::ceil (positionInBar / stepLength - 1.0e-9);
+        if (stepInBar >= stepsPerBar)
+        {
+            ++bar;
+            stepInBar = 0;
+        }
+        return bar * stepsPerBar + stepInBar;
+    }
+
+    /** @return A step's number counted from its bar start (Bar grid), or the step number itself (steady grid). */
+    int64_t stepInBar (int64_t step) const noexcept
+    {
+        return restartsEveryBar ? step - floorDivide (step, stepsPerBar) * stepsPerBar : step;
+    }
+
+    /** @return The step's position from its bar start (Bar grid) or from the song start (steady), in quarters. */
+    double positionForAccents (int64_t step) const noexcept { return (double) stepInBar (step) * stepLength; }
+
+private:
+    static int64_t floorDivide (int64_t value, int64_t divisor) noexcept
+    {
+        const int64_t quotient = value / divisor;
+        return (value % divisor != 0 && (value < 0) != (divisor < 0)) ? quotient - 1 : quotient;
+    }
+};
+
+//==============================================================================
+/**
  * Plays the held notes one after another at a tempo-synced rate.
- * Follows the host's bar grid while the transport runs, otherwise runs on its own clock that starts
- * with the first key pressed.
+ * Follows the host's step grid while the transport runs (steady from the song start, or restarting at every
+ * bar, see StepGrid), otherwise runs on its own clock that starts with the first key pressed.
  */
 class Arpeggiator final : public SchedulingModule
 {
@@ -232,6 +309,7 @@ public:
         notesInPitchOrder.reserve (maxHeldNotes);
         pattern.reserve (maxHeldNotes * 8);
         stepPositionsInBlock.reserve (1024);
+        stepNumbersInBlock.reserve (1024);
     }
 
     void reset() override
@@ -258,8 +336,10 @@ public:
             stepLengthInSamples - 1);
 
         const bool followHost = context.followsHostTransport();
+        const auto grid =
+            StepGrid::forBlock (stepLengthInBeats, integerParameter (parameterValues, gridMode) == barGrid, context);
         if (followHost)
-            findHostStepsInBlock (context, stepLengthInBeats);
+            findHostStepsInBlock (context, grid);
         else if (nextFreeRunningStepTime < context.blockStartSample)
             nextFreeRunningStepTime = context.blockStartSample; // our clock is stale (e.g. transport just stopped)
 
@@ -297,7 +377,17 @@ public:
             else
             {
                 sendScheduledEventsUpTo (context.blockStartSample + nextStepPosition, context, output);
-                playStep (nextStepPosition, context, noteLengthInSamples, parameterValues, output);
+                // A step shortened at the bar line (Bar grid) ends before the next one starts.
+                int64_t thisNoteLength = noteLengthInSamples;
+                if (followHost)
+                {
+                    const int64_t step = stepNumbersInBlock[nextHostStepIndex];
+                    const auto samplesToNextStep = (int64_t) std::llround (
+                        (grid.beatOfStep (step + 1) - grid.beatOfStep (step)) * context.samplesPerBeat());
+                    thisNoteLength =
+                        std::clamp<int64_t> (thisNoteLength, 1, std::max<int64_t> (1, samplesToNextStep - 1));
+                }
+                playStep (nextStepPosition, context, thisNoteLength, parameterValues, output);
                 if (followHost)
                     ++nextHostStepIndex;
                 else
@@ -313,7 +403,13 @@ private:
         rate,
         patternType,
         octaveRange,
-        gate
+        gate,
+        gridMode ///< page 2 (added in 0.19.1)
+    };
+    enum GridMode
+    {
+        steadyGrid,
+        barGrid
     };
     enum PatternType
     {
@@ -333,23 +429,30 @@ private:
         uint32_t pressOrder; ///< Increases with every key press, for the "As Played" pattern.
     };
 
-    /** Fills stepPositionsInBlock with the sample positions where the host's step grid falls in this block. */
-    void findHostStepsInBlock (const BlockContext& context, double stepLengthInBeats)
+    /**
+     * Fills stepPositionsInBlock (and stepNumbersInBlock) with the sample positions where the host's step grid
+     * falls in this block.
+     */
+    void findHostStepsInBlock (const BlockContext& context, const StepGrid& grid)
     {
         stepPositionsInBlock.clear();
+        stepNumbersInBlock.clear();
         const double blockStartBeat = context.ppqPositionAtBlockStart;
         const double samplesPerBeat = context.samplesPerBeat();
-        const int64_t firstStepNumber = (int64_t) std::ceil (blockStartBeat / stepLengthInBeats - 1.0e-9);
+        const int64_t firstStepNumber = grid.firstStepAtOrAfter (blockStartBeat);
 
         for (int64_t stepNumber = firstStepNumber;; ++stepNumber)
         {
-            const double stepBeat = (double) stepNumber * stepLengthInBeats;
+            const double stepBeat = grid.beatOfStep (stepNumber);
             const int64_t position = std::max<int64_t> (0, std::llround ((stepBeat - blockStartBeat) * samplesPerBeat));
             if (position >= context.numSamples || stepPositionsInBlock.size() == stepPositionsInBlock.capacity())
                 break;
             // Rounding can put the same step at the end of one block and the start of the next; play it once.
             if (stepNumber != lastHostStepNumber)
+            {
                 stepPositionsInBlock.push_back ((int) position);
+                stepNumbersInBlock.push_back (stepNumber);
+            }
             lastHostStepNumber = stepNumber;
         }
     }
@@ -446,6 +549,7 @@ private:
 
     std::vector<HeldNote> heldNotes, notesInPitchOrder, pattern;
     std::vector<int> stepPositionsInBlock;
+    std::vector<int64_t> stepNumbersInBlock; ///< The grid step of each entry of stepPositionsInBlock
     size_t nextPatternIndex = 0;
     uint32_t nextPressOrder = 0;
     int64_t nextFreeRunningStepTime = 0;
@@ -481,6 +585,7 @@ public:
         lastStepNumber = noStepYet;
         ownClockBeat = 0.0;
         wasFollowingHost = false;
+        wasOnBarGrid = false;
     }
 
     void process (const MidiEventList& input, MidiEventList& output, const BlockContext& context,
@@ -498,15 +603,16 @@ public:
             std::max<int64_t> (1, std::llround (noteLengthShare * stepLength * samplesPerBeat) - 1);
 
         double blockStartBeat = followHost ? context.ppqPositionAtBlockStart : ownClockBeat;
-        resyncGridIfNeeded (blockStartBeat, stepLength, swingDelayInSteps, followHost);
+        grid = StepGrid::forBlock (stepLength, integerParameter (parameterValues, gridMode) == barGrid, context);
+        resyncGridIfNeeded (blockStartBeat, swingDelayInSteps, followHost);
 
         // Walk through the block, handling input events and grid steps in time order.
         // At equal positions input comes first, so a chord pressed exactly on a step is complete.
         size_t nextInputIndex = 0;
         for (;;)
         {
-            const int nextStepPosition = positionOfStep (lastStepNumber + 1, blockStartBeat, stepLength,
-                                                         swingDelayInSteps, samplesPerBeat, context.numSamples);
+            const int nextStepPosition = positionOfStep (lastStepNumber + 1, blockStartBeat, swingDelayInSteps,
+                                                         samplesPerBeat, context.numSamples);
             const int nextInputPosition =
                 nextInputIndex < input.size() ? input[nextInputIndex].samplePosition : noMoreEvents;
             if (nextStepPosition == noMoreEvents && nextInputPosition == noMoreEvents)
@@ -530,9 +636,7 @@ public:
                 {
                     return context.blockStartSample +
                            (int64_t) std::ceil (
-                               (stepBeat (stepNumber, stepLength, swingDelayInSteps) - blockStartBeat) *
-                                   samplesPerBeat -
-                               1.0e-6);
+                               (stepBeat (stepNumber, swingDelayInSteps) - blockStartBeat) * samplesPerBeat - 1.0e-6);
                 };
                 handleInputEvent (event, eventTime, noteLengthInSamples, timeOfStep (lastStepNumber + 1),
                                   timeOfStep (lastStepNumber + 2), output);
@@ -542,11 +646,10 @@ public:
                 const int64_t stepTime = context.blockStartSample + nextStepPosition;
                 sendScheduledEventsUpTo (stepTime, context, output);
                 ++lastStepNumber;
-                const auto samplesToNextStep =
-                    (int64_t) std::llround ((stepBeat (lastStepNumber + 1, stepLength, swingDelayInSteps) -
-                                             stepBeat (lastStepNumber, stepLength, swingDelayInSteps)) *
-                                            samplesPerBeat);
-                playStep (lastStepNumber, stepTime, stepLength, std::min (noteLengthInSamples, samplesToNextStep - 1),
+                const auto samplesToNextStep = (int64_t) std::llround (
+                    (stepBeat (lastStepNumber + 1, swingDelayInSteps) - stepBeat (lastStepNumber, swingDelayInSteps)) *
+                    samplesPerBeat);
+                playStep (lastStepNumber, stepTime, std::min (noteLengthInSamples, samplesToNextStep - 1),
                           parameterValues);
             }
         }
@@ -554,6 +657,7 @@ public:
         sendScheduledEventsInBlock (context, output);
         ownClockBeat = blockStartBeat + context.numSamples / samplesPerBeat;
         wasFollowingHost = followHost;
+        wasOnBarGrid = grid.restartsEveryBar;
     }
 
 private:
@@ -565,7 +669,13 @@ private:
         accentPattern,
         accentBoost,       ///< page 2
         noteLengthPercent, ///< page 2
-        chancePercent      ///< page 2 (added in 0.9.0)
+        chancePercent,     ///< page 2 (added in 0.9.0)
+        gridMode           ///< page 2 (added in 0.19.1)
+    };
+    enum GridMode
+    {
+        steadyGrid,
+        barGrid
     };
     enum VelocitySource
     {
@@ -594,19 +704,25 @@ private:
         int64_t stepsBlockedUntil; ///< Grid steps before this absolute sample time are skipped for this key
     };
 
-    /** Beat position of grid step n: n step lengths, odd steps delayed by the swing. */
-    static double stepBeat (int64_t stepNumber, double stepLength, double swingDelayInSteps) noexcept
+    /**
+     * Beat position of grid step n: its place on the grid, odd steps (counted from the bar start on a Bar grid)
+     * delayed by the swing. A step shortened at the bar line is not swung past the next bar's first step.
+     */
+    double stepBeat (int64_t stepNumber, double swingDelayInSteps) const noexcept
     {
-        const bool isOddStep = (stepNumber % 2) != 0;
-        return ((double) stepNumber + (isOddStep ? swingDelayInSteps : 0.0)) * stepLength;
+        const double beat = grid.beatOfStep (stepNumber);
+        const bool isOddStep = (grid.stepInBar (stepNumber) % 2) != 0;
+        if (! isOddStep)
+            return beat;
+        const double swungBeat = beat + swingDelayInSteps * grid.stepLength;
+        return swungBeat < grid.beatOfStep (stepNumber + 1) - 1.0e-9 ? swungBeat : beat;
     }
 
     /** @return The sample position of a step in this block, or noMoreEvents if it is not in this block. */
-    static int positionOfStep (int64_t stepNumber, double blockStartBeat, double stepLength, double swingDelayInSteps,
-                               double samplesPerBeat, int numSamples) noexcept
+    int positionOfStep (int64_t stepNumber, double blockStartBeat, double swingDelayInSteps, double samplesPerBeat,
+                        int numSamples) const noexcept
     {
-        const double position =
-            (stepBeat (stepNumber, stepLength, swingDelayInSteps) - blockStartBeat) * samplesPerBeat;
+        const double position = (stepBeat (stepNumber, swingDelayInSteps) - blockStartBeat) * samplesPerBeat;
         if (position >= (double) numSamples)
             return noMoreEvents;
         return (int) std::max (0.0, std::ceil (position - 1.0e-6));
@@ -616,14 +732,15 @@ private:
      * Picks the next grid step after a start, a switch between host and own clock, or a jump of the host
      * position, so steps are neither replayed nor fired in a burst to catch up.
      */
-    void resyncGridIfNeeded (double blockStartBeat, double stepLength, double swingDelayInSteps, bool followHost)
+    void resyncGridIfNeeded (double blockStartBeat, double swingDelayInSteps, bool followHost)
     {
-        const bool needsResync =
-            lastStepNumber == noStepYet || followHost != wasFollowingHost ||
-            stepBeat (lastStepNumber, stepLength, swingDelayInSteps) > blockStartBeat + stepLength ||
-            stepBeat (lastStepNumber + 1, stepLength, swingDelayInSteps) < blockStartBeat - stepLength;
+        const double stepLength = grid.stepLength;
+        const bool needsResync = lastStepNumber == noStepYet || followHost != wasFollowingHost ||
+                                 grid.restartsEveryBar != wasOnBarGrid ||
+                                 stepBeat (lastStepNumber, swingDelayInSteps) > blockStartBeat + stepLength ||
+                                 stepBeat (lastStepNumber + 1, swingDelayInSteps) < blockStartBeat - stepLength;
         if (needsResync)
-            lastStepNumber = (int64_t) std::ceil (blockStartBeat / stepLength - 1.0e-9) - 1;
+            lastStepNumber = grid.firstStepAtOrAfter (blockStartBeat) - 1;
     }
 
     /**
@@ -685,11 +802,9 @@ private:
         sendEvent (event, output); // aftertouch and everything else passes through
     }
 
-    void playStep (int64_t stepNumber, int64_t stepTime, double stepLength, int64_t noteLengthInSamples,
-                   const float* parameterValues)
+    void playStep (int64_t stepNumber, int64_t stepTime, int64_t noteLengthInSamples, const float* parameterValues)
     {
-        const bool isAccented =
-            isAccentedStep (stepNumber, stepLength, integerParameter (parameterValues, accentPattern));
+        const bool isAccented = isAccentedStep (stepNumber, integerParameter (parameterValues, accentPattern));
         const bool usesAftertouch = integerParameter (parameterValues, velocitySource) == aftertouch;
 
         // Chance: one decision per step for all held keys, so a chord plays or rests as a whole.
@@ -728,10 +843,12 @@ private:
         return held.ownVelocity;
     }
 
-    static bool isAccentedStep (int64_t stepNumber, double stepLength, int pattern)
+    /** @return True if a step gets the accent; on a Bar grid the steps are counted from the bar start. */
+    bool isAccentedStep (int64_t stepNumber, int pattern) const noexcept
     {
-        const auto isMultipleOf = [stepNumber] (int64_t divisor)
-        { return ((stepNumber % divisor) + divisor) % divisor == 0; };
+        const int64_t countedStep = grid.stepInBar (stepNumber);
+        const auto isMultipleOf = [countedStep] (int64_t divisor)
+        { return ((countedStep % divisor) + divisor) % divisor == 0; };
         switch (pattern)
         {
             case everySecondStep: return isMultipleOf (2);
@@ -739,7 +856,7 @@ private:
             case everyFourthStep: return isMultipleOf (4);
             case onTheBeat:
             {
-                const double beat = (double) stepNumber * stepLength;
+                const double beat = grid.positionForAccents (stepNumber);
                 return std::abs (beat - std::round (beat)) < 1.0e-6;
             }
             default: return false;
@@ -761,6 +878,8 @@ private:
     int64_t lastStepNumber = noStepYet;
     double ownClockBeat = 0.0; ///< Our own clock, in beats, at the start of the next block
     bool wasFollowingHost = false;
+    bool wasOnBarGrid = false; ///< The previous block used a Bar grid (a switch resynchronises the steps)
+    StepGrid grid;             ///< The step grid of the current block
 };
 
 //==============================================================================
