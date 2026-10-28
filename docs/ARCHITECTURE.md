@@ -337,15 +337,11 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md#building) for commands. The workflow
 1. **Checks** (Linux): clang-format, clang-tidy, engine tests with warnings as errors, engine tests
    under address/UB sanitizers, plug-in layer tests, and screenshots of both editor pages (artifact
    `editor-screenshots`, the source of `docs/images/editor.png` and `docs/images/modulation.png`).
-2. **Plug-in build** (Windows and macOS, in parallel): the VST3, INSTALL.txt and LICENSE.txt.
-   - Windows: artifact `MIDI-Forge-Windows`, uploaded as a folder (GitHub zips artifacts itself, so the
-     download is a single zip).
-   - macOS (0.22.0): a universal binary (arm64 + x86_64, macOS 11+), ad-hoc signed with `codesign` (no Apple
-     Developer account, so not notarized; users clear the quarantine flag, see INSTALL.txt) and checked with
-     `lipo`. It is zipped with `ditto` in the job, because a GitHub artifact loses the bundle's file
-     permissions; artifact `MIDI-Forge-macOS` holds that zip.
-   - CLAP stays switched off (`MIDI_FORGE_BUILD_CLAP`).
-3. **Release** (tags `v*` only): zips each artifact folder (the macOS zip is taken as it is), takes the text
+2. **Plug-in build** (Windows): the VST3, INSTALL.txt and LICENSE.txt as artifact `MIDI-Forge-Windows`,
+   uploaded as a folder (GitHub zips artifacts itself, so the download is a single zip). macOS and CLAP
+   builds are switched off for now (see docs/IDEAS.md); CMake still knows both (universal binary on macOS,
+   `MIDI_FORGE_BUILD_CLAP`).
+3. **Release** (tags `v*` only): zips each artifact folder, takes the text
    from the version's section of `CHANGELOG.md` (no section: the job fails) and creates the GitHub release –
    a pre-release for versions below 1.0 or tags with a suffix. If a release for the tag exists already, it
    only uploads the zips (`--clobber`).

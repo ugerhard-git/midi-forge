@@ -26,7 +26,8 @@ option(MIDI_FORGE_BUILD_PLUGIN_TESTS "Build the plug-in layer tests (needs MIDI_
 option(MIDI_FORGE_WARNINGS_AS_ERRORS "Treat compiler warnings in our own code as errors" OFF)
 option(MIDI_FORGE_SANITIZERS "Build the engine and its tests with address and undefined-behaviour sanitizers" OFF)
 
-# Universal binary on macOS (Apple Silicon and Intel) unless the caller decides otherwise.
+# Universal binary on macOS (Apple Silicon and Intel) unless the caller decides otherwise. CI builds Windows only
+# for now; this stays so a Mac build can come back by adding the CI job (see docs/IDEAS.md).
 if(APPLE AND NOT CMAKE_OSX_ARCHITECTURES)
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "" FORCE)
 endif()

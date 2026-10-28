@@ -5,15 +5,6 @@ Windows (VST3)
 --------------
   Copy "MIDI Forge.vst3" to  C:\Program Files\Common Files\VST3\
 
-macOS (VST3, Apple Silicon and Intel)
--------------------------------------
-  Copy "MIDI Forge.vst3" to  ~/Library/Audio/Plug-Ins/VST3/
-
-  The plug-in is not notarized by Apple, so macOS quarantines it after the download and the DAW
-  refuses to load it. Remove the quarantine flag once, in Terminal:
-
-    xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/"MIDI Forge.vst3"
-
 Then rescan plug-ins in your DAW.
 
 Using it

@@ -35,16 +35,13 @@ not been used by many people yet: please report problems and ideas in the reposi
 ### Downloads
 
 - `MIDI-Forge-Windows.zip` – VST3 for Windows (64-bit).
-- `MIDI-Forge-macOS.zip` – VST3 for macOS 11 or newer (Apple Silicon and Intel).
 
 Installation: see `INSTALL.txt` in the zip, or the [user manual](https://github.com/ugerhard-git/midi-forge/blob/main/docs/MANUAL.md#installation).
 
 ### Known limitations
 
-- **macOS:** this is the first macOS build and has not been tried in a DAW yet – feedback is very welcome.
-  It is not notarized by Apple, so macOS blocks it after the download until you remove the quarantine flag
-  (one Terminal command, see `INSTALL.txt`).
-- VST3 only: no Audio Unit (so not for Logic Pro) and no CLAP for now.
+- Windows only for now; a macOS build is planned.
+- VST3 only: no Audio Unit and no CLAP for now.
 - Made and tested for Reaper and Bitwig Studio; other hosts with MIDI effect support should work.
 - Pitch Slide bends a whole MIDI channel; notes of a chord slide together (no MPE yet).
 

@@ -5,7 +5,7 @@ and randomizers – in front of any instrument.
 
 ![MIDI Forge](docs/images/editor.png)
 
-- **Format:** VST3 · **System:** Windows, macOS (11 or newer, Apple Silicon and Intel)
+- **Format:** VST3 · **System:** Windows (a macOS build is planned)
 - **Made for:** Reaper and Bitwig Studio (any host that supports MIDI-effect plug-ins should work)
 - **24 modules:** Note Range, Velocity Range, Channel Filter, Event Blocker, Note Split, Transpose, Scale Quantize,
   Velocity Curve, Channel Remap, Note Dispatcher, Groove, Diatonic Harmonizer, Arpeggiator, Chord, Note Echo,
