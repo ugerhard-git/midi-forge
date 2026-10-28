@@ -164,10 +164,13 @@ jobs:
           persist-credentials: false
           path: source
 
+      # Each platform's artifact is downloaded by name into its own folder. (With a pattern, a single matching
+      # artifact lands directly in `path`, so the loop below would zip the plug-in bundle instead – that
+      # broke the 0.22.0 release zip.) A new platform gets its own step here.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: MIDI-Forge-*
-          path: artifacts
+          name: MIDI-Forge-Windows
+          path: artifacts/MIDI-Forge-Windows
 
       # Each artifact arrives as a folder (artifacts/MIDI-Forge-Windows/...); zip each one for the release.
       - name: Zip the plug-ins

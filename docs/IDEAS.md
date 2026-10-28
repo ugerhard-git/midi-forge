@@ -35,7 +35,8 @@ Added and removed again in 0.22.0: GitHub's macOS runners were not available (jo
 in the queue, "capacity constraints"), and the owner did not want the release to wait. To bring it back,
 add to the `build` job's matrix `- name: macOS` / `os: macos-latest`, and after "Collect plug-ins":
 ad-hoc sign and check (`codesign --force --deep --sign -`, `codesign --verify --deep`, `lipo -info`), then
-zip with `ditto -c -k --sequesterRsrc` in the job and upload that zip as the artifact (a GitHub artifact
+zip with `ditto -c -k --sequesterRsrc` in the job and upload that zip as the artifact (and add a download
+step for `MIDI-Forge-macOS` in the release job) (a GitHub artifact
 loses the bundle's file permissions, which breaks the signature); the release job then takes the zip as it
 is. Put the macOS install folder (`~/Library/Audio/Plug-Ins/VST3/`) and the quarantine note
 (`xattr -dr com.apple.quarantine …`) back into the manual and packaging/INSTALL.txt. Consider an Intel macOS
