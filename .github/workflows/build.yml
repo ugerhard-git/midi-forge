@@ -122,9 +122,15 @@ jobs:
         shell: bash
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DMIDI_FORGE_BUILD_ENGINE_TESTS=OFF -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps"
 
+      # On failure the compiler errors are also posted as annotations, so they show on the run's summary page.
       - name: Build
         shell: bash
-        run: cmake --build build --config Release --target MidiForge_VST3 --parallel 4
+        run: |
+          set -o pipefail
+          if ! cmake --build build --config Release --target MidiForge_VST3 --parallel 4 2>&1 | tee build.log; then
+            grep -E "error|fatal" build.log | sort -u | head -n 20 | sed 's/^/::error::/'
+            exit 1
+          fi
 
       - name: Collect plug-ins
         shell: bash
