@@ -345,8 +345,10 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md#building) for commands. The workflow
      `lipo`. It is zipped with `ditto` in the job, because a GitHub artifact loses the bundle's file
      permissions; artifact `MIDI-Forge-macOS` holds that zip.
    - CLAP stays switched off (`MIDI_FORGE_BUILD_CLAP`).
-3. **Release** (tags `v*` only): zips each artifact folder (the macOS zip is taken as it is) and attaches the
-   zips to a GitHub Release.
+3. **Release** (tags `v*` only): zips each artifact folder (the macOS zip is taken as it is), takes the text
+   from the version's section of `CHANGELOG.md` (no section: the job fails) and creates the GitHub release –
+   a pre-release for versions below 1.0 or tags with a suffix. If a release for the tag exists already, it
+   only uploads the zips (`--clobber`).
 
 Dependencies (JUCE 9.0.4; clap-juce-extensions only with CLAP switched on) are fetched by CMake at pinned versions; GitHub
 Actions are pinned to commit SHAs and updated by Dependabot.

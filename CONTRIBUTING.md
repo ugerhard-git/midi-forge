@@ -77,8 +77,12 @@ Format everything in place with `clang-format -i $(git ls-files '*.cpp' '*.h')`.
 
 ## Releases
 
-Bump `project(MidiForge VERSION x.y.z)` in `CMakeLists.txt`, update the manual if needed, then push a
-tag `vx.y.z`. CI builds and publishes the release.
+1. Bump `project(MidiForge VERSION x.y.z)` in `CMakeLists.txt` and update the manual if needed.
+2. Add a section `## [x.y.z] – short title` to [CHANGELOG.md](CHANGELOG.md), written for users: it becomes
+   the text of the GitHub release (the build fails without it).
+3. Push a tag `vx.y.z` (only the owner, or with the owner's go). CI builds Windows and macOS and publishes
+   the release with both zips. Versions below 1.0 and tags with a suffix (`v1.0.0-rc1`) become
+   pre-releases. A release made by hand on GitHub for the tag is kept; CI only attaches the zips.
 
 ## Pull requests
 
