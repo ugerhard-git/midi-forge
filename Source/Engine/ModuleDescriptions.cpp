@@ -54,6 +54,8 @@ const char* const dispatchAlgorithmLabels[] = { "Round Robin", "Random", "Ping P
 const char* const dispatchModeLabels[] = { "Single Notes", "Chords" };
 const char* const mutateDirectionLabels[] = { "Up", "Down", "Both" };
 const char* const mutateMemoryLabels[] = { "4 Bars", "2 Bars", "1 Bar", "Per Pitch" };
+const char* const grooveTemplateLabels[] = { "Swing", "Laid-back Snare", "Pushed Off-beats", "Shuffle", "Drunk" };
+const char* const grooveGridLabels[] = { "1/8", "1/16", "1/32" };
 const char* const echoDivisionLabels[] = { "1/32", "1/16T", "1/16", "1/16D", "1/8T", "1/8",
                                            "1/8D", "1/4T",  "1/4",  "1/4D",  "1/2",  "1 Bar" };
 const char* const arpeggiatorDivisionLabels[] = { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
@@ -354,6 +356,23 @@ const ModuleDescription* createModuleTable()
           "it may move one more step to a neighbouring note of the scale, or back towards the original, and the "
           "module remembers it: per position in the loop (the note on beat 2 of bar 3) or per pitch (every C). "
           "Chords (notes within 30 ms) pass untouched." },
+
+        // Added in 0.17.0 --------------------------------------------------------------------------
+        { "Groove",
+          ModuleCategory::Transform,
+          "Pulls notes onto a groove: swing, laid-back snare, shuffle ...",
+          { choiceParameter ("Groove", grooveTemplateLabels, 0).withHelp ("The groove the notes are pulled to."),
+            percentParameter ("Amount", 0, 100, 100)
+                .withHelp ("How firmly notes snap to the groove (0 = untouched, 100 = exactly on it)."),
+            choiceParameter ("Grid", grooveGridLabels, 1).withHelp ("The grid the groove works on, e.g. 1/16 swing."),
+            percentParameter ("Velocity", 0, 100, 50).withHelp ("How strongly the groove's accents change velocities."),
+            // Page 2
+            integerParameter ("Early", 0, 30, 0, " ms", "Off")
+                .withHelp ("Room for notes to come early: everything is delayed this much (reported to the DAW).") },
+          "Moves every note towards the groove position of its nearest grid step and applies the groove's accents, "
+          "so programmed parts get a pocket. Works while the DAW plays (it needs the bar position). A plug-in "
+          "cannot play notes before they arrive: for grooves that push notes early, set Early; all notes are then "
+          "delayed that much, the early ones less, and the DAW is told to compensate." },
     };
     return table;
 }

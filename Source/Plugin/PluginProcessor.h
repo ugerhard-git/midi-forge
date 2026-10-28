@@ -245,6 +245,9 @@ private:
      */
     void resetKnobsAddedAfter (int savedKnobLayoutVersion);
     void readEngineSettings();
+    /** Reports the Early delay of the Groove modules to the host as latency, so it can compensate. */
+    void reportLatencyOfGrooves (double sampleRate);
+    static constexpr int grooveEarlyParameterIndex = 4; ///< Groove's "Early" knob (E)
     BlockContext readBlockContext (int numSamples);
     void publishReadoutsForEditor();
     /**

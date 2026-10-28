@@ -134,6 +134,10 @@ on all channels. The stress test also checks that no channel is left bent.
   and optionally `transformOtherEvent()`. Used by filters, transforms, Chord, Probability, Random Pitch.
 - **`SchedulingModule`** – sends events in the future using a queue of absolute sample times
   (`BlockContext::blockStartSample`). Used by Arpeggiator, Repeater, Note Echo and Humanize.
+- **Groove** is a `SchedulingModule` (like Humanize): each note-on is delayed by Early plus the groove shift
+  of its nearest grid step (clamped at 0), its note-off by the same amount. `BlockContext::beatAtSample()` gives
+  the bar position (shared by modules that need it). `MidiForgeProcessor::reportLatencyOfGrooves()` adds up
+  the Early time of every switched-on Groove and reports it with `setLatencySamples()`, so hosts compensate.
 - **Note Dispatcher** derives from `MidiModule` directly. Every input key remembers what happened to its note
   (`channelOfInputKey`: the channel it was sent to, *passed through* when it was not on the Input channel,
   or *stolen* when its channel was freed for a newer note), so note-offs and poly pressure always follow

@@ -1524,6 +1524,34 @@ TEST_CASE ("live values: a modulated knob shows the value the module uses now, i
     EXPECT (semitones.valueLabel.findColour (juce::Label::textColourId) == Theme::Colours::modulation);
 }
 
+//==============================================================================
+// Groove
+
+TEST_CASE ("groove: the host shows its knobs, and Early is reported to the host as latency")
+{
+    MidiForgeProcessor processor;
+    processor.loadModule (2, (int) ModuleType::Groove);
+    EXPECT (hostTextOf (processor, 2, 0) == "Swing");
+    EXPECT (hostTextOf (processor, 2, 1) == "100%");
+    EXPECT (hostTextOf (processor, 2, 2) == "1/16");
+    EXPECT (hostTextOf (processor, 2, 4) == "Off");
+
+    processor.setRateAndBufferSizeDetails (testSampleRate, testBlockSize);
+    processor.prepareToPlay (testSampleRate, testBlockSize);
+    processBlock (processor, {});
+    EXPECT (processor.getLatencySamples() == 0);
+
+    auto* early = processor.parameters.getParameter (ParameterIds::moduleParameter (2, 4));
+    early->setValueNotifyingHost (early->getValueForText ("20 ms"));
+    EXPECT (hostTextOf (processor, 2, 4) == "20 ms");
+    processBlock (processor, {});
+    EXPECT (processor.getLatencySamples() == 960); // 20 ms at 48 kHz
+
+    processor.parameters.getParameter (ParameterIds::slotEnabled (2))->setValueNotifyingHost (0.0f);
+    processBlock (processor, {});
+    EXPECT (processor.getLatencySamples() == 0);
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juceInitialiser;

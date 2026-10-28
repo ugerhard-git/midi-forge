@@ -143,6 +143,15 @@ struct BlockContext
     /** @return How many samples one quarter note lasts at the current tempo. */
     double samplesPerBeat() const noexcept { return sampleRate * 60.0 / std::max (1.0, tempoBpm); }
 
+    /**
+     * @return The host's musical position (quarter notes) at a sample position of this block. Only meaningful
+     *         when hasPpqPosition is true. Shared by the modules that need to know where in the bar a note is.
+     */
+    double beatAtSample (int samplePosition) const noexcept
+    {
+        return ppqPositionAtBlockStart + samplePosition / samplesPerBeat();
+    }
+
     /** @return True if tempo-synced modules should follow the host's musical position. */
     bool followsHostTransport() const noexcept { return isPlaying && hasPpqPosition; }
 };

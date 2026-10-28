@@ -1,7 +1,7 @@
 /**
  * @file TransformModules.cpp
  * @brief Modules that change events: Transpose, Scale Quantize, Velocity Curve, Channel Remap,
- *        Note Dispatcher.
+ *        Note Dispatcher, Groove.
  */
 #include "TransformModules.h"
 
@@ -483,6 +483,157 @@ private:
     SoundingNoteCounter soundingNotes;
 };
 
+/**
+ * Pulls notes onto a groove template. Each note snaps (by Amount) towards the groove position of its nearest
+ * grid step and gets the template's accent (by Velocity). A plug-in cannot play a note before it arrives, so
+ * every note is delayed by Early and pulled earlier from there; with Early 0 grooves can only drag notes.
+ * The note-off of a note is delayed exactly as much as its note-on, so note lengths stay.
+ */
+class Groove final : public SchedulingModule
+{
+public:
+    Groove() : SchedulingModule (ModuleType::Groove) { delayOfHeldNote.fill (noDelayStored); }
+
+    void reset() override
+    {
+        SchedulingModule::reset();
+        delayOfHeldNote.fill (noDelayStored);
+    }
+
+    void process (const MidiEventList& input, MidiEventList& output, const BlockContext& context,
+                  const float* parameterValues) override
+    {
+        const int64_t earlyDelay =
+            std::llround (integerParameter (parameterValues, earlyMilliseconds) / 1000.0 * context.sampleRate);
+        for (const auto& event : input)
+        {
+            const int64_t eventTime = context.blockStartSample + event.samplePosition;
+            sendScheduledEventsUpTo (eventTime, context, output);
+
+            if (! event.isNoteOnOrOff())
+            {
+                // Everything else is delayed like the notes, so controllers stay in step with them.
+                if (earlyDelay > 0)
+                    scheduleEvent (eventTime + earlyDelay, event);
+                else
+                    sendEvent (event, output);
+                continue;
+            }
+
+            auto& storedDelay = delayOfHeldNote[channelNoteIndex (event.channel(), event.noteNumber())];
+            if (event.isNoteOn())
+            {
+                if (storedDelay != noDelayStored) // retriggered: end the previous note first
+                    scheduleEvent (eventTime + storedDelay,
+                                   MidiEvent::noteOff (0, event.channel(), event.noteNumber()));
+
+                int velocityChange = 0;
+                const int64_t shift = context.followsHostTransport()
+                                          ? grooveShift (context, event.samplePosition, parameterValues, velocityChange)
+                                          : 0;
+                storedDelay = std::max<int64_t> (0, earlyDelay + shift);
+                MidiEvent noteOn = event;
+                noteOn.data2 = (uint8_t) std::clamp (event.velocity() + velocityChange, 1, 127);
+                scheduleEvent (eventTime + storedDelay, noteOn);
+            }
+            else if (storedDelay != noDelayStored)
+            {
+                scheduleEvent (eventTime + storedDelay, event);
+                storedDelay = noDelayStored;
+            }
+            else
+            {
+                sendEvent (event, output); // a note that started before this module was active
+            }
+        }
+        sendScheduledEventsInBlock (context, output);
+    }
+
+    /** One position of a groove template: timing offset (in grid steps, + = late) and velocity accent. */
+    struct GroovePoint
+    {
+        double offsetInSteps;
+        int velocityAccent;
+    };
+
+    /**
+     * @return The template's timing and accent for a grid step.
+     * @param stepInBar   The grid step counted from the start of the bar.
+     * @param stepsPerBeat Grid steps per quarter note (2, 4 or 8).
+     */
+    static GroovePoint groovePoint (int grooveTemplate, int64_t stepInBar, int stepsPerBeat) noexcept
+    {
+        const auto stepInBeat = (int) (stepInBar % stepsPerBeat);
+        const auto beatInBar = (int) ((stepInBar / stepsPerBeat) % 4);
+        const bool isOffStep = (stepInBar % 2) != 0;
+        switch (grooveTemplate)
+        {
+            case swing: return { isOffStep ? 0.2 : 0.0, isOffStep ? -10 : 8 }; // 60 % swing
+            case laidBackSnare:
+            {
+                const bool isSnareBeat = stepInBeat == 0 && (beatInBar == 1 || beatInBar == 3);
+                return { isSnareBeat ? 0.2 : 0.0, isSnareBeat ? 12 : (stepInBeat == 0 ? 4 : -4) };
+            }
+            case pushedOffBeats:
+            {
+                const bool isOffBeat = stepInBeat == stepsPerBeat / 2;
+                return { isOffBeat ? -0.15 : 0.0, isOffBeat ? 10 : (stepInBeat == 0 ? 0 : -6) };
+            }
+            case shuffle: return { isOffStep ? 1.0 / 3.0 : 0.0, isOffStep ? -14 : 10 }; // triplet feel
+            case drunk:
+            {
+                static constexpr GroovePoint pattern[] = { { -0.12, 10 }, { 0.18, -10 }, { -0.06, 2 }, { 0.22, -14 } };
+                return pattern[stepInBar % 4];
+            }
+            default: return { 0.0, 0 };
+        }
+    }
+
+private:
+    enum Parameter
+    {
+        grooveTemplateIndex,
+        amountPercent,
+        gridIndex,
+        velocityPercent,
+        earlyMilliseconds ///< page 2
+    };
+    enum GrooveTemplate
+    {
+        swing,
+        laidBackSnare,
+        pushedOffBeats,
+        shuffle,
+        drunk
+    };
+    static constexpr int64_t noDelayStored = -1;
+
+    /** @return How many samples the groove moves a note (negative = earlier), and its velocity change. */
+    int64_t grooveShift (const BlockContext& context, int samplePosition, const float* parameterValues,
+                         int& velocityChange) const noexcept
+    {
+        static constexpr int stepsPerBeatOfGrid[] = { 2, 4, 8 }; // 1/8, 1/16, 1/32
+        const int stepsPerBeat = stepsPerBeatOfGrid[std::clamp (integerParameter (parameterValues, gridIndex), 0, 2)];
+        const double stepLengthInBeats = 1.0 / stepsPerBeat;
+
+        const double beat = context.beatAtSample (samplePosition);
+        const auto nearestStep = (int64_t) std::llround (beat / stepLengthInBeats);
+        const int64_t stepsPerBar = 4 * (int64_t) stepsPerBeat; // 4/4
+        const int64_t stepInBar = ((nearestStep % stepsPerBar) + stepsPerBar) % stepsPerBar;
+        const auto point =
+            groovePoint (integerParameter (parameterValues, grooveTemplateIndex), stepInBar, stepsPerBeat);
+
+        const double amount = integerParameter (parameterValues, amountPercent) / 100.0;
+        const double targetBeat = ((double) nearestStep + point.offsetInSteps) * stepLengthInBeats;
+        const double shiftInBeats = (targetBeat - beat) * amount;
+        velocityChange =
+            (int) std::lround (point.velocityAccent * integerParameter (parameterValues, velocityPercent) / 100.0);
+        return std::llround (shiftInBeats * context.samplesPerBeat());
+    }
+
+    std::array<int64_t, numChannelNoteCombinations> delayOfHeldNote {};
+};
+
 } // namespace
 
 std::unique_ptr<MidiModule> createTransformModule (ModuleType type)
@@ -494,6 +645,7 @@ std::unique_ptr<MidiModule> createTransformModule (ModuleType type)
         case ModuleType::VelocityCurve: return std::make_unique<VelocityCurve>();
         case ModuleType::ChannelRemap: return std::make_unique<ChannelRemap>();
         case ModuleType::NoteDispatcher: return std::make_unique<NoteDispatcher>();
+        case ModuleType::Groove: return std::make_unique<Groove>();
         default: return nullptr;
     }
 }

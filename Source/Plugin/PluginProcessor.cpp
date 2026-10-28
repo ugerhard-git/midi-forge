@@ -449,6 +449,21 @@ bool MidiForgeProcessor::isBusesLayoutSupported (const BusesLayout& /*layouts*/)
     return true; // no audio is processed, so any layout a host insists on is fine
 }
 
+void MidiForgeProcessor::reportLatencyOfGrooves (double sampleRate)
+{
+    // Every switched-on Groove delays all notes by its Early time; delays of several Grooves add up.
+    int totalEarlyMilliseconds = 0;
+    const auto& earlyParameter = getModuleDescription (ModuleType::Groove).parameters[grooveEarlyParameterIndex];
+    for (const auto& slot : engineSettings.slots)
+        if (slot.moduleType == (int) ModuleType::Groove && slot.isEnabled)
+            totalEarlyMilliseconds +=
+                normalisedToInteger (earlyParameter, slot.parameterValues[grooveEarlyParameterIndex]);
+
+    const int requiredLatency = (int) std::lround (totalEarlyMilliseconds / 1000.0 * sampleRate);
+    if (requiredLatency != getLatencySamples())
+        setLatencySamples (requiredLatency); // the host is told asynchronously and compensates the track
+}
+
 void MidiForgeProcessor::readEngineSettings()
 {
     for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
@@ -510,6 +525,7 @@ void MidiForgeProcessor::processBlock (juce::AudioBuffer<float>& audio, juce::Mi
 
     readEngineSettings();
     const BlockContext context = readBlockContext (audio.getNumSamples());
+    reportLatencyOfGrooves (context.sampleRate);
 
     // Split the incoming MIDI: short messages go through the engine, long ones pass untouched.
     engineEvents.clear();

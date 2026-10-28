@@ -197,6 +197,37 @@ If two keys land on the same scale note, it keeps sounding until both keys are r
 | From | All, 1 … 16 | Which channel to move (All = every channel) |
 | To | 1 … 16 | Target channel |
 
+**Groove** – pulls notes onto a groove, so programmed parts get a pocket instead of sitting rigidly on the
+grid. Each note moves towards the groove position of its nearest grid step (*Amount* decides how far: 100 %
+puts it exactly there, which also tidies up sloppy timing), and the groove's accents change its velocity.
+The note-off moves with its note, so note lengths stay. Groove needs the bar position, so it works while the
+DAW plays; when it is stopped, notes pass unchanged.
+
+| Groove | What it does |
+|--------|--------------|
+| Swing | Every second grid step comes later (60 % swing) and a little softer |
+| Laid-back Snare | Beats 2 and 4 sit slightly behind the beat and are accented |
+| Pushed Off-beats | The "and" between the beats comes slightly early (needs *Early*, see below) and is accented |
+| Shuffle | A full triplet feel: every second grid step two thirds of the way |
+| Drunk | Every grid step a little early or late in a four-step pattern |
+
+| Knob | Range | Meaning |
+|------|-------|---------|
+| Groove | see above | The groove template |
+| Amount | 0 … 100 % | How firmly notes snap to the groove (default 100 %) |
+| Grid | 1/8, 1/16, 1/32 | The grid the groove works on, e.g. 1/8 for eighth-note swing (default 1/16) |
+| Velocity | 0 … 100 % | How strongly the groove's accents change velocities (default 50 %) |
+| Early *(page 2)* | Off, 1 … 30 ms | Room for notes to come early, see below |
+
+**Early notes:** a plug-in cannot play a note before it arrives. With *Early* set, Groove delays **every** note
+(and every other event) by that time, and notes the groove wants early are delayed less – so they can come up
+to that much ahead of the others. MIDI Forge tells your DAW about this delay (as plug-in latency), and
+Reaper and Bitwig normally shift the track to compensate, so everything stays in time with the rest of the
+song. If the whole part sounds late, set the track's delay/offset in your DAW to minus the Early time.
+Without Early, grooves can only move notes later (which is all Swing, Shuffle and Laid-back Snare need), and
+late-played notes cannot be pulled back onto the beat. Keep a Groove with Early switched on: switching the
+slot on and off (also by modulation) changes the delay.
+
 **Note Dispatcher** – spreads notes over several MIDI channels, picking a **free** channel for every note
 (or every chord). Use it to play several mono synths as one polyphonic instrument, or to alternate between
 sounds on different channels. A channel is free when none of the notes sent to it are still held.

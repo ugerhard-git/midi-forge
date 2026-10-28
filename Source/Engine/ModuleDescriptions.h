@@ -50,6 +50,8 @@ enum class ModuleType : int
     NoteDispatcher, ///< Transform
     // Added in 0.15.0
     Mutate, ///< Randomizer
+    // Added in 0.17.0
+    Groove, ///< Transform
 
     Count
 };

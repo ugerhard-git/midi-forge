@@ -15,7 +15,7 @@ When a feature is implemented, remove it here and describe it in [MANUAL.md](MAN
 Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 
 1. ~~Step modulator ties (0.16)~~ built
-2. Groove (0.17), with a shared "position in the bar" helper
+2. ~~Groove (0.17), with a shared "position in the bar" helper~~ built
 3. Strum + Ghost Notes (0.18)
 4. Beat-aware thinning + Diatonic Harmonizer (0.19), with a shared scale helper
 5. Modulating the modulation (0.20)
@@ -24,25 +24,9 @@ Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 
 ## Planned
 
-### Groove module (Timing; agreed, waiting for the go)
-
-- **Knobs:** A *Groove* (template: Swing, Laid-back Snare, Pushed Off-beats, Shuffle, Drunk; more can be
-  appended later), B *Amount* (0–100 %: how firmly notes snap to the template), C *Grid* (the swing grid,
-  e.g. 1/8, 1/16, 1/32), D *Velocity* (0–100 %: the template's accents), page 2: E *Early* (0–30 ms).
-- Snaps notes (within half a grid step) towards the template position of the nearest grid point; Amount
-  decides how far. Note-offs move with their notes, so lengths stay.
-- Early notes: every note is delayed by *Early*, "early" notes less; the delay is reported to the DAW as
-  latency so it can compensate. Early 0 = no delay, grooves can only drag notes later.
-- Works while the DAW plays (needs the bar position); otherwise notes pass unchanged.
-
+(nothing at the moment)
 
 ## Ideas
-
-### Groove
-
-Pushes notes towards a groove template (MPC-style swing 54–75 %, laid-back snare …) with a *Feel* amount,
-so straight programming gets a pocket instead of random wobble. Needs: which templates, how far notes may
-move (a plug-in can only delay notes, so "early" means delaying everything else).
 
 ### Strum
 
