@@ -170,6 +170,22 @@ public:
     {
         return currentStepReadouts[(size_t) stepModulatorIndex].load();
     }
+    /**
+     * @return True if an active route moves this target (any target number: slot knob, switch, route amount,
+     *         LFO or step setting).
+     */
+    bool isTargetModulated (int targetIndex) const noexcept;
+    /**
+     * @return The current text of a modulated setting of the modulation itself (route amount, LFO rate, phase
+     *         or width, step rate or glide) as the engine last used it, e.g. "1/8" or "+35%"; empty when the
+     *         target is not such a setting.
+     */
+    juce::String getModulatedSettingText (int targetIndex) const;
+    /**
+     * @return The modulated value of such a setting in the unit of its host parameter (amount in %, LFO rate
+     *         as note value index or Hz, phase in degrees, width in %, step rate as index, glide in %).
+     */
+    float getModulatedSettingValue (int targetIndex) const noexcept;
     /** @return True if an active route uses this modulation source (for the dots on the sub-tabs). */
     bool isSourceInUse (int sourceIndex) const noexcept;
     /** @return A Note Random modulator's current value (-1..+1). */
@@ -227,6 +243,13 @@ private:
     void addStepModulatorParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
     /** Added in 0.16.0, after all older parameters: the step ties. */
     void addStepTieParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
+    /** Routes 9..12 (0.20.0), appended after every older parameter. */
+    void addExtraRouteParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
+    /** Adds the source, target and amount (and, for routes from 0.20.0 on, the polarity) of one route. */
+    void addRouteParameterGroup (juce::AudioProcessorValueTreeState::ParameterLayout& layout, int routeIndex,
+                                 int version, bool includesPolarity);
+    /** @return The host parameter that a modulation target moves (route amount, LFO or step setting), or nullptr. */
+    juce::RangedAudioParameter* getParameterOfModulationSetting (int targetIndex) const;
     std::unique_ptr<juce::AudioParameterFloat> createModuleParameter (int slotIndex, int parameterIndex, int version);
     /**
      * The parameter state plus the shown knob pages and the knob layout version, as saved in projects and
@@ -323,6 +346,12 @@ private:
     // Written by the audio thread after each block, read by the editor.
     std::array<std::atomic<float>, numSlots * numParametersPerSlot> modulatedValueReadouts {};
     std::array<std::atomic<bool>, numSlots> modulatedSwitchReadouts {};
+    /**
+     * The modulated value of every setting of the modulation (targets from firstRouteAmountTarget on), in the
+     * unit of its host parameter: amount in %, LFO rate as note value index or Hz, phase in degrees, width in
+     * %, step rate as index, glide in %.
+     */
+    std::array<std::atomic<float>, numModulationTargets - firstRouteAmountTarget> modulatedSettingReadouts {};
     std::atomic<juce::uint32> lastBlockTimeMilliseconds { 0 }; ///< When the host last called processBlock
     std::array<std::atomic<float>, numLfos> lfoValueReadouts {};
     std::array<std::atomic<float>, numLfos> lfoPhaseReadouts {};

@@ -35,17 +35,19 @@ void StepModulator::reset() noexcept
 {
     freeRunningSteps = 0.0;
     restartBeat = 0.0;
+    isOffGrid = false;
 }
 
 void StepModulator::restart (const BlockContext& context) noexcept
 {
     freeRunningSteps = 0.0;
+    isOffGrid = false;
     restartBeat = context.followsHostTransport() ? context.ppqPositionAtBlockStart : 0.0;
 }
 
 double StepModulator::stepPositionAt (const StepModulatorSettings& settings, const BlockContext& context) const noexcept
 {
-    if (context.followsHostTransport())
+    if (context.followsHostTransport() && ! isOffGrid)
         return divisionsBetween (divisionOf (settings), context, restartBeat, context.ppqPositionAtBlockStart);
     return freeRunningSteps;
 }
@@ -89,7 +91,7 @@ float StepModulator::valueAt (const StepModulatorSettings& settings, const Block
 
 void StepModulator::advance (const StepModulatorSettings& settings, const BlockContext& context) noexcept
 {
-    if (context.followsHostTransport())
+    if (context.followsHostTransport() && ! isOffGrid)
     {
         // Mirror the host position, so the steps continue smoothly when the transport stops.
         freeRunningSteps =

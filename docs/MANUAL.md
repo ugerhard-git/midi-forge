@@ -520,7 +520,8 @@ DAW automation:
 
 They make no sound themselves; they only move the settings of the MIDI modules. All of this lives on the
 **Modulation** tab: the three small tabs at the top (**LFOs · Random · Steps**) switch between the sources,
-and the eight **routes** below connect sources to knobs and switches. A yellow dot on one of the small tabs
+and the twelve **routes** below connect sources to knobs and switches – or to the settings of the
+modulation itself (see [Modulating the modulation](#modulating-the-modulation)). A yellow dot on one of the small tabs
 means one of its sources is used by a route.
 
 ### LFOs
@@ -591,12 +592,14 @@ for a module that plays only in every fourth bar (see the *Breathing Steps* pres
 
 ### Modulation routes
 
-The eight routes connect a source to a slot knob:
+The twelve routes connect a source to a slot knob, a slot's switch, or a setting of the modulation. They are
+shown six at a time: the buttons **1 – 6** and **7 – 12** next to the title switch between them, and a yellow
+dot on a button means one of its routes is in use.
 
 | Control | Meaning |
 |---------|---------|
 | Source | LFO 1 … 4, Random 1 … 4 or Steps 1 … 4 |
-| Target | Which knob, named after the module in that slot, e.g. *Slot 2 · Gate*, or a slot's power switch (*Slot 2 · On/Off*). The menu lists the knobs of every loaded module, slot by slot (both pages), followed by its On/Off switch. *None* switches the route off |
+| Target | Which knob, named after the module in that slot, e.g. *Slot 2 · Gate*, or a slot's power switch (*Slot 2 · On/Off*). The menu lists the knobs of every loaded module, slot by slot (both pages), followed by its On/Off switch, and then, under *Modulation*, the sub-menus *Route amounts*, *LFOs* and *Steps*. *None* switches the route off |
 | **±** / **+** | Polarity. **±** (bipolar, the default): the source moves the knob below *and* above its position. **+** (unipolar): the source only pushes the knob **up** from its position (or only **down** with a negative amount). Click to switch |
 | Amount | −100 … +100 %. How far the source moves the knob. At 100 % it can sweep the knob's whole range; negative amounts turn the source upside down. Double-click: 50 % |
 
@@ -619,16 +622,44 @@ The eight routes connect a source to a slot knob:
   press it again.
 - Routes follow their module: when a module moves (▲ / ▼, or because a module above it was removed), its
   routes keep pointing at it. Routes to a removed module are set to *None* (Undo restores them).
-- The module type and the slot's on/off switch cannot be modulated (switching them releases notes).
+- The module type cannot be modulated (changing it releases notes).
 - If you change the module in a slot, routes to that slot keep pointing at the same knob position (A … H),
   which now belongs to the new module. The target name shows what it controls.
 - Modulation never changes your knob settings, and it never writes into your DAW's automation.
 - Values are taken at the exact moment a note arrives; notes the plug-in generates itself
   (arpeggio steps, echoes) use an LFO value at most 32 samples old.
 
+### Modulating the modulation
+
+Routes can also move the modulation's own settings, so the movement itself changes over time:
+
+| Target | What moves | Example |
+|--------|------------|---------|
+| Route 1 … 12 · Amount | How strongly that route acts | A slow LFO fades a vibrato route in and out; a Random modulator decides per phrase how hard a step pattern hits |
+| LFO 1 … 4 · Rate | The LFO's speed: its note value (Tempo) or its Hz (Free) | A slow LFO speeds a fast one up and slows it down again |
+| LFO 1 … 4 · Phase | Where in its cycle the LFO is | A step modulator shifts the wave from bar to bar |
+| LFO 1 … 4 · Width | The Square wave's pulse width | |
+| Steps 1 … 4 · Rate | The step length | Steps get faster towards the end of a phrase |
+| Steps 1 … 4 · Glide | How smoothly the steps slide | A pattern turns from hard steps into a smooth curve over 8 bars |
+
+- The **amount** works as for knobs: at 100 % a source moves the setting across its whole range. A route's
+  *amount* is the exception: it moves by up to the other route's amount in percentage points and stays
+  within −100 … +100 %. A route set to 0 % does nothing on its own, but comes alive while another route
+  pushes its amount up (use a **+** route for that).
+- A tempo-synced **rate** steps through the note values (1 Bar, 1/2, 1/4D …); a free rate glides through
+  the Hz. The **phase** wraps around (350° + 20° = 10°).
+- **Speed changes are smooth:** while its rate is modulated, an LFO or step modulator keeps its place in
+  the cycle and only changes speed, so the wave never jumps. It leaves the DAW's bar grid for that time and
+  locks onto the bar again at the next *Restart on key* or when the DAW starts playing.
+- **Loops are allowed:** LFO 1 can speed up LFO 2 while LFO 2 speeds up LFO 1, and an LFO can even move its
+  own rate. Routes to the modulation's settings use the sources' values from a moment earlier (under 1 ms),
+  which keeps such loops stable.
+- On the Modulation tab, a setting moved by a route shows its current value in yellow (the LFO knobs, the
+  step modulator's rate and glide, a route's amount). Point the mouse at it to see your own setting.
+
 ## Presets
 
-A preset stores the complete setup: all eight slots, the four LFOs and the eight routes.
+A preset stores the complete setup: all eight slots, all modulation sources and the twelve routes.
 
 ### The preset controls
 

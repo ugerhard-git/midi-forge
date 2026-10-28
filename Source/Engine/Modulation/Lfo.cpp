@@ -44,11 +44,13 @@ void Lfo::reset() noexcept
 {
     freeRunningCycles = 0.0;
     restartBeat = 0.0;
+    isOffGrid = false;
 }
 
 void Lfo::restart (const BlockContext& context) noexcept
 {
     freeRunningCycles = 0.0;
+    isOffGrid = false;
     // While following the host, count cycles from the restart position; otherwise re-align to the bar
     // grid once the transport starts.
     restartBeat = context.followsHostTransport() ? context.ppqPositionAtBlockStart : 0.0;
@@ -66,7 +68,7 @@ double Lfo::cyclePositionAt (const LfoSettings& settings, const BlockContext& co
 {
     const double phaseOffsetInCycles = settings.phaseDegrees / 360.0;
 
-    if (settings.isTempoSynced && context.followsHostTransport())
+    if (settings.isTempoSynced && context.followsHostTransport() && ! isOffGrid)
     {
         return divisionsBetween (divisionOf (settings), context, restartBeat, context.ppqPositionAtBlockStart) +
                phaseOffsetInCycles;
@@ -90,7 +92,7 @@ float Lfo::unipolarValueAt (const LfoSettings& settings, const BlockContext& con
 
 void Lfo::advance (const LfoSettings& settings, const BlockContext& context) noexcept
 {
-    if (settings.isTempoSynced && context.followsHostTransport())
+    if (settings.isTempoSynced && context.followsHostTransport() && ! isOffGrid)
     {
         // Mirror the host position in our own clock, so the LFO continues smoothly if the transport stops.
         const double blockEndBeat = context.beatAtSample (context.numSamples);

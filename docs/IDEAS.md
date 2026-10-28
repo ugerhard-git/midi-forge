@@ -18,7 +18,7 @@ Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 2. ~~Groove (0.17), with a shared "position in the bar" helper~~ built
 3. ~~Strum + Ghost Notes (0.18)~~ built
 4. ~~Beat Thinning + Diatonic Harmonizer (0.19), time signatures followed everywhere~~ built
-5. Modulating the modulation (0.20)
+5. ~~Modulating the modulation (0.20)~~ built
 6. Pitch Slide: Fall Off (0.21)
 - Later, separately: Pitch Slide MPE. Parked until the owner wants it: macOS and CLAP builds.
 
@@ -27,11 +27,6 @@ Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 (nothing at the moment)
 
 ## Ideas
-
-### Modulating the modulation
-
-Let routes target another LFO's rate or another route's amount (e.g. a slow LFO that speeds up a fast one).
-The LFOs exist now (0.2.0); needs a design discussion (which targets, how the menu lists them).
 
 ### macOS and CLAP builds
 

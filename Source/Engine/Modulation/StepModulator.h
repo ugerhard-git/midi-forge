@@ -54,6 +54,8 @@ struct StepModulatorSettings
 /**
  * @brief One step modulator. Its timing works like a tempo-synced LFO: while the host transport runs it
  *        follows the host's musical position (step 1 on the bar grid), otherwise it runs on its own clock.
+ *        While a route modulates its rate it runs on its own clock too, until the next restart on key or
+ *        transport start (see Lfo).
  */
 class StepModulator
 {
@@ -76,6 +78,17 @@ public:
     /** Moves the own clock forward by the length of the given stretch of time. */
     void advance (const StepModulatorSettings& settings, const BlockContext& context) noexcept;
 
+    /** Call before evaluating a stretch of time: a modulated rate makes the steps run on the own clock. */
+    void followRateModulation (bool isRateModulated) noexcept
+    {
+        if (isRateModulated)
+            isOffGrid = true;
+    }
+    /** Locks onto the bar grid again (the transport started). */
+    void lockToGrid() noexcept { isOffGrid = false; }
+    /** @return True while the steps run on the own clock because the rate was modulated. */
+    bool isRunningOffGrid() const noexcept { return isOffGrid; }
+
     /**
      * @return The output for a position in steps: the value of the step (or of the first step of its tied
      *         group), and with glide a smooth slide to the next value during the last part of the group.
@@ -85,6 +98,7 @@ public:
 private:
     double freeRunningSteps = 0.0; ///< Own clock, in steps since the last reset or restart.
     double restartBeat = 0.0;      ///< Host position (quarter notes) of the last restart.
+    bool isOffGrid = false;        ///< Left the bar grid because the rate was modulated
 };
 
 } // namespace midiforge

@@ -298,9 +298,39 @@ void StepModulatorPanel::refreshFromProcessor()
     fewerStepsButton.setEnabled (settings.numSteps > minimumSteps);
     moreStepsButton.setEnabled (settings.numSteps < maximumSteps);
 
+    // Glide and rate moved by routes show their current value in the modulation colour.
+    const bool isEngineRunning = processor.isEngineRunning();
+    const int glideTarget = stepSettingTarget (stepModulatorIndex, StepSettingTarget::glide);
+    const bool showsModulatedGlide =
+        isEngineRunning && processor.isTargetModulated (glideTarget) && ! glideSlider.isMouseOverOrDragging();
     if (auto* glideParameter = processor.parameters.getParameter (ParameterIds::stepGlide (stepModulatorIndex)))
-        if (glideValue.getText() != glideParameter->getCurrentValueAsText())
-            glideValue.setText (glideParameter->getCurrentValueAsText(), juce::dontSendNotification);
+    {
+        const auto glideText = showsModulatedGlide ? processor.getModulatedSettingText (glideTarget)
+                                                   : glideParameter->getCurrentValueAsText();
+        if (glideValue.getText() != glideText)
+            glideValue.setText (glideText, juce::dontSendNotification);
+        const auto colour = showsModulatedGlide ? Theme::Colours::modulation : Theme::Colours::primaryText;
+        if (glideValue.findColour (juce::Label::textColourId) != colour)
+            glideValue.setColour (juce::Label::textColourId, colour);
+    }
+
+    // The rate menu shows the modulated note value as its text (the parameter itself is unchanged).
+    const int rateTarget = stepSettingTarget (stepModulatorIndex, StepSettingTarget::rate);
+    const bool showsModulatedRate = isEngineRunning && processor.isTargetModulated (rateTarget) &&
+                                    ! rateMenu.isMouseOver (true) && ! rateMenu.isPopupActive();
+    const auto rateColour = showsModulatedRate ? Theme::Colours::modulation : Theme::Colours::primaryText;
+    if (rateMenu.findColour (juce::ComboBox::textColourId) != rateColour)
+        rateMenu.setColour (juce::ComboBox::textColourId, rateColour);
+    if (showsModulatedRate)
+    {
+        const auto rateText = processor.getModulatedSettingText (rateTarget);
+        if (rateMenu.getText() != rateText)
+            rateMenu.setText (rateText, juce::dontSendNotification);
+    }
+    else if (const int ownRateId = settings.divisionIndex + 1; rateMenu.getSelectedId() != ownRateId)
+    {
+        rateMenu.setSelectedId (ownRateId, juce::dontSendNotification);
+    }
 
     // Title line: "step 6 / 16 · -30" while routed, "not routed" otherwise.
     const bool isInUse = processor.isSourceInUse (firstStepModulatorSource + stepModulatorIndex);

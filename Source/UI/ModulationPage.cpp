@@ -63,9 +63,19 @@ void CompactKnob::resized()
 
 void CompactKnob::refresh()
 {
-    const auto text = knob.getTextFromValue (knob.getValue());
+    const bool showsModulation = modulatedValueText.isNotEmpty() && ! knob.isMouseOverOrDragging();
+    const auto text = showsModulation ? modulatedValueText : knob.getTextFromValue (knob.getValue());
     if (valueLabel.getText() != text)
         valueLabel.setText (text, juce::dontSendNotification);
+    const auto colour = showsModulation ? Theme::Colours::modulation : Theme::Colours::primaryText;
+    if (valueLabel.findColour (juce::Label::textColourId) != colour)
+        valueLabel.setColour (juce::Label::textColourId, colour);
+}
+
+void CompactKnob::showModulatedValue (const juce::String& modulatedText)
+{
+    modulatedValueText = modulatedText;
+    refresh();
 }
 
 //==============================================================================
@@ -214,8 +224,30 @@ void LfoPanel::resized()
 
 void LfoPanel::refreshFromProcessor()
 {
-    const auto settings = processor.getLfoSettings (lfoIndex);
-    preview.show (settings, processor.getLfoPhase (lfoIndex), processor.getLfoValue (lfoIndex));
+    // Settings moved by routes show their current value in the modulation colour (and in the preview).
+    auto settings = processor.getLfoSettings (lfoIndex);
+    auto shownSettings = settings;
+    const bool isEngineRunning = processor.isEngineRunning();
+    const auto modulatedText = [&] (LfoSettingTarget setting)
+    {
+        const int target = lfoSettingTarget (lfoIndex, setting);
+        return isEngineRunning && processor.isTargetModulated (target) ? processor.getModulatedSettingText (target)
+                                                                       : juce::String();
+    };
+    const auto rateText = modulatedText (LfoSettingTarget::rate);
+    const auto phaseText = modulatedText (LfoSettingTarget::phase);
+    const auto widthText = modulatedText (LfoSettingTarget::width);
+    if (phaseText.isNotEmpty())
+        shownSettings.phaseDegrees =
+            processor.getModulatedSettingValue (lfoSettingTarget (lfoIndex, LfoSettingTarget::phase));
+    if (widthText.isNotEmpty())
+        shownSettings.pulseWidth =
+            processor.getModulatedSettingValue (lfoSettingTarget (lfoIndex, LfoSettingTarget::width)) / 100.0;
+    rateKnob.showModulatedValue (rateText);
+    divisionKnob.showModulatedValue (rateText);
+    phaseKnob.showModulatedValue (phaseText);
+    pulseWidthKnob.showModulatedValue (widthText);
+    preview.show (shownSettings, processor.getLfoPhase (lfoIndex), processor.getLfoValue (lfoIndex));
 
     rateKnob.setVisible (! settings.isTempoSynced);
     divisionKnob.setVisible (settings.isTempoSynced);
@@ -338,8 +370,9 @@ RouteRow::RouteRow (MidiForgeProcessor& processorToControl, int routeIndexToShow
     };
     rebuildTargetMenu();
     targetAttachment->sendInitialUpdate();
-    sourceMenu.setTooltip ("Which LFO or Random modulator drives this route");
-    targetMenu.setTooltip ("Which slot parameter the source moves");
+    sourceMenu.setTooltip ("Which LFO, Random or step modulator drives this route");
+    targetMenu.setTooltip ("What the source moves: a slot knob or switch, or (under Modulation) another route's "
+                           "amount or an LFO or step modulator setting");
 
     polarityButton.setClickingTogglesState (true);
     polarityButton.setTooltip (juce::String::fromUTF8 (
@@ -435,6 +468,34 @@ void RouteRow::rebuildTargetMenu()
         selectedTargetListed = selectedTargetListed || switchTarget == selectedTarget;
     }
 
+    // The modulation's own settings, in sub-menus so the list stays short.
+    targetMenu.addSectionHeading ("Modulation");
+    juce::PopupMenu routeAmountMenu, lfoMenu, stepsMenu;
+    for (int routeNumber = 0; routeNumber < numModulationRoutes; ++routeNumber)
+    {
+        const int targetIndex = routeAmountTarget (routeNumber);
+        routeAmountMenu.addItem (targetIndex + 1, processor.getModulationTargetName (targetIndex), true,
+                                 targetIndex == selectedTarget);
+    }
+    for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
+        for (const auto setting : { LfoSettingTarget::rate, LfoSettingTarget::phase, LfoSettingTarget::width })
+        {
+            const int targetIndex = lfoSettingTarget (lfoIndex, setting);
+            lfoMenu.addItem (targetIndex + 1, processor.getModulationTargetName (targetIndex), true,
+                             targetIndex == selectedTarget);
+        }
+    for (int stepIndex = 0; stepIndex < numStepModulators; ++stepIndex)
+        for (const auto setting : { StepSettingTarget::rate, StepSettingTarget::glide })
+        {
+            const int targetIndex = stepSettingTarget (stepIndex, setting);
+            stepsMenu.addItem (targetIndex + 1, processor.getModulationTargetName (targetIndex), true,
+                               targetIndex == selectedTarget);
+        }
+    targetMenu.getRootMenu()->addSubMenu ("Route amounts", routeAmountMenu);
+    targetMenu.getRootMenu()->addSubMenu ("LFOs", lfoMenu);
+    targetMenu.getRootMenu()->addSubMenu ("Steps", stepsMenu);
+    selectedTargetListed = selectedTargetListed || selectedTarget >= firstRouteAmountTarget;
+
     // A route can point at a knob the current module does not use (e.g. after changing the module): keep it visible.
     if (! selectedTargetListed)
     {
@@ -459,9 +520,17 @@ void RouteRow::refreshFromProcessor()
     if (polarityButton.getButtonText() != polarityText)
         polarityButton.setButtonText (polarityText);
 
-    const auto amountText = amountSlider.getTextFromValue (amountSlider.getValue());
+    // While another route moves this route's amount, the label shows the moved amount in the modulation colour.
+    const int amountTarget = routeAmountTarget (routeIndex);
+    const bool showsModulatedAmount = processor.isEngineRunning() && processor.isTargetModulated (amountTarget) &&
+                                      ! amountSlider.isMouseOverOrDragging();
+    const auto amountText = showsModulatedAmount ? processor.getModulatedSettingText (amountTarget)
+                                                 : amountSlider.getTextFromValue (amountSlider.getValue());
     if (amountLabel.getText() != amountText)
         amountLabel.setText (amountText, juce::dontSendNotification);
+    const auto amountColour = showsModulatedAmount ? Theme::Colours::modulation : Theme::Colours::primaryText;
+    if (amountLabel.findColour (juce::Label::textColourId) != amountColour)
+        amountLabel.setColour (juce::Label::textColourId, amountColour);
 
     const bool isActive = targetMenu.getSelectedItemIndex() > 0;
     for (auto* component :
@@ -492,8 +561,28 @@ ModulationPage::ModulationPage (MidiForgeProcessor& processorToControl) : proces
     for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
     {
         routeRows.push_back (std::make_unique<RouteRow> (processor, routeIndex));
-        addAndMakeVisible (*routeRows.back());
+        addChildComponent (*routeRows.back());
     }
+
+    // The route pages: two toggle buttons in the routes' title line.
+    constexpr int routePagesRadioGroup = 2002;
+    for (int page = 0; page < numRoutePages; ++page)
+    {
+        auto& button = routePageButtons[(size_t) page];
+        const int firstRoute = page * routesPerPage + 1;
+        button.setButtonText (juce::String (firstRoute) + juce::String::fromUTF8 (" \xe2\x80\x93 ") +
+                              juce::String (firstRoute + routesPerPage - 1));
+        button.setClickingTogglesState (true);
+        button.setRadioGroupId (routePagesRadioGroup);
+        button.setColour (juce::TextButton::buttonColourId, Theme::Colours::slotBackground);
+        button.setColour (juce::TextButton::buttonOnColourId, Theme::Colours::selectedTab);
+        button.setColour (juce::TextButton::textColourOffId, Theme::Colours::secondaryText);
+        button.setColour (juce::TextButton::textColourOnId, Theme::Colours::primaryText);
+        button.setTooltip ("Show routes " + button.getButtonText());
+        button.onClick = [this, page] { showRoutePage (page); };
+        addAndMakeVisible (button);
+    }
+    showRoutePage (0);
 
     // The sub-tabs: three toggle buttons in one radio group.
     constexpr int sourceTabsRadioGroup = 2001;
@@ -547,10 +636,11 @@ void ModulationPage::paint (juce::Graphics& graphics)
 {
     graphics.setColour (Theme::Colours::secondaryText);
     graphics.setFont (Theme::font (11.0f));
-    graphics.drawText (juce::String::fromUTF8 ("Sources move slot knobs and switches through the routes below "
-                                               "\xc2\xb7 a dot: a source on that tab is in use"),
-                       getLocalBounds().removeFromTop (28).withTrimmedLeft (stepsTab.getRight() + 12),
-                       juce::Justification::centredRight);
+    graphics.drawText (
+        juce::String::fromUTF8 ("Sources move knobs, switches and modulation settings through the routes "
+                                "below \xc2\xb7 dot: a source there is in use"),
+        getLocalBounds().removeFromTop (28).withTrimmedLeft (stepsTab.getRight() + 12),
+        juce::Justification::centredRight);
 
     const auto area = routesArea.toFloat();
     graphics.setColour (Theme::Colours::slotBackground);
@@ -565,8 +655,30 @@ void ModulationPage::paint (juce::Graphics& graphics)
     graphics.setColour (Theme::Colours::secondaryText);
     graphics.setFont (Theme::font (11.5f));
     graphics.drawText (
-        juce::String::fromUTF8 ("A source moves a slot knob by the amount:  \xc2\xb1 both ways,  + only one way"),
+        juce::String::fromUTF8 ("A source moves its target by the amount:  \xc2\xb1 both ways,  + only one way"),
         titleArea, juce::Justification::centredRight);
+}
+
+void ModulationPage::showRoutePage (int page)
+{
+    shownRoutePage = juce::jlimit (0, numRoutePages - 1, page);
+    for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
+        routeRows[(size_t) routeIndex]->setVisible (routeIndex / routesPerPage == shownRoutePage);
+    for (int pageIndex = 0; pageIndex < numRoutePages; ++pageIndex)
+        routePageButtons[(size_t) pageIndex].setToggleState (pageIndex == shownRoutePage, juce::dontSendNotification);
+    resized();
+}
+
+bool ModulationPage::isAnyRouteInUse (int routePage) const
+{
+    for (int routeIndex = routePage * routesPerPage; routeIndex < (routePage + 1) * routesPerPage; ++routeIndex)
+    {
+        const auto* target = processor.parameters.getRawParameterValue (ParameterIds::routeTarget (routeIndex));
+        const auto* amount = processor.parameters.getRawParameterValue (ParameterIds::routeAmount (routeIndex));
+        if (target->load() >= 0.5f && std::abs (amount->load()) / 100.0f >= ModulationRoute::smallestEffectiveAmount)
+            return true;
+    }
+    return false;
 }
 
 void ModulationPage::paintOverChildren (juce::Graphics& graphics)
@@ -579,6 +691,12 @@ void ModulationPage::paintOverChildren (juce::Graphics& graphics)
             graphics.fillEllipse (juce::Rectangle<float> (6.0f, 6.0f)
                                       .withCentre ({ (float) tabs[index]->getRight() - 9.0f,
                                                      (float) tabs[index]->getBounds().getCentreY() }));
+    // ... and on the route page buttons
+    for (size_t page = 0; page < routePageButtons.size(); ++page)
+        if (shownRoutePageDots[page])
+            graphics.fillEllipse (juce::Rectangle<float> (5.0f, 5.0f)
+                                      .withCentre ({ (float) routePageButtons[page].getRight() - 8.0f,
+                                                     (float) routePageButtons[page].getBounds().getCentreY() }));
 }
 
 void ModulationPage::resized()
@@ -594,9 +712,11 @@ void ModulationPage::resized()
     }
     area.removeFromTop (6);
 
-    // Each sub-tab uses the whole sources area.
-    auto sourcesArea = area.removeFromTop (300);
-    area.removeFromTop (gap);
+    // The routes take what six rows need; each sub-tab uses the whole rest as its sources area.
+    constexpr int routeRowHeight = 30;
+    routesArea = area.removeFromBottom (4 + 22 + routesPerPage * routeRowHeight + 8);
+    area.removeFromBottom (gap);
+    auto sourcesArea = area;
 
     const auto layOutRow = [gap] (juce::Rectangle<int> rowArea, auto begin, auto end)
     {
@@ -620,12 +740,17 @@ void ModulationPage::resized()
     layOutGrid (noteRandomPanels);
     layOutGrid (stepModulatorPanels);
 
-    routesArea = area;
-    auto rowsArea = area.reduced (12, 4);
-    rowsArea.removeFromTop (22); // title
-    const int rowHeight = juce::jmin (34, rowsArea.getHeight() / numModulationRoutes);
-    for (auto& row : routeRows)
-        row->setBounds (rowsArea.removeFromTop (rowHeight));
+    auto rowsArea = routesArea.reduced (12, 4);
+    auto titleLine = rowsArea.removeFromTop (22);
+    titleLine.removeFromLeft (150); // "Modulation routes"
+    for (auto& button : routePageButtons)
+    {
+        button.setBounds (titleLine.removeFromLeft (66).reduced (0, 1));
+        titleLine.removeFromLeft (6);
+    }
+    for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
+        routeRows[(size_t) routeIndex]->setBounds (
+            rowsArea.withHeight (routeRowHeight).translated (0, (routeIndex % routesPerPage) * routeRowHeight));
 }
 
 void ModulationPage::refreshFromProcessor()
@@ -645,9 +770,13 @@ void ModulationPage::refreshFromProcessor()
 
     const std::array<bool, 3> inUse { isAnySourceInUse (SourcePage::lfos), isAnySourceInUse (SourcePage::randoms),
                                       isAnySourceInUse (SourcePage::steps) };
-    if (inUse != shownInUseDots)
+    std::array<bool, numRoutePages> routePagesInUse {};
+    for (int page = 0; page < numRoutePages; ++page)
+        routePagesInUse[(size_t) page] = isAnyRouteInUse (page);
+    if (inUse != shownInUseDots || routePagesInUse != shownRoutePageDots)
     {
         shownInUseDots = inUse;
+        shownRoutePageDots = routePagesInUse;
         repaint();
     }
 }

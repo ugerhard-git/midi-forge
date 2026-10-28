@@ -56,7 +56,9 @@ struct LfoSettings
  *
  * Timing: while the host transport runs, a tempo-synced LFO follows the host's musical position, so it
  * stays locked to the bar grid even when you jump around in the song. Otherwise (free rate, or transport
- * stopped) it runs on its own clock.
+ * stopped) it runs on its own clock. While a route modulates its rate, it also runs on its own clock (so the
+ * speed changes smoothly, without jumps); it locks onto the bar grid again at the next restart on key or
+ * when the transport starts.
  */
 class Lfo
 {
@@ -88,6 +90,20 @@ public:
     /** Moves the LFO's own clock forward by the length of the given stretch of time. */
     void advance (const LfoSettings& settings, const BlockContext& context) noexcept;
 
+    /**
+     * Call before evaluating a stretch of time: when a route modulates the rate, the LFO leaves the bar grid
+     * and runs on its own clock from where it is now, so a changing speed never makes the wave jump.
+     */
+    void followRateModulation (bool isRateModulated) noexcept
+    {
+        if (isRateModulated)
+            isOffGrid = true;
+    }
+    /** Locks a tempo-synced LFO onto the bar grid again (the transport started). */
+    void lockToGrid() noexcept { isOffGrid = false; }
+    /** @return True while the LFO runs on its own clock because its rate was modulated. */
+    bool isRunningOffGrid() const noexcept { return isOffGrid; }
+
     /** @return The wave's value (-1..+1) at a position measured in cycles (1.0 = one full cycle). */
     float waveformValue (LfoWaveform waveform, double cyclePosition, double pulseWidth) const noexcept;
 
@@ -101,6 +117,7 @@ private:
     uint64_t seed;
     double freeRunningCycles = 0.0; ///< Own clock, in cycles since the last reset or restart.
     double restartBeat = 0.0;       ///< Host position (quarter notes) of the last restart.
+    bool isOffGrid = false;         ///< Left the bar grid because its rate was modulated
 };
 
 } // namespace midiforge

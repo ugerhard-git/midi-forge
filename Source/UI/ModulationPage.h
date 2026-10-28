@@ -22,12 +22,18 @@ public:
     void resized() override;
     /** Updates the value text from the parameter. */
     void refresh();
+    /**
+     * Shows the value a route has moved this setting to (in the modulation colour) instead of the knob's own
+     * value; while the mouse is over the knob its own value is shown. An empty text shows the own value.
+     */
+    void showModulatedValue (const juce::String& modulatedText);
 
     juce::Slider knob;
 
 private:
     juce::Label nameLabel, valueLabel;
     juce::AudioProcessorValueTreeState::SliderAttachment attachment;
+    juce::String modulatedValueText; ///< Shown instead of the own value while the setting is modulated
 };
 
 /** Draws an LFO's wave shape and a dot at its current position. */
@@ -88,7 +94,10 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> triggerAttachment, stepsAttachment;
 };
 
-/** One modulation route: source (LFO or Random) -> target parameter, with polarity and amount. */
+/**
+ * One modulation route: source (LFO, Random or Steps) -> target (a slot knob or switch, or a setting of the
+ * modulation itself), with polarity and amount.
+ */
 class RouteRow final : public juce::Component
 {
 public:
@@ -101,7 +110,8 @@ public:
 private:
     /**
      * Fills the target menu: "None", then per slot a heading and the knobs its module uses, sorted by
-     * slot and knob. Item IDs are target numbers + 1 (the menu order differs from the numbering).
+     * slot and knob, then a "Modulation" heading with sub-menus for route amounts, LFO and step settings.
+     * Item IDs are target numbers + 1 (the menu order differs from the numbering).
      */
     void rebuildTargetMenu();
     int currentTargetIndex() const;
@@ -123,8 +133,8 @@ private:
 
 /**
  * The whole "Modulation" tab. The sources are on three sub-tabs (LFOs, Random, Steps), so each kind gets
- * the full width; the routes stay visible below. A yellow dot on a sub-tab means one of its sources is
- * routed somewhere.
+ * the full width; the routes stay visible below, six at a time on two pages (1–6, 7–12). A yellow dot on a
+ * sub-tab means one of its sources is routed somewhere; on a route page button, that one of its routes is on.
  */
 class ModulationPage final : public juce::Component
 {
@@ -145,12 +155,20 @@ public:
     /** Shows one sub-tab's panels and highlights its tab. */
     void showSourcePage (SourcePage page);
     SourcePage getShownSourcePage() const noexcept { return shownSourcePage; }
+    /** Routes shown at a time; the two route pages show routes 1–6 and 7–12. */
+    static constexpr int routesPerPage = 6;
+    static constexpr int numRoutePages = numModulationRoutes / routesPerPage;
+    /** Shows one page of routes (0: routes 1–6, 1: routes 7–12) and highlights its button. */
+    void showRoutePage (int page);
+    int getShownRoutePage() const noexcept { return shownRoutePage; }
     /** @return The panel of a step modulator (for tests). */
     StepModulatorPanel& getStepModulatorPanel (int index) { return *stepModulatorPanels[(size_t) index]; }
 
 private:
     /** @return True if any source of a sub-tab is routed somewhere. */
     bool isAnySourceInUse (SourcePage page) const;
+    /** @return True if a route on a route page has a target and an amount. */
+    bool isAnyRouteInUse (int routePage) const;
 
     MidiForgeProcessor& processor;
     juce::TextButton lfoTab { "LFOs" }, randomTab { "Random" }, stepsTab { "Steps" };
@@ -161,6 +179,9 @@ private:
     std::vector<std::unique_ptr<NoteRandomPanel>> noteRandomPanels;
     std::vector<std::unique_ptr<StepModulatorPanel>> stepModulatorPanels;
     std::vector<std::unique_ptr<RouteRow>> routeRows;
+    std::array<juce::TextButton, numRoutePages> routePageButtons;
+    int shownRoutePage = 0;
+    std::array<bool, numRoutePages> shownRoutePageDots {};
     juce::Rectangle<int> routesArea;
 };
 

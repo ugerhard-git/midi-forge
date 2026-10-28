@@ -22,6 +22,8 @@ constexpr juce::uint8 sysexStart = 0xF0;
 
 const juce::StringArray syncModeNames { "Free", "Tempo" };
 constexpr int tempoSyncIndex = 1;
+/** Routes 1..8 existed before 0.20.0; their parameters keep their place and version. */
+constexpr int numRoutesBefore0_20 = 8;
 const juce::String middleDot = juce::String::fromUTF8 (" \xc2\xb7 ");
 
 juce::StringArray namesOf (const char* const* names, int count)
@@ -41,8 +43,29 @@ juce::StringArray lfoDivisionNames()
 }
 
 /**
+ * @return The name of a target that is a setting of the modulation itself, e.g. "Route 3" + separator +
+ *         "Amount", "LFO 2" + separator + "Rate", "Steps 1" + separator + "Glide".
+ */
+juce::String modulationSettingName (const ModulationRoute& route, const juce::String& separator)
+{
+    if (const int routeIndex = route.targetRouteIndex(); routeIndex >= 0)
+        return "Route " + juce::String (routeIndex + 1) + separator + "Amount";
+    if (const int lfoIndex = route.targetLfoIndex(); lfoIndex >= 0)
+    {
+        static const char* const settingNames[] = { "Rate", "Phase", "Width" };
+        return "LFO " + juce::String (lfoIndex + 1) + separator + settingNames[(int) route.targetLfoSetting()];
+    }
+    if (const int stepIndex = route.targetStepIndex(); stepIndex >= 0)
+    {
+        static const char* const settingNames[] = { "Rate", "Glide" };
+        return "Steps " + juce::String (stepIndex + 1) + separator + settingNames[(int) route.targetStepSetting()];
+    }
+    return "None";
+}
+
+/**
  * Fixed host-side names of the modulation targets, in target-number order: "None", "Slot 1 A" ...,
- * then "Slot 1 On/Off" ...
+ * then "Slot 1 On/Off" ..., then "Route 1 Amount" ..., "LFO 1 Rate" ..., "Steps 1 Rate" ...
  */
 juce::StringArray fixedModulationTargetNames()
 {
@@ -51,6 +74,11 @@ juce::StringArray fixedModulationTargetNames()
     {
         ModulationRoute route;
         route.targetIndex = targetIndex;
+        if (route.targetsModulation())
+        {
+            result.add (modulationSettingName (route, " "));
+            continue;
+        }
         const juce::String slotName = "Slot " + juce::String (route.targetSlotIndex() + 1) + " ";
         if (route.targetsSlotSwitch())
             result.add (slotName + "On/Off");
@@ -166,6 +194,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout MidiForgeProcessor::createPa
     addSecondPageSlotParameters (layout);
     addStepModulatorParameters (layout);
     addStepTieParameters (layout);
+    addExtraRouteParameters (layout);
     return layout;
 }
 
@@ -287,7 +316,20 @@ void MidiForgeProcessor::addLfoParameters (juce::AudioProcessorValueTreeState::P
 
 void MidiForgeProcessor::addRouteParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
 {
-    constexpr int version = ParameterIds::modulationParameterVersion;
+    // Routes 1..8 (0.2.0); their polarity was added in 0.6.0 (see addNoteRandomAndPolarityParameters).
+    for (int routeIndex = 0; routeIndex < numRoutesBefore0_20; ++routeIndex)
+        addRouteParameterGroup (layout, routeIndex, ParameterIds::modulationParameterVersion, false);
+}
+
+void MidiForgeProcessor::addExtraRouteParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+{
+    for (int routeIndex = numRoutesBefore0_20; routeIndex < numModulationRoutes; ++routeIndex)
+        addRouteParameterGroup (layout, routeIndex, ParameterIds::extraRouteParameterVersion, true);
+}
+
+void MidiForgeProcessor::addRouteParameterGroup (juce::AudioProcessorValueTreeState::ParameterLayout& layout,
+                                                 int routeIndex, int version, bool includesPolarity)
+{
     // LFO 1..4 first, then Random 1..4 (added in 0.6.0, appended so stored indices keep their meaning).
     juce::StringArray sourceNames;
     for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
@@ -298,45 +340,46 @@ void MidiForgeProcessor::addRouteParameters (juce::AudioProcessorValueTreeState:
         sourceNames.add ("Steps " + juce::String (stepIndex + 1));
     const juce::StringArray targetNames = fixedModulationTargetNames();
 
-    for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
-    {
-        const juce::String routeName = "Route " + juce::String (routeIndex + 1);
-        auto group = std::make_unique<juce::AudioProcessorParameterGroup> ("route" + juce::String (routeIndex + 1),
-                                                                           routeName, " | ");
+    const juce::String routeName = "Route " + juce::String (routeIndex + 1);
+    auto group = std::make_unique<juce::AudioProcessorParameterGroup> ("route" + juce::String (routeIndex + 1),
+                                                                       routeName, " | ");
 
-        group->addChild (std::make_unique<juce::AudioParameterChoice> (
-            juce::ParameterID { ParameterIds::routeSource (routeIndex), version }, routeName + " Source", sourceNames,
-            0));
+    group->addChild (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIds::routeSource (routeIndex), version }, routeName + " Source", sourceNames, 0));
 
-        // The host shows the target with the name of the module parameter, e.g. "Slot 2 · Gate".
-        auto targetAttributes =
-            juce::AudioParameterChoiceAttributes()
-                .withStringFromValueFunction ([this] (int targetIndex, int)
-                                              { return getModulationTargetName (targetIndex); })
-                .withValueFromStringFunction (
-                    [this, targetNames] (const juce::String& text)
-                    {
-                        for (int targetIndex = 0; targetIndex < numModulationTargets; ++targetIndex)
-                            if (text == targetNames[targetIndex] || text == getModulationTargetName (targetIndex))
-                                return targetIndex;
-                        return 0;
-                    });
-        group->addChild (std::make_unique<juce::AudioParameterChoice> (
-            juce::ParameterID { ParameterIds::routeTarget (routeIndex), version }, routeName + " Target", targetNames,
-            0, targetAttributes));
-
-        group->addChild (std::make_unique<juce::AudioParameterFloat> (
-            juce::ParameterID { ParameterIds::routeAmount (routeIndex), version }, routeName + " Amount",
-            juce::NormalisableRange<float> (-100.0f, 100.0f, 1.0f), 50.0f,
-            juce::AudioParameterFloatAttributes().withStringFromValueFunction (
-                [] (float percent, int)
+    // The host shows the target with the name of the module parameter, e.g. "Slot 2 · Gate".
+    auto targetAttributes =
+        juce::AudioParameterChoiceAttributes()
+            .withStringFromValueFunction ([this] (int targetIndex, int)
+                                          { return getModulationTargetName (targetIndex); })
+            .withValueFromStringFunction (
+                [this, targetNames] (const juce::String& text)
                 {
-                    const int rounded = juce::roundToInt (percent);
-                    return (rounded > 0 ? "+" : "") + juce::String (rounded) + "%";
-                })));
+                    for (int targetIndex = 0; targetIndex < numModulationTargets; ++targetIndex)
+                        if (text == targetNames[targetIndex] || text == getModulationTargetName (targetIndex))
+                            return targetIndex;
+                    return 0;
+                });
+    group->addChild (std::make_unique<juce::AudioParameterChoice> (
+        juce::ParameterID { ParameterIds::routeTarget (routeIndex), version }, routeName + " Target", targetNames, 0,
+        targetAttributes));
 
-        layout.add (std::move (group));
-    }
+    group->addChild (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIds::routeAmount (routeIndex), version }, routeName + " Amount",
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 1.0f), 50.0f,
+        juce::AudioParameterFloatAttributes().withStringFromValueFunction (
+            [] (float percent, int)
+            {
+                const int rounded = juce::roundToInt (percent);
+                return (rounded > 0 ? "+" : "") + juce::String (rounded) + "%";
+            })));
+
+    if (includesPolarity)
+        group->addChild (std::make_unique<juce::AudioParameterChoice> (
+            juce::ParameterID { ParameterIds::routePolarity (routeIndex), version }, routeName + " Polarity",
+            juce::StringArray { "Bipolar", "Unipolar" }, 0));
+
+    layout.add (std::move (group));
 }
 
 void MidiForgeProcessor::addNoteRandomAndPolarityParameters (
@@ -367,7 +410,7 @@ void MidiForgeProcessor::addNoteRandomAndPolarityParameters (
     }
 
     auto polarityGroup = std::make_unique<juce::AudioProcessorParameterGroup> ("polarity", "Route Polarity", " | ");
-    for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
+    for (int routeIndex = 0; routeIndex < numRoutesBefore0_20; ++routeIndex)
         polarityGroup->addChild (std::make_unique<juce::AudioParameterChoice> (
             juce::ParameterID { ParameterIds::routePolarity (routeIndex), version },
             "Route " + juce::String (routeIndex + 1) + " Polarity", juce::StringArray { "Bipolar", "Unipolar" }, 0));
@@ -590,6 +633,29 @@ void MidiForgeProcessor::publishReadoutsForEditor()
         modulatedSwitchReadouts[(size_t) slotIndex].store (modulatedSlots[slotIndex].isEnabled,
                                                            std::memory_order_relaxed);
 
+    const auto& modulated = engine->getLastModulatedModulators();
+    const auto storeSetting = [this] (int targetIndex, double value)
+    {
+        modulatedSettingReadouts[(size_t) (targetIndex - firstRouteAmountTarget)].store ((float) value,
+                                                                                         std::memory_order_relaxed);
+    };
+    for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
+        storeSetting (routeAmountTarget (routeIndex), modulated.routeAmounts[routeIndex] * 100.0);
+    for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
+    {
+        const auto& lfo = modulated.lfos[lfoIndex];
+        storeSetting (lfoSettingTarget (lfoIndex, LfoSettingTarget::rate),
+                      lfo.isTempoSynced ? (double) lfo.divisionIndex : lfo.rateHz);
+        storeSetting (lfoSettingTarget (lfoIndex, LfoSettingTarget::phase), lfo.phaseDegrees);
+        storeSetting (lfoSettingTarget (lfoIndex, LfoSettingTarget::width), lfo.pulseWidth * 100.0);
+    }
+    for (int stepIndex = 0; stepIndex < numStepModulators; ++stepIndex)
+    {
+        const auto& steps = modulated.stepModulators[stepIndex];
+        storeSetting (stepSettingTarget (stepIndex, StepSettingTarget::rate), (double) steps.divisionIndex);
+        storeSetting (stepSettingTarget (stepIndex, StepSettingTarget::glide), steps.glide * 100.0);
+    }
+
     for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
     {
         lfoValueReadouts[(size_t) lfoIndex].store (engine->getLastLfoValues()[lfoIndex], std::memory_order_relaxed);
@@ -678,12 +744,72 @@ bool MidiForgeProcessor::isSlotEnabledAfterModulation (int slotIndex) const noex
 
 bool MidiForgeProcessor::isParameterModulated (int slotIndex, int parameterIndex) const noexcept
 {
-    const int targetIndex = modulationTargetIndex (slotIndex, parameterIndex);
-    for (const auto& values : routeParameterValues)
-        if ((int) std::lround (values.target->load()) == targetIndex &&
-            std::abs (values.amountPercent->load()) / 100.0f >= ModulationRoute::smallestEffectiveAmount)
+    return isTargetModulated (modulationTargetIndex (slotIndex, parameterIndex));
+}
+
+bool MidiForgeProcessor::isTargetModulated (int targetIndex) const noexcept
+{
+    const auto routeIsOn = [this] (int routeIndex)
+    {
+        const auto& values = routeParameterValues[(size_t) routeIndex];
+        return (int) std::lround (values.target->load()) > 0 &&
+               std::abs (values.amountPercent->load()) / 100.0f >= ModulationRoute::smallestEffectiveAmount;
+    };
+    for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
+    {
+        if ((int) std::lround (routeParameterValues[(size_t) routeIndex].target->load()) != targetIndex)
+            continue;
+        if (routeIsOn (routeIndex))
             return true;
+        // A route set to 0 % still moves its target while another route moves its amount.
+        for (int otherRoute = 0; otherRoute < numModulationRoutes; ++otherRoute)
+            if (otherRoute != routeIndex && routeIsOn (otherRoute) &&
+                (int) std::lround (routeParameterValues[(size_t) otherRoute].target->load()) ==
+                    routeAmountTarget (routeIndex))
+                return true;
+    }
     return false;
+}
+
+juce::RangedAudioParameter* MidiForgeProcessor::getParameterOfModulationSetting (int targetIndex) const
+{
+    ModulationRoute route;
+    route.targetIndex = targetIndex;
+    if (const int routeIndex = route.targetRouteIndex(); routeIndex >= 0)
+        return parameters.getParameter (ParameterIds::routeAmount (routeIndex));
+    if (const int lfoIndex = route.targetLfoIndex(); lfoIndex >= 0)
+    {
+        switch (route.targetLfoSetting())
+        {
+            case LfoSettingTarget::rate:
+                return parameters.getParameter (getLfoSettings (lfoIndex).isTempoSynced
+                                                    ? ParameterIds::lfoDivision (lfoIndex)
+                                                    : ParameterIds::lfoRate (lfoIndex));
+            case LfoSettingTarget::phase: return parameters.getParameter (ParameterIds::lfoPhase (lfoIndex));
+            case LfoSettingTarget::width: return parameters.getParameter (ParameterIds::lfoPulseWidth (lfoIndex));
+        }
+    }
+    if (const int stepIndex = route.targetStepIndex(); stepIndex >= 0)
+        return parameters.getParameter (route.targetStepSetting() == StepSettingTarget::rate
+                                            ? ParameterIds::stepRate (stepIndex)
+                                            : ParameterIds::stepGlide (stepIndex));
+    return nullptr;
+}
+
+juce::String MidiForgeProcessor::getModulatedSettingText (int targetIndex) const
+{
+    auto* parameter = getParameterOfModulationSetting (targetIndex);
+    if (parameter == nullptr)
+        return {};
+    const float plainValue = getModulatedSettingValue (targetIndex);
+    return parameter->getText (parameter->convertTo0to1 (plainValue), 0);
+}
+
+float MidiForgeProcessor::getModulatedSettingValue (int targetIndex) const noexcept
+{
+    if (targetIndex < firstRouteAmountTarget || targetIndex >= numModulationTargets)
+        return 0.0f;
+    return modulatedSettingReadouts[(size_t) (targetIndex - firstRouteAmountTarget)].load (std::memory_order_relaxed);
 }
 
 float MidiForgeProcessor::getModulatedParameterValue (int slotIndex, int parameterIndex) const noexcept
@@ -699,6 +825,8 @@ juce::String MidiForgeProcessor::getModulationTargetName (int targetIndex) const
 
     ModulationRoute route;
     route.targetIndex = targetIndex;
+    if (route.targetsModulation())
+        return modulationSettingName (route, middleDot);
     const int slotIndex = route.targetSlotIndex();
     const int parameterIndex = route.targetParameterIndex();
     const juce::String slotName = "Slot " + juce::String (slotIndex + 1);
@@ -789,8 +917,8 @@ void MidiForgeProcessor::moveRouteTargets (const std::array<int, numSlots>& newS
     {
         ModulationRoute route;
         route.targetIndex = getRouteTarget (routeIndex);
-        if (route.targetIndex <= 0 || route.targetIndex >= numModulationTargets)
-            continue;
+        if (! route.targetsSlot())
+            continue; // only slot targets move with their modules
         const int newSlot = newSlotOfOldSlot[(size_t) route.targetSlotIndex()];
         const int newTarget = newSlot < 0 ? 0 : modulationTargetIndex (newSlot, route.targetParameterIndex());
         if (newTarget != route.targetIndex)

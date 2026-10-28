@@ -271,6 +271,24 @@ strip in the footer for 8 seconds. Removal history is not saved in projects.
 - `applyModulationRoutes()` adds `sourceValue × amount` (bipolar or unipolar value, per route) to each
   target's normalised value (0..1), sums routes on the same target and clamps. The user's own settings are
   never changed.
+- **Modulating the modulation (0.20.0):** 12 routes (`rn_*` for n = 9..12 are host parameters of version 7,
+  appended after everything else, polarity inside their group). Targets 73..84 are the route amounts,
+  85..96 LFO Rate/Phase/Width, 97..104 Steps Rate/Glide (`routeAmountTarget()`, `lfoSettingTarget()`,
+  `stepSettingTarget()`). At the start of each segment `MidiForgeEngine::updateModulatedModulators()` calls
+  `applyRoutesToModulators()` (Modulation/ModulatorModulation.*) with the **previous** segment's source values
+  and route amounts, giving `ModulatedModulators` (LFO and step settings, route amounts) for this segment;
+  the sources are then evaluated and advanced with these settings, and the slot routes use the modulated
+  amounts. The one-segment delay keeps feedback loops stable. Settings move in normalised control space
+  (LFO rate via `normalisedLfoRate()` / `setLfoRateFromNormalised()`, mirroring the host ranges); route amounts
+  add directly (−1..+1), the phase wraps.
+- **Smooth rate changes:** while a route moves its rate, an `Lfo` / `StepModulator` sets `isOffGrid`
+  (`followRateModulation()`) and runs on its own clock, which until then mirrored the host position, so the
+  speed changes without a jump. `restart()` and the transport starting (`lockToGrid()`, from
+  `MidiForgeEngine::processSegment()`) put it back on the bar grid.
+- The processor publishes the modulated settings (`modulatedSettingReadouts`, in host parameter units);
+  `getModulatedSettingText()` formats them with the host parameter's own text function, and the
+  Modulation page shows them in the modulation colour (`CompactKnob::showModulatedValue()`, route amount
+  labels, the step modulator's glide and rate menu).
 - **Segments:** with at least one active route, `MidiForgeEngine` splits each block at every input event
   and at least every 32 samples (`maxSegmentLength`), evaluates the LFOs at the start of each segment and
   runs the chain on each segment with its own `BlockContext` (shifted host position, segment length).

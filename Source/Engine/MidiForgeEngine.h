@@ -6,6 +6,7 @@
 
 #include "Modulation/Lfo.h"
 #include "Modulation/ModulationRoutes.h"
+#include "Modulation/ModulatorModulation.h"
 #include "Modulation/NoteRandom.h"
 #include "Modulation/StepModulator.h"
 #include "ModuleChain.h"
@@ -30,7 +31,8 @@ struct EngineSettings
  * incoming event and at least every maxSegmentLength samples. The sources are evaluated at the start of
  * each segment, so incoming notes see the LFO value at their exact sample position (and a Note Random
  * value rolled for that very note), and generated notes (arpeggio steps, echoes) see a value at most
- * maxSegmentLength samples old.
+ * maxSegmentLength samples old. Routes to the modulation's own settings (route amounts, LFO and step
+ * settings) use the source values of the previous segment, so feedback loops stay stable.
  *
  * Real-time safe: no allocation after construction.
  */
@@ -68,6 +70,8 @@ public:
     const float* getLastStepModulatorValues() const noexcept { return stepModulatorValues; }
     /** @return The step (0-based) each step modulator was playing at the end of the last block. */
     const int* getLastSteps() const noexcept { return currentSteps; }
+    /** @return The LFO and step settings and route amounts after modulation, as used in the last segment. */
+    const ModulatedModulators& getLastModulatedModulators() const noexcept { return modulatedModulators; }
 
 private:
     void processSegment (int segmentStart, int segmentLength, const BlockContext& blockContext,
@@ -76,8 +80,10 @@ private:
     /** Restarts LFOs on the first key and lets the Note Random modulators roll for played notes. */
     void handleNotesForModulators (const MidiEventList& segmentInput, const BlockContext& segmentContext,
                                    int64_t segmentStartSample, const EngineSettings& settings);
-    void computeSourceValues (const BlockContext& segmentContext, const EngineSettings& settings);
-    void updateLfoReadouts (const BlockContext& endOfBlockContext, const EngineSettings& settings);
+    void computeSourceValues (const BlockContext& segmentContext);
+    /** Applies the routes to route amounts, LFO and step settings (from the previous segment's values). */
+    void updateModulatedModulators (const EngineSettings& settings, bool isModulationActive);
+    void updateLfoReadouts (const BlockContext& endOfBlockContext);
 
     ModuleChain moduleChain;
     Lfo lfos[numLfos];
@@ -86,6 +92,9 @@ private:
     float stepModulatorValues[numStepModulators] {};
     int currentSteps[numStepModulators] {};
     ModulationSourceValues sourceValues;
+    ModulationSourceValues previousSourceValues; ///< The previous segment's, for routes to the modulation
+    ModulatedModulators modulatedModulators;     ///< This segment's modulated LFO / step settings and amounts
+    bool wasFollowingHost = false;               ///< The previous segment followed the host transport
     int64_t samplesProcessed = 0;
     SlotSettings modulatedSlots[numSlots] {};
     bool slotSwitchStates[numSlots] {}; ///< Each slot's on/off state after modulation, for the hysteresis

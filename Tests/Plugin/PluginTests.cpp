@@ -69,15 +69,19 @@ TEST_CASE ("plugin: exposes slot, LFO and route parameters with stable IDs")
     const auto idAt = [&processor] (int index)
     { return dynamic_cast<juce::AudioProcessorParameterWithID*> (processor.getParameters()[index])->paramID; };
     const int numStepParameters = numStepModulators * parametersPerStepModulator;
-    EXPECT (idAt (numSlots * 6 + numLfos * 7 + numModulationRoutes * 3 - 1) == "r8_amount");   // last of 0.2.0
-    EXPECT (idAt (numOurParameters - 1 - numStepParameters - numSlots * 4) == "r8_polarity");  // last of 0.6.0
-    EXPECT (idAt (numOurParameters - 1 - numStepParameters) == "s8_h");                        // last of 0.7.0
-    EXPECT (idAt (numOurParameters - 1 - numStepModulators * (maximumSteps - 1)) == "q4_v16"); // last of 0.14.0
-    EXPECT (idAt (numOurParameters - 1) == "q4_t16");                                          // ties (0.16.0) last
+    constexpr int numNewRouteParameters = (numModulationRoutes - 8) * parametersPerRoute; // routes 9..12 (0.20.0)
+    const int beforeNewRoutes = numOurParameters - numNewRouteParameters;
+    EXPECT (idAt (numSlots * 6 + numLfos * 7 + 8 * 3 - 1) == "r8_amount");                    // last of 0.2.0
+    EXPECT (idAt (beforeNewRoutes - 1 - numStepParameters - numSlots * 4) == "r8_polarity");  // last of 0.6.0
+    EXPECT (idAt (beforeNewRoutes - 1 - numStepParameters) == "s8_h");                        // last of 0.7.0
+    EXPECT (idAt (beforeNewRoutes - 1 - numStepModulators * (maximumSteps - 1)) == "q4_v16"); // last of 0.14.0
+    EXPECT (idAt (beforeNewRoutes - 1) == "q4_t16");                                          // ties (0.16.0)
+    EXPECT (idAt (beforeNewRoutes) == "r9_source");                                           // routes 9..12 last
+    EXPECT (idAt (numOurParameters - 1) == "r12_polarity");
 
-    for (const char* id :
-         { "s1_type", "s8_d", "l1_wave", "l4_restart", "r1_source", "r8_amount", "r1_polarity", "n1_window", "n4_steps",
-           "s1_e", "s8_h", "q1_steps", "q2_rate", "q3_glide", "q4_restart", "q1_v1", "q4_v16", "q1_t2", "q4_t16" })
+    for (const char* id : { "s1_type",    "s8_d",     "l1_wave", "l4_restart", "r1_source", "r8_amount", "r1_polarity",
+                            "n1_window",  "n4_steps", "s1_e",    "s8_h",       "q1_steps",  "q2_rate",   "q3_glide",
+                            "q4_restart", "q1_v1",    "q4_v16",  "q1_t2",      "q4_t16",    "r9_target", "r12_amount" })
         EXPECT (processor.parameters.getParameter (id) != nullptr);
     EXPECT (processor.isMidiEffect() && processor.acceptsMidi() && processor.producesMidi());
 
@@ -1619,4 +1623,73 @@ TEST_CASE ("about: shows version, copyright, licence, the missing warranty and t
     EXPECT (text.contains ("GNU Affero General Public License, version 3"));
     EXPECT (text.contains ("NO WARRANTY"));
     EXPECT (text.contains ("https://github.com/ugerhard-git/midi-forge"));
+}
+
+TEST_CASE ("modulating modulation: targets have names, and the editor sees the modulated values")
+{
+    MidiForgeProcessor processor;
+    const auto dot = juce::String::fromUTF8 (" \xc2\xb7 ");
+    EXPECT (processor.getModulationTargetName (routeAmountTarget (2)) == "Route 3" + dot + "Amount");
+    EXPECT (processor.getModulationTargetName (lfoSettingTarget (1, LfoSettingTarget::width)) ==
+            "LFO 2" + dot + "Width");
+    EXPECT (processor.getModulationTargetName (stepSettingTarget (3, StepSettingTarget::glide)) ==
+            "Steps 4" + dot + "Glide");
+    auto* target = processor.parameters.getParameter (ParameterIds::routeTarget (11));
+    EXPECT (target->getText (target->convertTo0to1 ((float) lfoSettingTarget (0, LfoSettingTarget::rate)), 0) ==
+            "LFO 1" + dot + "Rate");
+    EXPECT (std::abs (target->getValueForText ("Steps 2 Rate") -
+                      target->convertTo0to1 ((float) stepSettingTarget (1, StepSettingTarget::rate))) < 1.0e-6f);
+
+    // Route 2 (LFO 1, square, 50 %) moves route 1's amount; route 1 sits at 0 % but counts as modulated.
+    processor.parameters.getParameter (ParameterIds::routeTarget (0))
+        ->setValueNotifyingHost (target->convertTo0to1 ((float) modulationTargetIndex (0, 0)));
+    processor.parameters.getParameter (ParameterIds::routeAmount (0))->setValueNotifyingHost (0.5f); // 0 %
+    processor.parameters.getParameter (ParameterIds::routeTarget (1))
+        ->setValueNotifyingHost (target->convertTo0to1 ((float) routeAmountTarget (0)));
+    EXPECT (processor.isTargetModulated (routeAmountTarget (0)));
+    EXPECT (processor.isParameterModulated (0, 0));
+    EXPECT (! processor.isTargetModulated (lfoSettingTarget (0, LfoSettingTarget::rate)));
+
+    processor.setRateAndBufferSizeDetails (48000.0, 512);
+    processor.prepareToPlay (48000.0, 512);
+    juce::AudioBuffer<float> audio (0, 512);
+    juce::MidiBuffer midi;
+    processor.processBlock (audio, midi);
+    const float amount = processor.getModulatedSettingValue (routeAmountTarget (0));
+    EXPECT (std::abs (amount) <= 50.5f);
+    EXPECT (processor.getModulatedSettingText (routeAmountTarget (0)).endsWith ("%"));
+    EXPECT (processor.getModulatedSettingText (lfoSettingTarget (0, LfoSettingTarget::rate)) == "1 Bar");
+    EXPECT (processor.getModulatedSettingText (modulationTargetIndex (0, 0)).isEmpty());
+}
+
+TEST_CASE ("modulation page: the routes are on two pages of six")
+{
+    MidiForgeProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditorAndMakeActive());
+    auto* forgeEditor = dynamic_cast<MidiForgeEditor*> (editor.get());
+    EXPECT (forgeEditor != nullptr);
+    if (forgeEditor == nullptr)
+        return;
+    forgeEditor->showPage (MidiForgeEditor::Page::modulation);
+    auto& page = forgeEditor->getModulationPage();
+    EXPECT (page.getShownRoutePage() == 0);
+
+    // Count the visible route rows and check which are shown.
+    const auto visibleRouteRows = [&page]
+    {
+        std::vector<int> rows;
+        int routeIndex = 0;
+        for (auto* child : page.getChildren())
+            if (dynamic_cast<RouteRow*> (child) != nullptr)
+            {
+                if (child->isVisible())
+                    rows.push_back (routeIndex);
+                ++routeIndex;
+            }
+        return rows;
+    };
+    EXPECT ((visibleRouteRows() == std::vector<int> { 0, 1, 2, 3, 4, 5 }));
+    page.showRoutePage (1);
+    EXPECT (page.getShownRoutePage() == 1);
+    EXPECT ((visibleRouteRows() == std::vector<int> { 6, 7, 8, 9, 10, 11 }));
 }

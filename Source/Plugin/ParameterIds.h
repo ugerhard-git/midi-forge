@@ -5,7 +5,7 @@
  * Per slot n (1..8):   sn_type (module), sn_on (on/off), sn_a .. sn_h (the eight module parameters;
  *                      sn_e .. sn_h were added in 0.7.0 and come after all older parameters)
  * Per LFO n (1..4):    ln_wave, ln_sync, ln_rate, ln_div, ln_phase, ln_width, ln_restart
- * Per route n (1..8):  rn_source, rn_target, rn_amount, rn_polarity
+ * Per route n (1..12): rn_source, rn_target, rn_amount, rn_polarity (routes 9..12 added in 0.20.0)
  * Per Note Random n (1..4): nn_window, nn_trigger, nn_steps
  * Per step modulator n (1..4, added in 0.14.0): qn_steps, qn_rate, qn_glide, qn_restart, qn_v1 .. qn_v16;
  *                      added in 0.16.0: qn_t2 .. qn_t16 (ties)
@@ -140,5 +140,6 @@ inline constexpr int noteRandomParameterVersion = 3;    ///< Version 0.6.0: rout
 inline constexpr int secondPageParameterVersion = 4;    ///< Version 0.7.0: slot parameters E-H
 inline constexpr int stepModulatorParameterVersion = 5; ///< Version 0.14.0: step modulators
 inline constexpr int stepTieParameterVersion = 6;       ///< Version 0.16.0: step ties
+inline constexpr int extraRouteParameterVersion = 7;    ///< Version 0.20.0: routes 9..12
 
 } // namespace midiforge::ParameterIds

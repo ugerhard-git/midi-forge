@@ -250,7 +250,13 @@ TEST_CASE ("routes: target numbering covers every slot parameter and switch, and
     EXPECT (modulationTargetIndex (7, 7) == 64);
     // ... and the on/off switches after those (0.13.0).
     EXPECT (modulationTargetIndex (0, slotSwitchParameterIndex) == 65);
-    EXPECT (modulationTargetIndex (7, slotSwitchParameterIndex) == numModulationTargets - 1);
+    EXPECT (modulationTargetIndex (7, slotSwitchParameterIndex) == 72);
+    // ... and the modulation's own settings after those (0.20.0).
+    EXPECT (routeAmountTarget (0) == 73 && routeAmountTarget (11) == 84);
+    EXPECT (lfoSettingTarget (0, LfoSettingTarget::rate) == 85);
+    EXPECT (lfoSettingTarget (3, LfoSettingTarget::width) == 96);
+    EXPECT (stepSettingTarget (0, StepSettingTarget::rate) == 97);
+    EXPECT (stepSettingTarget (3, StepSettingTarget::glide) == numModulationTargets - 1);
 
     std::set<int> seen;
     for (int slotIndex = 0; slotIndex < numSlots; ++slotIndex)
@@ -263,7 +269,23 @@ TEST_CASE ("routes: target numbering covers every slot parameter and switch, and
             seen.insert (route.targetIndex);
         }
     }
-    EXPECT ((int) seen.size() == numModulationTargets - 1 && *seen.begin() == 1);
+    EXPECT ((int) seen.size() == firstRouteAmountTarget - 1 && *seen.begin() == 1);
+
+    // Every modulation target names exactly one route, LFO setting or step setting, and no slot.
+    for (int target = firstRouteAmountTarget; target < numModulationTargets; ++target)
+    {
+        ModulationRoute route;
+        route.targetIndex = target;
+        const int kinds = (route.targetRouteIndex() >= 0 ? 1 : 0) + (route.targetLfoIndex() >= 0 ? 1 : 0) +
+                          (route.targetStepIndex() >= 0 ? 1 : 0);
+        EXPECT (kinds == 1 && route.targetsModulation() && ! route.targetsSlot() && route.targetSlotIndex() == -1);
+    }
+    ModulationRoute lfoPhaseRoute;
+    lfoPhaseRoute.targetIndex = lfoSettingTarget (2, LfoSettingTarget::phase);
+    EXPECT (lfoPhaseRoute.targetLfoIndex() == 2 && lfoPhaseRoute.targetLfoSetting() == LfoSettingTarget::phase);
+    ModulationRoute glideRoute;
+    glideRoute.targetIndex = stepSettingTarget (1, StepSettingTarget::glide);
+    EXPECT (glideRoute.targetStepIndex() == 1 && glideRoute.targetStepSetting() == StepSettingTarget::glide);
 }
 
 TEST_CASE ("engine: a square LFO on Transpose alternates the pitch, and note-offs still match")

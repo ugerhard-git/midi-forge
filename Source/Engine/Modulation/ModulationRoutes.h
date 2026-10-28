@@ -1,7 +1,8 @@
 /**
  * @file ModulationRoutes.h
- * @brief Routes connect a modulation source (LFO or Note Random) to one slot parameter (A-H) or a slot's
- *        on/off switch, with an amount and a polarity.
+ * @brief Routes connect a modulation source (LFO, Random or Steps) to one slot parameter (A-H), a slot's
+ *        on/off switch, or a setting of the modulation itself (another route's amount, an LFO's rate, phase
+ *        or width, a step modulator's rate or glide), with an amount and a polarity.
  */
 #pragma once
 
@@ -22,15 +23,54 @@ constexpr int numStepModulators = 4;
 constexpr int numModulationSources = numLfos + numNoteRandoms + numStepModulators;
 constexpr int firstNoteRandomSource = numLfos;
 constexpr int firstStepModulatorSource = numLfos + numNoteRandoms;
-constexpr int numModulationRoutes = 8;
+/** Routes 1..8 since 0.2.0, routes 9..12 added in 0.20.0. */
+constexpr int numModulationRoutes = 12;
 /**
  * Targets are numbered: 0 = none, then slot 1 A, slot 1 B, ... slot 8 D (1..32, since 0.2.0), then
  * slot 1 E ... slot 8 H (33..64, added in 0.7.0), then the on/off switches of slot 1 ... 8 (65..72, added in
- * 0.13.0). The numbers are stored in projects, so targets added later get numbers after the existing ones.
+ * 0.13.0), then (added in 0.20.0) the amounts of routes 1..12 (73..84), the Rate, Phase and Width of LFO 1..4
+ * (85..96, three per LFO) and the Rate and Glide of Steps 1..4 (97..104, two per step modulator).
+ * The numbers are stored in projects, so targets added later get numbers after the existing ones.
  */
 constexpr int firstSecondPageTarget = 1 + numSlots * numParametersPerPage;
 constexpr int firstSlotSwitchTarget = 1 + numSlots * numParametersPerSlot;
-constexpr int numModulationTargets = firstSlotSwitchTarget + numSlots;
+constexpr int firstRouteAmountTarget = firstSlotSwitchTarget + numSlots;
+constexpr int firstLfoSettingTarget = firstRouteAmountTarget + numModulationRoutes;
+constexpr int firstStepSettingTarget = firstLfoSettingTarget + numLfos * 3;
+constexpr int numModulationTargets = firstStepSettingTarget + numStepModulators * 2;
+
+/** The settings of an LFO a route can move, in target order. */
+enum class LfoSettingTarget
+{
+    rate,
+    phase,
+    width
+};
+constexpr int numLfoSettingTargets = 3;
+
+/** The settings of a step modulator a route can move, in target order. */
+enum class StepSettingTarget
+{
+    rate,
+    glide
+};
+constexpr int numStepSettingTargets = 2;
+
+/** @return The target number of a route's amount. */
+constexpr int routeAmountTarget (int routeIndex) noexcept
+{
+    return firstRouteAmountTarget + routeIndex;
+}
+/** @return The target number of an LFO setting. */
+constexpr int lfoSettingTarget (int lfoIndex, LfoSettingTarget setting) noexcept
+{
+    return firstLfoSettingTarget + lfoIndex * numLfoSettingTargets + (int) setting;
+}
+/** @return The target number of a step modulator setting. */
+constexpr int stepSettingTarget (int stepIndex, StepSettingTarget setting) noexcept
+{
+    return firstStepSettingTarget + stepIndex * numStepSettingTargets + (int) setting;
+}
 /** The "parameter index" that stands for a slot's on/off switch in targetParameterIndex() and below. */
 constexpr int slotSwitchParameterIndex = numParametersPerSlot;
 
@@ -58,23 +98,79 @@ struct ModulationRoute
     /** Amounts smaller than this (half a percent) count as "off". */
     static constexpr float smallestEffectiveAmount = 0.005f;
 
-    bool isActive() const noexcept
+    /** @return True if the route has a source and a target (whatever its amount). */
+    bool isConnected() const noexcept
     {
         return targetIndex > 0 && targetIndex < numModulationTargets && sourceIndex >= 0 &&
-               sourceIndex < numModulationSources && std::abs (amount) >= smallestEffectiveAmount;
+               sourceIndex < numModulationSources;
     }
+    /** @return True if the route is connected and its amount (as set, not modulated) does something. */
+    bool isActive() const noexcept { return isActiveWithAmount (amount); }
+    /** @return True if the route is connected and the given (e.g. modulated) amount does something. */
+    bool isActiveWithAmount (float effectiveAmount) const noexcept
+    {
+        return isConnected() && std::abs (effectiveAmount) >= smallestEffectiveAmount;
+    }
+
+    /** @return True if the route moves a slot knob or a slot's on/off switch. */
+    bool targetsSlot() const noexcept { return targetIndex > 0 && targetIndex < firstRouteAmountTarget; }
     /** @return True if the route moves a slot's on/off switch rather than a knob. */
-    bool targetsSlotSwitch() const noexcept { return targetIndex >= firstSlotSwitchTarget; }
+    bool targetsSlotSwitch() const noexcept
+    {
+        return targetIndex >= firstSlotSwitchTarget && targetIndex < firstRouteAmountTarget;
+    }
+    /** @return True if the route moves a setting of the modulation (route amount, LFO or step setting). */
+    bool targetsModulation() const noexcept
+    {
+        return targetIndex >= firstRouteAmountTarget && targetIndex < numModulationTargets;
+    }
+    /** @return The route (0-based) whose amount this route moves, or -1. */
+    int targetRouteIndex() const noexcept
+    {
+        return targetIndex >= firstRouteAmountTarget && targetIndex < firstLfoSettingTarget
+                   ? targetIndex - firstRouteAmountTarget
+                   : -1;
+    }
+    /** @return The LFO (0-based) whose setting this route moves, or -1. */
+    int targetLfoIndex() const noexcept
+    {
+        return targetIndex >= firstLfoSettingTarget && targetIndex < firstStepSettingTarget
+                   ? (targetIndex - firstLfoSettingTarget) / numLfoSettingTargets
+                   : -1;
+    }
+    /** @return Which LFO setting this route moves (only meaningful when targetLfoIndex() >= 0). */
+    LfoSettingTarget targetLfoSetting() const noexcept
+    {
+        return (LfoSettingTarget) ((targetIndex - firstLfoSettingTarget) % numLfoSettingTargets);
+    }
+    /** @return The step modulator (0-based) whose setting this route moves, or -1. */
+    int targetStepIndex() const noexcept
+    {
+        return targetIndex >= firstStepSettingTarget && targetIndex < numModulationTargets
+                   ? (targetIndex - firstStepSettingTarget) / numStepSettingTargets
+                   : -1;
+    }
+    /** @return Which step modulator setting this route moves (only meaningful when targetStepIndex() >= 0). */
+    StepSettingTarget targetStepSetting() const noexcept
+    {
+        return (StepSettingTarget) ((targetIndex - firstStepSettingTarget) % numStepSettingTargets);
+    }
+
+    /** @return The slot (0-based) whose knob or switch this route moves, or -1 for other targets. */
     int targetSlotIndex() const noexcept
     {
+        if (! targetsSlot())
+            return -1;
         if (targetsSlotSwitch())
             return targetIndex - firstSlotSwitchTarget;
         return targetIndex < firstSecondPageTarget ? (targetIndex - 1) / numParametersPerPage
                                                    : (targetIndex - firstSecondPageTarget) / numParametersPerPage;
     }
-    /** @return The knob (0..7), or slotSwitchParameterIndex for the on/off switch. */
+    /** @return The knob (0..7), slotSwitchParameterIndex for the on/off switch, or -1 for other targets. */
     int targetParameterIndex() const noexcept
     {
+        if (! targetsSlot())
+            return -1;
         if (targetsSlotSwitch())
             return slotSwitchParameterIndex;
         return targetIndex < firstSecondPageTarget
@@ -104,9 +200,10 @@ struct ModulationSourceValues
 };
 
 /**
- * Applies all active routes: each adds sourceValue * amount to its target's normalised value, using the
- * bipolar or unipolar value of its source. Several routes on one target add up. Knob values are clamped to
+ * Applies all active routes to slots: each adds sourceValue * amount to its target's normalised value, using
+ * the bipolar or unipolar value of its source. Several routes on one target add up. Knob values are clamped to
  * 0..1. A modulated on/off switch counts as 0 or 1 plus its modulation and flips at the thresholds above.
+ * Routes to the modulation's own settings are skipped here (see applyRoutesToModulators()).
  *
  * @param sourceValues   Current output of every source.
  * @param routes         numModulationRoutes routes.
@@ -114,10 +211,12 @@ struct ModulationSourceValues
  * @param modulatedSlots Receives the modulated slot settings (numSlots entries).
  * @param switchStates   numSlots entries: each slot's switch state after the previous call (for the
  *                       hysteresis), updated here. nullptr: no memory, the switch flips at 0.5.
+ * @param routeAmounts   numModulationRoutes amounts to use instead of the routes' own (the modulated
+ *                       amounts), or nullptr.
  */
 inline void applyModulationRoutes (const ModulationSourceValues& sourceValues, const ModulationRoute* routes,
                                    const SlotSettings* baseSlots, SlotSettings* modulatedSlots,
-                                   bool* switchStates = nullptr) noexcept
+                                   bool* switchStates = nullptr, const float* routeAmounts = nullptr) noexcept
 {
     float switchModulation[numSlots] {};
     bool isSwitchModulated[numSlots] {};
@@ -127,11 +226,12 @@ inline void applyModulationRoutes (const ModulationSourceValues& sourceValues, c
     for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
     {
         const auto& route = routes[routeIndex];
-        if (! route.isActive())
+        const float amount = routeAmounts != nullptr ? routeAmounts[routeIndex] : route.amount;
+        if (! route.isActiveWithAmount (amount) || ! route.targetsSlot())
             continue;
         const float sourceValue =
             route.isUnipolar ? sourceValues.unipolar[route.sourceIndex] : sourceValues.bipolar[route.sourceIndex];
-        const float change = sourceValue * std::clamp (route.amount, -1.0f, 1.0f);
+        const float change = sourceValue * std::clamp (amount, -1.0f, 1.0f);
         if (route.targetsSlotSwitch())
         {
             switchModulation[route.targetSlotIndex()] += change;

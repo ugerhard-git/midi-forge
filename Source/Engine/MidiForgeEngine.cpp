@@ -50,6 +50,8 @@ void MidiForgeEngine::reset()
     for (auto& stepModulator : stepModulators)
         stepModulator.reset();
     samplesProcessed = 0;
+    previousSourceValues = {};
+    wasFollowingHost = false;
     isKeyHeld.fill (false);
     numKeysHeld = 0;
     std::fill (std::begin (slotSwitchStates), std::end (slotSwitchStates), true);
@@ -106,13 +108,14 @@ void MidiForgeEngine::handleNotesForModulators (const MidiEventList& segmentInpu
     }
 }
 
-void MidiForgeEngine::computeSourceValues (const BlockContext& segmentContext, const EngineSettings& settings)
+void MidiForgeEngine::computeSourceValues (const BlockContext& segmentContext)
 {
     for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
     {
-        lfoValues[lfoIndex] = lfos[lfoIndex].valueAt (settings.lfos[lfoIndex], segmentContext);
+        const auto& lfoSettings = modulatedModulators.lfos[lfoIndex];
+        lfoValues[lfoIndex] = lfos[lfoIndex].valueAt (lfoSettings, segmentContext);
         sourceValues.bipolar[lfoIndex] = lfoValues[lfoIndex];
-        sourceValues.unipolar[lfoIndex] = lfos[lfoIndex].unipolarValueAt (settings.lfos[lfoIndex], segmentContext);
+        sourceValues.unipolar[lfoIndex] = lfos[lfoIndex].unipolarValueAt (lfoSettings, segmentContext);
     }
     for (int randomIndex = 0; randomIndex < numNoteRandoms; ++randomIndex)
     {
@@ -122,7 +125,8 @@ void MidiForgeEngine::computeSourceValues (const BlockContext& segmentContext, c
     }
     for (int stepIndex = 0; stepIndex < numStepModulators; ++stepIndex)
     {
-        const float value = stepModulators[stepIndex].valueAt (settings.stepModulators[stepIndex], segmentContext);
+        const float value =
+            stepModulators[stepIndex].valueAt (modulatedModulators.stepModulators[stepIndex], segmentContext);
         sourceValues.bipolar[firstStepModulatorSource + stepIndex] = value;
         sourceValues.unipolar[firstStepModulatorSource + stepIndex] = (value + 1.0f) * 0.5f;
     }
@@ -144,12 +148,24 @@ void MidiForgeEngine::processSegment (int segmentStart, int segmentLength, const
     }
 
     const BlockContext segmentContext = contextForSegment (blockContext, segmentStart, segmentLength);
+    // The transport started: modulators that left the bar grid (modulated rate) lock onto it again.
+    if (segmentContext.followsHostTransport() && ! wasFollowingHost)
+    {
+        for (auto& lfo : lfos)
+            lfo.lockToGrid();
+        for (auto& stepModulator : stepModulators)
+            stepModulator.lockToGrid();
+    }
+    wasFollowingHost = segmentContext.followsHostTransport();
+
     handleNotesForModulators (segmentEvents, segmentContext, samplesProcessed + segmentStart, settings);
-    computeSourceValues (segmentContext, settings);
+    updateModulatedModulators (settings, isModulationActive);
+    computeSourceValues (segmentContext);
 
     if (isModulationActive)
     {
-        applyModulationRoutes (sourceValues, settings.routes, settings.slots, modulatedSlots, slotSwitchStates);
+        applyModulationRoutes (sourceValues, settings.routes, settings.slots, modulatedSlots, slotSwitchStates,
+                               modulatedModulators.routeAmounts);
     }
     else
     {
@@ -168,9 +184,37 @@ void MidiForgeEngine::processSegment (int segmentStart, int segmentLength, const
     }
 
     for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
-        lfos[lfoIndex].advance (settings.lfos[lfoIndex], segmentContext);
+        lfos[lfoIndex].advance (modulatedModulators.lfos[lfoIndex], segmentContext);
     for (int stepIndex = 0; stepIndex < numStepModulators; ++stepIndex)
-        stepModulators[stepIndex].advance (settings.stepModulators[stepIndex], segmentContext);
+        stepModulators[stepIndex].advance (modulatedModulators.stepModulators[stepIndex], segmentContext);
+    previousSourceValues = sourceValues;
+}
+
+void MidiForgeEngine::updateModulatedModulators (const EngineSettings& settings, bool isModulationActive)
+{
+    if (! isModulationActive)
+    {
+        std::copy (std::begin (settings.lfos), std::end (settings.lfos), modulatedModulators.lfos);
+        std::copy (std::begin (settings.stepModulators), std::end (settings.stepModulators),
+                   modulatedModulators.stepModulators);
+        for (int routeIndex = 0; routeIndex < numModulationRoutes; ++routeIndex)
+            modulatedModulators.routeAmounts[routeIndex] = settings.routes[routeIndex].amount;
+        std::fill (std::begin (modulatedModulators.isLfoRateModulated),
+                   std::end (modulatedModulators.isLfoRateModulated), false);
+        std::fill (std::begin (modulatedModulators.isStepRateModulated),
+                   std::end (modulatedModulators.isStepRateModulated), false);
+        return;
+    }
+
+    float previousAmounts[numModulationRoutes];
+    std::copy (std::begin (modulatedModulators.routeAmounts), std::end (modulatedModulators.routeAmounts),
+               previousAmounts);
+    applyRoutesToModulators (previousSourceValues, settings.routes, previousAmounts, settings.lfos,
+                             settings.stepModulators, modulatedModulators);
+    for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
+        lfos[lfoIndex].followRateModulation (modulatedModulators.isLfoRateModulated[lfoIndex]);
+    for (int stepIndex = 0; stepIndex < numStepModulators; ++stepIndex)
+        stepModulators[stepIndex].followRateModulation (modulatedModulators.isStepRateModulated[stepIndex]);
 }
 
 void MidiForgeEngine::process (MidiEventList& events, const BlockContext& context, const EngineSettings& settings)
@@ -204,22 +248,23 @@ void MidiForgeEngine::process (MidiEventList& events, const BlockContext& contex
         }
     }
 
-    updateLfoReadouts (contextForSegment (context, blockLength, 0), settings);
+    updateLfoReadouts (contextForSegment (context, blockLength, 0));
     samplesProcessed += blockLength;
     events.assign (blockOutput.begin(), blockOutput.end());
 }
 
-void MidiForgeEngine::updateLfoReadouts (const BlockContext& endOfBlockContext, const EngineSettings& settings)
+void MidiForgeEngine::updateLfoReadouts (const BlockContext& endOfBlockContext)
 {
     for (int lfoIndex = 0; lfoIndex < numLfos; ++lfoIndex)
     {
-        const double cyclePosition = lfos[lfoIndex].cyclePositionAt (settings.lfos[lfoIndex], endOfBlockContext);
+        const auto& lfoSettings = modulatedModulators.lfos[lfoIndex];
+        const double cyclePosition = lfos[lfoIndex].cyclePositionAt (lfoSettings, endOfBlockContext);
         lfoPhases[lfoIndex] = cyclePosition - std::floor (cyclePosition);
-        lfoValues[lfoIndex] = lfos[lfoIndex].valueAt (settings.lfos[lfoIndex], endOfBlockContext);
+        lfoValues[lfoIndex] = lfos[lfoIndex].valueAt (lfoSettings, endOfBlockContext);
     }
     for (int stepIndex = 0; stepIndex < numStepModulators; ++stepIndex)
     {
-        const auto& stepSettings = settings.stepModulators[stepIndex];
+        const auto& stepSettings = modulatedModulators.stepModulators[stepIndex];
         stepModulatorValues[stepIndex] = stepModulators[stepIndex].valueAt (stepSettings, endOfBlockContext);
         currentSteps[stepIndex] = stepModulators[stepIndex].currentStepAt (stepSettings, endOfBlockContext);
     }

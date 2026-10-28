@@ -11,8 +11,8 @@ and randomizers – in front of any instrument.
   Velocity Curve, Channel Remap, Note Dispatcher, Groove, Diatonic Harmonizer, Arpeggiator, Chord, Note Echo,
   Repeater (ratchets), Strum, Ghost Notes, Humanize, Probability, Beat Thinning, Random Pitch, Pitch Slide, Mutate
 - **Follows the DAW's time signature** (4/4, 3/4, 6/8, 7/8 …) wherever bars matter
-- **4 LFOs, 4 Random modulators, 4 step modulators and 8 modulation routes** move any module setting or switch
-  slots on and off: LFOs tempo-synced or free with 7 waveforms; Random modulators pick a new value per played
+- **4 LFOs, 4 Random modulators, 4 step modulators and 12 modulation routes** move any module setting, switch
+  slots on and off, or move the modulation itself (route amounts, LFO rate/phase/width, step rate/glide): LFOs tempo-synced or free with 7 waveforms; Random modulators pick a new value per played
   note or chord; step modulators play 4–16 drawn steps in time with the song; bipolar or unipolar per route
 - **Your own presets**, saved as files you can back up and share, plus 12 factory presets
 - **Module browser with search** and built-in help for every module and knob
