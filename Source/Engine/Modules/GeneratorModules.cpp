@@ -1,6 +1,6 @@
 /**
  * @file GeneratorModules.cpp
- * @brief Modules that create new notes: Chord, Note Echo and Arpeggiator.
+ * @brief Modules that create new notes: Chord, Note Echo, Arpeggiator, Repeater, Strum and Ghost Notes.
  */
 #include "GeneratorModules.h"
 
@@ -762,6 +762,326 @@ private:
     bool wasFollowingHost = false;
 };
 
+//==============================================================================
+/**
+ * Rolls chords. Notes arriving within Window are collected; then they start Speed apart in the chosen order.
+ * Everything is delayed by Window (the host is told, see MidiForgeProcessor::reportLatencyOfModules), so the
+ * first note of a strum lands where the chord was played. A note-off is delayed as much as its note-on.
+ */
+class Strum final : public SchedulingModule
+{
+public:
+    Strum() : SchedulingModule (ModuleType::Strum) { reset(); }
+
+    void reset() override
+    {
+        SchedulingModule::reset();
+        delayOfHeldNote.fill (noDelayStored);
+        numCollected = 0;
+        lastStrumTime = std::numeric_limits<int64_t>::min() / 2;
+        nextAlternateGoesUp = true;
+    }
+
+    void process (const MidiEventList& input, MidiEventList& output, const BlockContext& context,
+                  const float* parameterValues) override
+    {
+        const int64_t window = millisecondsToSamples (integerParameter (parameterValues, windowMilliseconds), context);
+        for (const auto& event : input)
+        {
+            const int64_t eventTime = context.blockStartSample + event.samplePosition;
+            if (numCollected > 0 && eventTime > collectionStart + window)
+                playCollectedChord (context, parameterValues, window);
+            sendScheduledEventsUpTo (eventTime, context, output);
+
+            if (event.isNoteOn())
+            {
+                auto& storedDelay = delayOfHeldNote[keyOf (event)];
+                if (storedDelay != noDelayStored) // played again: end the previous note first
+                    scheduleEvent (eventTime + storedDelay,
+                                   MidiEvent::noteOff (0, event.channel(), event.noteNumber()));
+                storedDelay = noDelayStored;
+                if (numCollected == 0)
+                    collectionStart = eventTime;
+                // A key already waiting in this chord is not added twice (one note-off ends both).
+                if (numCollected < maxChordNotes && ! isCollected (event))
+                    collected[(size_t) numCollected++] = { event, eventTime };
+                continue;
+            }
+
+            if (event.isNoteOff())
+            {
+                // A note released while its chord is still being collected: play the chord first.
+                if (isCollected (event))
+                    playCollectedChord (context, parameterValues, window);
+                auto& storedDelay = delayOfHeldNote[keyOf (event)];
+                if (storedDelay != noDelayStored)
+                    scheduleEvent (eventTime + storedDelay, event);
+                else
+                    sendEvent (event, output); // a note that started before this module was active
+                storedDelay = noDelayStored;
+                continue;
+            }
+
+            // Everything else keeps its place relative to the notes.
+            if (window > 0)
+                scheduleEvent (eventTime + window, event);
+            else
+                sendEvent (event, output);
+        }
+
+        // Window 0: only notes at the very same time form a chord, so it can be played at the end of the block.
+        const int64_t blockEnd = context.blockStartSample + context.numSamples;
+        if (numCollected > 0 && blockEnd > collectionStart + window)
+            playCollectedChord (context, parameterValues, window);
+        sendScheduledEventsInBlock (context, output);
+    }
+
+private:
+    enum Parameter
+    {
+        speedMilliseconds,
+        direction,
+        velocityTilt,
+        windowMilliseconds
+    };
+    enum Direction
+    {
+        up,
+        down,
+        alternate,
+        random
+    };
+    struct CollectedNote
+    {
+        MidiEvent noteOn;
+        int64_t arrivalTime;
+    };
+
+    static constexpr int maxChordNotes = 16;
+    static constexpr int64_t noDelayStored = -1;
+    static constexpr double phrasePauseSeconds = 0.5; ///< Alternate starts low to high again after this pause
+
+    static size_t keyOf (const MidiEvent& event) noexcept
+    {
+        return channelNoteIndex (event.channel(), event.noteNumber());
+    }
+    static int64_t millisecondsToSamples (int milliseconds, const BlockContext& context) noexcept
+    {
+        return std::llround (milliseconds / 1000.0 * context.sampleRate);
+    }
+
+    bool isCollected (const MidiEvent& noteOff) const noexcept
+    {
+        for (int index = 0; index < numCollected; ++index)
+            if (keyOf (collected[(size_t) index].noteOn) == keyOf (noteOff))
+                return true;
+        return false;
+    }
+
+    /** Schedules the collected notes as a strum and remembers each note's delay for its note-off. */
+    void playCollectedChord (const BlockContext& context, const float* parameterValues, int64_t window)
+    {
+        const auto begin = collected.begin();
+        const auto end = collected.begin() + numCollected;
+        std::sort (begin, end, [] (const CollectedNote& first, const CollectedNote& second)
+                   { return first.noteOn.noteNumber() < second.noteOn.noteNumber(); });
+
+        bool goesUp = true;
+        switch (integerParameter (parameterValues, direction))
+        {
+            case down: goesUp = false; break;
+            case alternate:
+                if (collectionStart - lastStrumTime >
+                    millisecondsToSamples ((int) (phrasePauseSeconds * 1000), context))
+                    nextAlternateGoesUp = true; // a new phrase starts low to high
+                goesUp = nextAlternateGoesUp;
+                nextAlternateGoesUp = ! nextAlternateGoesUp;
+                break;
+            case random:
+                for (int index = numCollected - 1; index > 0; --index)
+                    std::swap (collected[(size_t) index], collected[(size_t) randomInteger (0, index)]);
+                break;
+            default: break;
+        }
+        if (! goesUp)
+            std::reverse (begin, end);
+
+        const int64_t speed = millisecondsToSamples (integerParameter (parameterValues, speedMilliseconds), context);
+        const int tilt = integerParameter (parameterValues, velocityTilt);
+        for (int index = 0; index < numCollected; ++index)
+        {
+            const auto& note = collected[(size_t) index];
+            const int64_t startTime = collectionStart + window + (int64_t) index * speed;
+            const int velocityChange =
+                numCollected > 1 ? (int) std::lround ((double) tilt * index / (numCollected - 1)) : 0;
+            MidiEvent noteOn = note.noteOn;
+            noteOn.data2 = (uint8_t) std::clamp (note.noteOn.velocity() + velocityChange, 1, 127);
+            scheduleEvent (startTime, noteOn);
+            delayOfHeldNote[keyOf (note.noteOn)] = startTime - note.arrivalTime;
+        }
+        lastStrumTime = collectionStart;
+        numCollected = 0;
+    }
+
+    std::array<int64_t, numChannelNoteCombinations> delayOfHeldNote {};
+    std::array<CollectedNote, maxChordNotes> collected {};
+    int numCollected = 0;
+    int64_t collectionStart = 0;
+    int64_t lastStrumTime = 0;
+    bool nextAlternateGoesUp = true;
+};
+
+//==============================================================================
+/**
+ * Adds short, quiet copies of notes ("ghost notes") Distance apart. After: scheduled from the note. Before:
+ * a plug-in cannot look ahead, so every note is remembered for a bar, and ghosts are played just before the
+ * place it fell one bar earlier (while the DAW plays). The chance is decided once per note.
+ */
+class GhostNotes final : public SchedulingModule
+{
+public:
+    GhostNotes() : SchedulingModule (ModuleType::GhostNotes) { reset(); }
+
+    void reset() override
+    {
+        SchedulingModule::reset();
+        numRemembered = 0;
+        isKeyHeld.fill (false);
+    }
+
+    void process (const MidiEventList& input, MidiEventList& output, const BlockContext& context,
+                  const float* parameterValues) override
+    {
+        const int position = integerParameter (parameterValues, ghostPosition);
+        const bool wantsAfter = position == after || position == both;
+        const bool wantsBefore = (position == before || position == both) && context.followsHostTransport();
+        const double distanceInBeats =
+            ghostDistances[std::clamp (integerParameter (parameterValues, distanceIndex), 0, 3)];
+        const int count = std::clamp (integerParameter (parameterValues, ghostCount), 1, 3);
+        const int64_t ghostLength = std::max<int64_t> (1, std::llround (ghostLengthInBeats * context.samplesPerBeat()));
+
+        if (wantsBefore)
+            scheduleGhostsBeforeRememberedNotes (context, distanceInBeats, count, ghostLength);
+        else if (! context.followsHostTransport())
+            numRemembered = 0;
+
+        for (const auto& event : input)
+        {
+            const int64_t eventTime = context.blockStartSample + event.samplePosition;
+            sendScheduledEventsUpTo (eventTime, context, output);
+
+            // A key played again before its note-off (e.g. two notes upstream landing on one pitch, ended by
+            // one note-off): end the earlier note first, so the one note-off that follows ends this one.
+            if (event.isNoteOnOrOff())
+            {
+                auto& isHeld = isKeyHeld[channelNoteIndex (event.channel(), event.noteNumber())];
+                if (event.isNoteOn() && isHeld)
+                    sendEvent (MidiEvent::noteOff (event.samplePosition, event.channel(), event.noteNumber()), output);
+                isHeld = event.isNoteOn();
+            }
+            sendEvent (event, output); // the original always passes on time
+
+            if (! event.isNoteOn())
+                continue;
+            const bool getsGhosts =
+                randomUnitValue() * 100.0f < (float) integerParameter (parameterValues, chancePercent);
+            const int velocity = std::max (
+                1, (int) std::lround (event.velocity() * integerParameter (parameterValues, velocityPercent) / 100.0));
+
+            if (getsGhosts && wantsAfter)
+                for (int ghost = 1; ghost <= count; ++ghost)
+                    scheduleGhost (eventTime + std::llround (ghost * distanceInBeats * context.samplesPerBeat()), event,
+                                   velocity, ghostLength);
+
+            if (context.followsHostTransport())
+                remember (event, context.beatAtSample (event.samplePosition), getsGhosts, velocity);
+        }
+        sendScheduledEventsInBlock (context, output);
+    }
+
+private:
+    enum Parameter
+    {
+        chancePercent,
+        ghostPosition,
+        distanceIndex,
+        ghostCount,
+        velocityPercent ///< page 2
+    };
+    enum Position
+    {
+        after,
+        before,
+        both
+    };
+    /** A note of the last bar, for the ghost notes before it in the next bar. */
+    struct RememberedNote
+    {
+        double beat;
+        int channel;
+        int noteNumber;
+        int ghostVelocity;
+        bool getsGhosts;
+        int ghostsPlayed; ///< Bit per ghost (1 = closest) already scheduled in the next bar
+    };
+
+    static constexpr double ghostDistances[] = { 0.125, 1.0 / 6.0, 0.25, 0.5 }; // 1/32, 1/16T, 1/16, 1/8
+    static constexpr double ghostLengthInBeats = 0.0625;                        // 1/64
+    static constexpr double beatsPerBar = 4.0;
+    static constexpr int maxRememberedNotes = 128;
+
+    void scheduleGhost (int64_t time, const MidiEvent& original, int velocity, int64_t length)
+    {
+        scheduleEvent (time, MidiEvent::noteOn (0, original.channel(), original.noteNumber(), velocity));
+        scheduleEvent (time + length, MidiEvent::noteOff (0, original.channel(), original.noteNumber()));
+    }
+
+    void remember (const MidiEvent& noteOn, double beat, bool getsGhosts, int ghostVelocity)
+    {
+        if (numRemembered == maxRememberedNotes)
+        {
+            std::move (remembered.begin() + 1, remembered.end(), remembered.begin()); // drop the oldest
+            --numRemembered;
+        }
+        remembered[(size_t) numRemembered++] = { beat,          noteOn.channel(), noteOn.noteNumber(),
+                                                 ghostVelocity, getsGhosts,       0 };
+    }
+
+    /** Plays the ghosts that fall into this block before the places where notes fell one bar ago. */
+    void scheduleGhostsBeforeRememberedNotes (const BlockContext& context, double distanceInBeats, int count,
+                                              int64_t ghostLength)
+    {
+        const double blockStartBeat = context.ppqPositionAtBlockStart;
+        const double blockEndBeat = context.beatAtSample (context.numSamples);
+        int kept = 0;
+        for (int index = 0; index < numRemembered; ++index)
+        {
+            auto& note = remembered[(size_t) index];
+            const double nextBarBeat = note.beat + beatsPerBar;
+            if (nextBarBeat < blockStartBeat) // its place has passed (or the host jumped): forget it
+                continue;
+            for (int ghost = 1; ghost <= count && note.getsGhosts; ++ghost)
+            {
+                const double ghostBeat = nextBarBeat - ghost * distanceInBeats;
+                const int ghostBit = 1 << ghost;
+                if ((note.ghostsPlayed & ghostBit) != 0 || ghostBeat < blockStartBeat || ghostBeat >= blockEndBeat)
+                    continue;
+                note.ghostsPlayed |= ghostBit;
+                const int64_t time =
+                    context.blockStartSample + std::llround ((ghostBeat - blockStartBeat) * context.samplesPerBeat());
+                scheduleGhost (time, MidiEvent::noteOn (0, note.channel, note.noteNumber, note.ghostVelocity),
+                               note.ghostVelocity, ghostLength);
+            }
+            remembered[(size_t) kept++] = note;
+        }
+        numRemembered = kept;
+    }
+
+    std::array<RememberedNote, maxRememberedNotes> remembered {};
+    int numRemembered = 0;
+    std::array<bool, numChannelNoteCombinations> isKeyHeld {}; ///< Original notes sounding (not the ghosts)
+};
+
 } // namespace
 
 std::unique_ptr<MidiModule> createGeneratorModule (ModuleType type)
@@ -772,6 +1092,8 @@ std::unique_ptr<MidiModule> createGeneratorModule (ModuleType type)
         case ModuleType::Chord: return std::make_unique<Chord>();
         case ModuleType::NoteEcho: return std::make_unique<NoteEcho>();
         case ModuleType::Repeater: return std::make_unique<Repeater>();
+        case ModuleType::Strum: return std::make_unique<Strum>();
+        case ModuleType::GhostNotes: return std::make_unique<GhostNotes>();
         default: return nullptr;
     }
 }

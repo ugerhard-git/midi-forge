@@ -56,6 +56,9 @@ const char* const mutateDirectionLabels[] = { "Up", "Down", "Both" };
 const char* const mutateMemoryLabels[] = { "4 Bars", "2 Bars", "1 Bar", "Per Pitch" };
 const char* const grooveTemplateLabels[] = { "Swing", "Laid-back Snare", "Pushed Off-beats", "Shuffle", "Drunk" };
 const char* const grooveGridLabels[] = { "1/8", "1/16", "1/32" };
+const char* const strumDirectionLabels[] = { "Up", "Down", "Alternate", "Random" };
+const char* const ghostPositionLabels[] = { "After", "Before", "Both" };
+const char* const ghostDistanceLabels[] = { "1/32", "1/16T", "1/16", "1/8" };
 const char* const echoDivisionLabels[] = { "1/32", "1/16T", "1/16", "1/16D", "1/8T", "1/8",
                                            "1/8D", "1/4T",  "1/4",  "1/4D",  "1/2",  "1 Bar" };
 const char* const arpeggiatorDivisionLabels[] = { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
@@ -373,6 +376,36 @@ const ModuleDescription* createModuleTable()
           "so programmed parts get a pocket. Works while the DAW plays (it needs the bar position). A plug-in "
           "cannot play notes before they arrive: for grooves that push notes early, set Early; all notes are then "
           "delayed that much, the early ones less, and the DAW is told to compensate." },
+
+        // Added in 0.18.0 --------------------------------------------------------------------------
+        { "Strum",
+          ModuleCategory::Generator,
+          "Plays chords as strums: the notes one after another.",
+          { integerParameter ("Speed", 1, 100, 15, " ms").withHelp ("Time between the notes of a strum."),
+            choiceParameter ("Direction", strumDirectionLabels, 0)
+                .withHelp ("Up: lowest note first. Alternate: up, down, up ... Random: a new order every time."),
+            integerParameter ("Velocity Tilt", -50, 50, 0)
+                .withHelp ("Later notes get louder (positive) or softer (negative) by up to this much."),
+            integerParameter ("Window", 0, 40, 10, " ms")
+                .withHelp ("How long Strum collects a played chord; everything is delayed this much (reported to "
+                           "the DAW). 0: only exactly simultaneous chords.") },
+          "Rolls every chord: its notes start one after another, Speed apart, low to high, high to low, alternating "
+          "like a strummed guitar (starting low to high again after a pause), or in random order. Notes that "
+          "arrive within Window count as one chord. Single notes pass, delayed by Window like everything else." },
+        { "Ghost Notes",
+          ModuleCategory::Generator,
+          "Adds quiet extra hits around notes, mainly for drums.",
+          { percentParameter ("Chance", 0, 100, 50).withHelp ("How often a note gets ghost notes."),
+            choiceParameter ("Position", ghostPositionLabels, 0)
+                .withHelp ("After the note, before it (where a note fell one bar earlier), or both."),
+            choiceParameter ("Distance", ghostDistanceLabels, 2).withHelp ("The spacing of the ghost notes."),
+            integerParameter ("Count", 1, 3, 1).withHelp ("How many ghost notes (on each side)."),
+            // Page 2
+            percentParameter ("Velocity", 10, 60, 30).withHelp ("Ghost note velocity, as a share of the note's.") },
+          "Adds short, quiet copies of a note one or more Distance apart, e.g. around a snare. A plug-in cannot "
+          "play before a note it has not received yet, so Before works from the previous bar: ghost notes come "
+          "just before the places where notes fell one bar earlier (needs the DAW playing). Put a Note Split in "
+          "front to give only one drum ghost notes." },
     };
     return table;
 }

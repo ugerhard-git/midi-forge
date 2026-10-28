@@ -52,6 +52,9 @@ enum class ModuleType : int
     Mutate, ///< Randomizer
     // Added in 0.17.0
     Groove, ///< Transform
+    // Added in 0.18.0
+    Strum,      ///< Generator
+    GhostNotes, ///< Generator
 
     Count
 };

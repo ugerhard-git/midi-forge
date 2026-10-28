@@ -136,8 +136,17 @@ on all channels. The stress test also checks that no channel is left bent.
   (`BlockContext::blockStartSample`). Used by Arpeggiator, Repeater, Note Echo and Humanize.
 - **Groove** is a `SchedulingModule` (like Humanize): each note-on is delayed by Early plus the groove shift
   of its nearest grid step (clamped at 0), its note-off by the same amount. `BlockContext::beatAtSample()` gives
-  the bar position (shared by modules that need it). `MidiForgeProcessor::reportLatencyOfGrooves()` adds up
-  the Early time of every switched-on Groove and reports it with `setLatencySamples()`, so hosts compensate.
+  the bar position (shared by modules that need it). The Early time is reported as latency (see
+  `reportLatencyOfModules()` below), so hosts compensate.
+- **Strum** (a `SchedulingModule`) collects note-ons arriving within Window, sorts them, and schedules them
+  Speed apart starting Window after the first one; everything else is delayed by Window. Each key stores its
+  delay for its note-off. A key already waiting in a chord is not collected twice.
+- **Ghost Notes** (a `SchedulingModule`) passes every event on time and schedules ghost note pairs (1/64 long)
+  after a note, and before the places where notes fell one bar earlier (a list of the last bar's note-ons,
+  while the host plays). A key repeated before its note-off ends the earlier note first, so the one note-off
+  upstream sends ends the right note.
+- `MidiForgeProcessor::reportLatencyOfModules()` adds up Groove's Early and Strum's Window of every
+  switched-on slot and reports it with `setLatencySamples()`.
 - **Note Dispatcher** derives from `MidiModule` directly. Every input key remembers what happened to its note
   (`channelOfInputKey`: the channel it was sent to, *passed through* when it was not on the Input channel,
   or *stolen* when its channel was freed for a newer note), so note-offs and poly pressure always follow

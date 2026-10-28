@@ -231,6 +231,14 @@ TEST_CASE ("chain: randomized stress test leaves no stuck notes and no pitch ben
             for (const auto& slot : rig.slots)
                 std::printf (" %s%s", getModuleDescription (slot.moduleType).name, slot.isEnabled ? "" : " (off)");
             std::printf ("\n");
+            for (const auto& [key, count] : stuck)
+            {
+                std::printf ("  stuck ch%d n%d:", key / 128 + 1, key % 128);
+                for (const auto& event : rig.everyOutputEvent)
+                    if (event.isNoteOnOrOff() && event.channel() == key / 128 && event.noteNumber() == key % 128)
+                        std::printf (" %d%s", event.samplePosition, event.isNoteOn() ? "+" : "-");
+                std::printf ("\n");
+            }
         }
         EXPECT (stuck.empty());
 

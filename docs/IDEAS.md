@@ -16,7 +16,7 @@ Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 
 1. ~~Step modulator ties (0.16)~~ built
 2. ~~Groove (0.17), with a shared "position in the bar" helper~~ built
-3. Strum + Ghost Notes (0.18)
+3. ~~Strum + Ghost Notes (0.18)~~ built
 4. Beat-aware thinning + Diatonic Harmonizer (0.19), with a shared scale helper
 5. Modulating the modulation (0.20)
 6. Pitch Slide: Fall Off (0.21)
@@ -24,35 +24,14 @@ Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 
 ## Planned
 
-### Strum and Ghost Notes modules (agreed, waiting for the go)
-
-**Strum** (Generator): plays chords as strums. Knobs: *Speed* (1–100 ms between notes, default 15),
-*Direction* (Up, Down, Alternate, Random), *Velocity Tilt* (−50…+50), *Window* (0–40 ms, default 10: how
-long it collects a played chord; reported to the DAW as latency; 0 = only exactly simultaneous chords, no
-delay). Alternate starts again with a down-strum after a pause. Note-offs are delayed like their note-ons;
-single notes pass unchanged.
-
-**Ghost Notes** (Generator): adds quiet extra hits, mainly for drums. Knobs: *Chance* (0–100 %), *Position*
-(After / Before / Both), *Distance* (1/32, 1/16T, 1/16, 1/8), *Count* (1–3), *Velocity* (10–60 % of the
-note). Ghost notes are short (1/64). *Before* uses the previous bar: ghosts come just before the places where
-notes fell one bar earlier (needs the DAW playing; no delay).
-
+(nothing at the moment)
 
 ## Ideas
-
-### Strum
-
-Plays chords as strums: the notes one after another instead of together. Speed (ms or tempo-synced),
-direction (up, down, alternating, random) and a velocity tilt across the strum.
 
 ### Beat-aware thinning
 
 Like Probability, but each position in the bar has a weight: downbeats almost always play, off-beat
 sixteenths drop out more often. Variation without losing the backbone of the groove.
-
-### Ghost Notes
-
-Adds quiet extra hits shortly before or after notes, with a chance, mainly for drums (hi-hats, snares).
 
 ### Diatonic Harmonizer
 

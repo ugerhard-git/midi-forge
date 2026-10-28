@@ -245,9 +245,13 @@ private:
      */
     void resetKnobsAddedAfter (int savedKnobLayoutVersion);
     void readEngineSettings();
-    /** Reports the Early delay of the Groove modules to the host as latency, so it can compensate. */
-    void reportLatencyOfGrooves (double sampleRate);
+    /**
+     * Reports the fixed delays of the modules (Groove's Early, Strum's Window) to the host as latency, so it
+     * can compensate.
+     */
+    void reportLatencyOfModules (double sampleRate);
     static constexpr int grooveEarlyParameterIndex = 4; ///< Groove's "Early" knob (E)
+    static constexpr int strumWindowParameterIndex = 3; ///< Strum's "Window" knob (D)
     BlockContext readBlockContext (int numSamples);
     void publishReadoutsForEditor();
     /**

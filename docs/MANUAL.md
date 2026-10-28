@@ -224,6 +224,7 @@ DAW plays; when it is stopped, notes pass unchanged.
 to that much ahead of the others. MIDI Forge tells your DAW about this delay (as plug-in latency), and
 Reaper and Bitwig normally shift the track to compensate, so everything stays in time with the rest of the
 song. If the whole part sounds late, set the track's delay/offset in your DAW to minus the Early time.
+Strum's *Window* is reported the same way, and the delays of several modules add up.
 Without Early, grooves can only move notes later (which is all Swing, Shuffle and Laid-back Snare need), and
 late-played notes cannot be pulled back onto the beat. Keep a Groove with Early switched on: switching the
 slot on and off (also by modulation) changes the delay.
@@ -312,6 +313,40 @@ Tip: an LFO on *Rate* makes the ratchet speed change on its own (see the *Ratche
 modulator on *Chance* makes some phrases busy and others sparse.
 
 Projects and presets from older versions open with *Chance* at 100 %, so they sound as before.
+
+**Strum** – plays chords as strums: the notes of a chord start one after another instead of together, like a
+strummed guitar or a rolled piano chord. Single notes pass unchanged. Each note's note-off is delayed as much
+as its note-on, so note lengths stay.
+
+| Knob | Range | Meaning |
+|------|-------|---------|
+| Speed | 1 … 100 ms | Time between the notes of a strum (default 15 ms) |
+| Direction | Up / Down / Alternate / Random | *Up:* lowest note first. *Down:* highest first. *Alternate:* up, down, up … like strumming; after half a second without chords it starts with up again. *Random:* a new order every time |
+| Velocity Tilt | −50 … +50 | Later notes of a strum get softer (negative) or louder (positive), the last one by this much |
+| Window | 0 … 40 ms | How long Strum collects a played chord (default 10 ms), see below |
+
+**Window:** to strum "Up", Strum has to know all notes of a chord before it plays the lowest one. Chords from
+your DAW's piano roll arrive at exactly the same moment, but chords you play live are spread over a few
+milliseconds. Strum waits *Window* for the rest of the chord and delays **everything** by that time; MIDI
+Forge tells your DAW, which normally shifts the track to compensate (as with Groove's *Early*). With Window 0
+only exactly simultaneous chords are strummed, without any delay.
+
+**Ghost Notes** – adds quiet, short extra hits around notes, mainly for drums: put a *Note Split* on the
+snare in front of it and the snare gets ghost notes while everything else stays as played. The notes
+themselves pass on time and unchanged.
+
+| Knob | Range | Meaning |
+|------|-------|---------|
+| Chance | 0 … 100 % | How often a note gets ghost notes (default 50 %) |
+| Position | After / Before / Both | Where the ghost notes go, see below |
+| Distance | 1/32, 1/16T, 1/16, 1/8 | Spacing of the ghost notes (default 1/16) |
+| Count | 1 … 3 | How many ghost notes on each side |
+| Velocity *(page 2)* | 10 … 60 % | Ghost note velocity as a share of the note's (default 30 %) |
+
+Ghost notes are short (a 1/64 note) and have the same pitch as their note. **Before:** a plug-in cannot play
+before a note it has not received yet, so Ghost Notes remembers where notes fell in the previous bar and plays
+the ghosts just before the same places in the current bar – ideal for loops and steady grooves. This needs
+the DAW playing; when it is stopped, only *After* works.
 
 ### Randomizers (purple)
 

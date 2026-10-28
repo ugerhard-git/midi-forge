@@ -449,17 +449,27 @@ bool MidiForgeProcessor::isBusesLayoutSupported (const BusesLayout& /*layouts*/)
     return true; // no audio is processed, so any layout a host insists on is fine
 }
 
-void MidiForgeProcessor::reportLatencyOfGrooves (double sampleRate)
+void MidiForgeProcessor::reportLatencyOfModules (double sampleRate)
 {
-    // Every switched-on Groove delays all notes by its Early time; delays of several Grooves add up.
-    int totalEarlyMilliseconds = 0;
-    const auto& earlyParameter = getModuleDescription (ModuleType::Groove).parameters[grooveEarlyParameterIndex];
+    // Modules that delay everything by a fixed time: Groove (Early) and Strum (Window). Delays of several
+    // switched-on modules add up.
+    int totalDelayMilliseconds = 0;
     for (const auto& slot : engineSettings.slots)
-        if (slot.moduleType == (int) ModuleType::Groove && slot.isEnabled)
-            totalEarlyMilliseconds +=
-                normalisedToInteger (earlyParameter, slot.parameterValues[grooveEarlyParameterIndex]);
+    {
+        if (! slot.isEnabled)
+            continue;
+        int parameterIndex = -1;
+        if (slot.moduleType == (int) ModuleType::Groove)
+            parameterIndex = grooveEarlyParameterIndex;
+        else if (slot.moduleType == (int) ModuleType::Strum)
+            parameterIndex = strumWindowParameterIndex;
+        if (parameterIndex >= 0)
+            totalDelayMilliseconds +=
+                normalisedToInteger (getModuleDescription (slot.moduleType).parameters[parameterIndex],
+                                     slot.parameterValues[parameterIndex]);
+    }
 
-    const int requiredLatency = (int) std::lround (totalEarlyMilliseconds / 1000.0 * sampleRate);
+    const int requiredLatency = (int) std::lround (totalDelayMilliseconds / 1000.0 * sampleRate);
     if (requiredLatency != getLatencySamples())
         setLatencySamples (requiredLatency); // the host is told asynchronously and compensates the track
 }
@@ -525,7 +535,7 @@ void MidiForgeProcessor::processBlock (juce::AudioBuffer<float>& audio, juce::Mi
 
     readEngineSettings();
     const BlockContext context = readBlockContext (audio.getNumSamples());
-    reportLatencyOfGrooves (context.sampleRate);
+    reportLatencyOfModules (context.sampleRate);
 
     // Split the incoming MIDI: short messages go through the engine, long ones pass untouched.
     engineEvents.clear();

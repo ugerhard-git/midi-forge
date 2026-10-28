@@ -1552,6 +1552,30 @@ TEST_CASE ("groove: the host shows its knobs, and Early is reported to the host 
     EXPECT (processor.getLatencySamples() == 0);
 }
 
+//==============================================================================
+// Strum and Ghost Notes
+
+TEST_CASE ("strum and ghost notes: host texts, and Strum's window adds to the reported latency")
+{
+    MidiForgeProcessor processor;
+    processor.loadModule (0, (int) ModuleType::Strum);
+    processor.loadModule (1, (int) ModuleType::GhostNotes);
+    processor.loadModule (2, (int) ModuleType::Groove);
+    EXPECT (hostTextOf (processor, 0, 0) == "15 ms");
+    EXPECT (hostTextOf (processor, 0, 1) == "Up");
+    EXPECT (hostTextOf (processor, 0, 3) == "10 ms");
+    EXPECT (hostTextOf (processor, 1, 1) == "After");
+    EXPECT (hostTextOf (processor, 1, 2) == "1/16");
+    EXPECT (hostTextOf (processor, 1, 4) == "30%");
+
+    auto* early = processor.parameters.getParameter (ParameterIds::moduleParameter (2, 4));
+    early->setValueNotifyingHost (early->getValueForText ("20 ms"));
+    processor.setRateAndBufferSizeDetails (testSampleRate, testBlockSize);
+    processor.prepareToPlay (testSampleRate, testBlockSize);
+    processBlock (processor, {});
+    EXPECT (processor.getLatencySamples() == 1440); // 10 ms Strum window + 20 ms Groove Early at 48 kHz
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI juceInitialiser;
