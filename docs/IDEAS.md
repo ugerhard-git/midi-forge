@@ -24,7 +24,17 @@ Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 
 ## Planned
 
-(nothing at the moment)
+### Groove module (Timing; agreed, waiting for the go)
+
+- **Knobs:** A *Groove* (template: Swing, Laid-back Snare, Pushed Off-beats, Shuffle, Drunk; more can be
+  appended later), B *Amount* (0–100 %: how firmly notes snap to the template), C *Grid* (the swing grid,
+  e.g. 1/8, 1/16, 1/32), D *Velocity* (0–100 %: the template's accents), page 2: E *Early* (0–30 ms).
+- Snaps notes (within half a grid step) towards the template position of the nearest grid point; Amount
+  decides how far. Note-offs move with their notes, so lengths stay.
+- Early notes: every note is delayed by *Early*, "early" notes less; the delay is reported to the DAW as
+  latency so it can compensate. Early 0 = no delay, grooves can only drag notes later.
+- Works while the DAW plays (needs the bar position); otherwise notes pass unchanged.
+
 
 ## Ideas
 
