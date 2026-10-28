@@ -103,10 +103,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Windows only for now. A macOS job (macos-latest, ad-hoc codesign, ditto zip) can be added back:
-          # CMake still builds a universal binary on macOS.
           - name: Windows
             os: windows-latest
+          # Universal binary (Apple Silicon and Intel), ad-hoc signed (no Apple Developer account).
+          - name: macOS
+            os: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -140,12 +141,32 @@ jobs:
           cp packaging/INSTALL.txt dist/
           cp LICENSE dist/LICENSE.txt
 
-      # GitHub always delivers an artifact as a zip, so the folder is uploaded as it is (zipping it here
-      # would give a zip inside a zip). The release job makes the release zip itself.
+      - name: Ad-hoc sign and check (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          codesign --force --deep --sign - "dist/MIDI Forge.vst3"
+          codesign --verify --deep --verbose=2 "dist/MIDI Forge.vst3"
+          lipo -info "dist/MIDI Forge.vst3/Contents/MacOS/MIDI Forge"
+
+      # macOS: a bundle loses its file permissions in a GitHub artifact, which breaks its signature, so it is
+      # zipped here with ditto and the artifact holds that zip (the release job publishes it as it is).
+      - name: Zip (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p upload
+          cd dist && ditto -c -k --sequesterRsrc . "../upload/MIDI-Forge-macOS.zip"
+
+      # Windows: GitHub always delivers an artifact as a zip, so the folder is uploaded as it is (zipping it
+      # here would give a zip inside a zip). The release job makes the release zip itself.
+      - name: Prepare upload (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: mv dist upload
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: MIDI-Forge-${{ matrix.name }}
-          path: dist/
+          path: upload/
           if-no-files-found: error
           retention-days: 30
 
@@ -163,12 +184,17 @@ jobs:
           pattern: MIDI-Forge-*
           path: artifacts
 
-      # Each artifact arrives as a folder (artifacts/MIDI-Forge-Windows/...); zip each one for the release.
+      # Each artifact arrives as a folder (artifacts/MIDI-Forge-Windows/...). The macOS one already holds its
+      # zip (made with ditto); the others are zipped here.
       - name: Zip the plug-ins
         run: |
           for folder in artifacts/*/; do
             name=$(basename "$folder")
-            (cd "$folder" && zip -r -q "$GITHUB_WORKSPACE/$name.zip" .)
+            if [ -f "$folder/$name.zip" ]; then
+              cp "$folder/$name.zip" "$GITHUB_WORKSPACE/$name.zip"
+            else
+              (cd "$folder" && zip -r -q "$GITHUB_WORKSPACE/$name.zip" .)
+            fi
           done
           ls -l *.zip
 

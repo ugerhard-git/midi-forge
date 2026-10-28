@@ -11,7 +11,7 @@
 
 cmake_minimum_required(VERSION 3.28)
 
-project(MidiForge VERSION 0.21.0 LANGUAGES C CXX)
+project(MidiForge VERSION 0.22.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -26,8 +26,7 @@ option(MIDI_FORGE_BUILD_PLUGIN_TESTS "Build the plug-in layer tests (needs MIDI_
 option(MIDI_FORGE_WARNINGS_AS_ERRORS "Treat compiler warnings in our own code as errors" OFF)
 option(MIDI_FORGE_SANITIZERS "Build the engine and its tests with address and undefined-behaviour sanitizers" OFF)
 
-# Universal binary on macOS unless the caller decides otherwise. CI builds Windows only for now; this stays so
-# a Mac build can come back by adding a CI job.
+# Universal binary on macOS (Apple Silicon and Intel) unless the caller decides otherwise.
 if(APPLE AND NOT CMAKE_OSX_ARCHITECTURES)
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "" FORCE)
 endif()
@@ -167,6 +166,8 @@ if(MIDI_FORGE_BUILD_PLUGIN)
         Source/Plugin/RecentModuleList.h
         Source/Plugin/RecentModuleList.cpp
         Source/UI/Theme.h
+        Source/UI/ForgeLogo.h
+        Source/UI/ForgeLogo.cpp
         Source/UI/ForgeLookAndFeel.h
         Source/UI/ForgeLookAndFeel.cpp
         Source/UI/SlotRow.h

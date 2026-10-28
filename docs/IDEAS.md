@@ -20,7 +20,8 @@ Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 4. ~~Beat Thinning + Diatonic Harmonizer (0.19), time signatures followed everywhere~~ built
 5. ~~Modulating the modulation (0.20)~~ built
 6. ~~Pitch Slide: Fall Off (0.21)~~ built
-- Later, separately: Pitch Slide MPE. Parked until the owner wants it: macOS and CLAP builds.
+- Next: the forge look of the header and the macOS build again (0.22, built). Later, separately: Pitch Slide
+  MPE. Parked until the owner wants it: CLAP build.
 
 ## Planned
 
@@ -28,12 +29,11 @@ Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 
 ## Ideas
 
-### macOS and CLAP builds
+### CLAP build
 
-Switched off in 0.9.0 because only the Windows VST3 is needed for now. CMake still builds a universal binary
-on macOS, and `-DMIDI_FORGE_BUILD_CLAP=ON` brings CLAP back. To return: add the macOS job to the CI matrix
-again (ad-hoc `codesign`, `ditto` zip), add the CLAP target and file to the build and collect steps, and put
-the install folders and the macOS quarantine note back into the manual and packaging/INSTALL.txt.
+Switched off in 0.9.0. `-DMIDI_FORGE_BUILD_CLAP=ON` brings it back; then add the CLAP target and file to the
+build and collect steps of the workflow (and sign it on macOS), and add its install folders to the manual and
+packaging/INSTALL.txt.
 
 ### Pitch Slide: MPE
 

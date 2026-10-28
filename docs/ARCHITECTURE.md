@@ -45,7 +45,7 @@ connects it to JUCE, which provides the VST3 wrapper, parameters and the editor.
 | `Source/Plugin/FactoryPresets.*` | The factory presets (JUCE-free, so the engine tests can check them too) |
 | `Source/Plugin/UserPresetLibrary.*` | User preset files: folder, save/load/rename/delete/import, validation, name cleaning |
 | `Source/Plugin/RecentModuleList.*` | The recently used modules of the module browser, shared by all instances via `juce::SharedResourcePointer`, saved in `Documents/MIDI Forge/Settings.xml` |
-| `Source/UI/*` | Editor: `MidiForgeEditor` (tabs), `SlotRow` + `ParameterKnob` (Chain tab), `ModuleBrowser` + `ModuleInfoView` (pop-ups of the module menu and the ⓘ button), `ModulationPage` with `LfoPanel`, `WaveformPreview`, `NoteRandomPanel`, `RouteRow`, `CompactKnob` (Modulation tab), `PresetBar` (◀ menu ▶, Save, ⋯ menu with async dialogs), `ForgeLookAndFeel`, `Theme`. `ParameterKnob::attachTo()` sets the knob's step interval from the parameter description, so stepped parameters snap while dragging |
+| `Source/UI/*` | Editor: `MidiForgeEditor` (tabs; the header's word mark, glow and ember line come from `ForgeLogo`, drawn with paths and gradients), `SlotRow` + `ParameterKnob` (Chain tab), `ModuleBrowser` + `ModuleInfoView` (pop-ups of the module menu and the ⓘ button), `ModulationPage` with `LfoPanel`, `WaveformPreview`, `NoteRandomPanel`, `RouteRow`, `CompactKnob` (Modulation tab), `PresetBar` (◀ menu ▶, Save, ⋯ menu with async dialogs), `ForgeLookAndFeel`, `Theme`. `ParameterKnob::attachTo()` sets the knob's step interval from the parameter description, so stepped parameters snap while dragging |
 | `Tests/Engine/*` | Engine tests (no JUCE) |
 | `Tests/Plugin/*` | Tests of the JUCE layer; can also render both editor pages and the module pop-ups to PNGs |
 | `docs/` | This document, the user manual, images |
@@ -337,10 +337,16 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md#building) for commands. The workflow
 1. **Checks** (Linux): clang-format, clang-tidy, engine tests with warnings as errors, engine tests
    under address/UB sanitizers, plug-in layer tests, and screenshots of both editor pages (artifact
    `editor-screenshots`, the source of `docs/images/editor.png` and `docs/images/modulation.png`).
-2. **Plug-in build** (Windows): the VST3 and INSTALL.txt as artifact `MIDI-Forge-Windows` (uploaded as a
-   folder; GitHub zips artifacts itself, so the download is a single zip). macOS and CLAP builds
-   are switched off for now; CMake still knows both (universal binary on macOS, `MIDI_FORGE_BUILD_CLAP`).
-3. **Release** (tags `v*` only): zips each artifact folder and attaches the zips to a GitHub Release.
+2. **Plug-in build** (Windows and macOS, in parallel): the VST3, INSTALL.txt and LICENSE.txt.
+   - Windows: artifact `MIDI-Forge-Windows`, uploaded as a folder (GitHub zips artifacts itself, so the
+     download is a single zip).
+   - macOS (0.22.0): a universal binary (arm64 + x86_64, macOS 11+), ad-hoc signed with `codesign` (no Apple
+     Developer account, so not notarized; users clear the quarantine flag, see INSTALL.txt) and checked with
+     `lipo`. It is zipped with `ditto` in the job, because a GitHub artifact loses the bundle's file
+     permissions; artifact `MIDI-Forge-macOS` holds that zip.
+   - CLAP stays switched off (`MIDI_FORGE_BUILD_CLAP`).
+3. **Release** (tags `v*` only): zips each artifact folder (the macOS zip is taken as it is) and attaches the
+   zips to a GitHub Release.
 
 Dependencies (JUCE 9.0.4; clap-juce-extensions only with CLAP switched on) are fetched by CMake at pinned versions; GitHub
 Actions are pinned to commit SHAs and updated by Dependabot.

@@ -20,11 +20,21 @@ stack in **slots**.
 
 ## Installation
 
-Download `MIDI-Forge-Windows.zip` from the project's **Releases** page on GitHub (or, for test builds,
-from the **Actions** tab → latest successful run → *Artifacts*) and copy `MIDI Forge.vst3` to
-`C:\Program Files\Common Files\VST3\`.
+Download the zip for your system from the project's **Releases** page on GitHub (or, for test builds,
+from the **Actions** tab → latest successful run → *Artifacts*):
 
-Then let your DAW rescan its plug-ins.
+- **Windows** (`MIDI-Forge-Windows.zip`): copy `MIDI Forge.vst3` to `C:\Program Files\Common Files\VST3\`.
+- **macOS** (`MIDI-Forge-macOS.zip`, macOS 11 or newer, Apple Silicon and Intel): copy `MIDI Forge.vst3` to
+  `~/Library/Audio/Plug-Ins/VST3/`. The plug-in is not notarized by Apple, so macOS quarantines it after the
+  download and your DAW will not load it. Remove the quarantine flag once, in Terminal:
+
+  ```sh
+  xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/"MIDI Forge.vst3"
+  ```
+
+  (A test build from *Actions* arrives as a zip that holds `MIDI-Forge-macOS.zip`; unzip both.)
+
+Then let your DAW rescan its plug-ins. Logic Pro is not supported (it only loads Audio Units).
 
 ## Where to put it in your DAW
 

@@ -4,6 +4,7 @@
  */
 #include "PluginEditor.h"
 
+#include "ForgeLogo.h"
 #include "Theme.h"
 
 namespace midiforge
@@ -14,6 +15,7 @@ MidiForgeEditor::MidiForgeEditor (MidiForgeProcessor& processorToEdit)
       modulationPage (processorToEdit)
 {
     setLookAndFeel (&lookAndFeel);
+    setTitle ("MIDI Forge"); // the painted word mark, for screen readers
 
     addAndMakeVisible (presetBar);
 
@@ -77,10 +79,9 @@ void MidiForgeEditor::paint (juce::Graphics& graphics)
     using namespace Theme::Layout;
     graphics.fillAll (Theme::Colours::windowBackground);
 
-    auto header = getLocalBounds().removeFromTop (headerHeight).reduced (outerMargin, 0);
-    graphics.setColour (Theme::Colours::primaryText);
-    graphics.setFont (Theme::font (24.0f, true));
-    graphics.drawText ("MIDI FORGE", header.removeFromLeft (170), juce::Justification::centredLeft);
+    const auto header = getLocalBounds().removeFromTop (headerHeight);
+    ForgeLogo::paintHeaderBackground (graphics, header);
+    ForgeLogo::paintWordMark (graphics, header.reduced (outerMargin, 0).withWidth (ForgeLogo::width));
 
     paintFooter (graphics);
 }
@@ -117,7 +118,7 @@ void MidiForgeEditor::resized()
     auto area = getLocalBounds();
 
     auto header = area.removeFromTop (headerHeight).reduced (outerMargin, 16);
-    header.removeFromLeft (172); // title
+    header.removeFromLeft (ForgeLogo::width + 4); // the word mark
     chainTab.setBounds (header.removeFromLeft (96));
     header.removeFromLeft (6);
     modulationTab.setBounds (header.removeFromLeft (110));
