@@ -24,7 +24,19 @@ Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 
 ## Planned
 
-(nothing at the moment)
+### Strum and Ghost Notes modules (agreed, waiting for the go)
+
+**Strum** (Generator): plays chords as strums. Knobs: *Speed* (1–100 ms between notes, default 15),
+*Direction* (Up, Down, Alternate, Random), *Velocity Tilt* (−50…+50), *Window* (0–40 ms, default 10: how
+long it collects a played chord; reported to the DAW as latency; 0 = only exactly simultaneous chords, no
+delay). Alternate starts again with a down-strum after a pause. Note-offs are delayed like their note-ons;
+single notes pass unchanged.
+
+**Ghost Notes** (Generator): adds quiet extra hits, mainly for drums. Knobs: *Chance* (0–100 %), *Position*
+(After / Before / Both), *Distance* (1/32, 1/16T, 1/16, 1/8), *Count* (1–3), *Velocity* (10–60 % of the
+note). Ghost notes are short (1/64). *Before* uses the previous bar: ghosts come just before the places where
+notes fell one bar earlier (needs the DAW playing; no delay).
+
 
 ## Ideas
 
