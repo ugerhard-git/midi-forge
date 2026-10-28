@@ -10,6 +10,8 @@
  */
 #pragma once
 
+#include "MidiEvent.h"
+
 #include <string>
 
 namespace midiforge
@@ -55,6 +57,9 @@ enum class ModuleType : int
     // Added in 0.18.0
     Strum,      ///< Generator
     GhostNotes, ///< Generator
+    // Added in 0.19.0
+    BeatThinning,       ///< Randomizer
+    DiatonicHarmonizer, ///< Transform
 
     Count
 };
@@ -200,12 +205,35 @@ std::string getNoteName (int noteNumber);
 //==============================================================================
 // Lookup tables shared by the descriptions and the modules
 
-/** A musical note length expressed in quarter notes ("beats"). */
+/**
+ * A musical note length expressed in quarter notes ("beats"). Bar-long divisions ("1 Bar", "4 Bars") also
+ * give their number of bars, so they follow the host's time signature; use divisionLengthInBeats().
+ */
 struct NoteDivision
 {
     const char* name;
-    double lengthInBeats;
+    double lengthInBeats; ///< The length in quarter notes (for bar-long divisions: in 4/4)
+    int bars = 0;         ///< For bar-long divisions the number of bars, otherwise 0
 };
+
+/** @return A division's length in quarter notes in a time signature (bar-long divisions follow the meter). */
+inline double divisionLengthInBeats (const NoteDivision& division, const TimeSignature& timeSignature) noexcept
+{
+    return division.bars > 0 ? division.bars * timeSignature.barLengthInQuarters() : division.lengthInBeats;
+}
+
+/**
+ * @return How many lengths of a division lie between two musical positions (quarter notes), e.g. LFO cycles
+ *         or steps. Bar-long divisions count the host's bars, so they stay aligned to the bar start in any
+ *         time signature.
+ */
+inline double divisionsBetween (const NoteDivision& division, const BlockContext& context, double fromBeat,
+                                double toBeat) noexcept
+{
+    if (division.bars > 0)
+        return (context.barsAtBeat (toBeat) - context.barsAtBeat (fromBeat)) / division.bars;
+    return (toBeat - fromBeat) / division.lengthInBeats;
+}
 extern const NoteDivision echoDivisions[];
 extern const int numEchoDivisions;
 extern const NoteDivision arpeggiatorDivisions[];
@@ -224,6 +252,31 @@ struct Scale
 };
 extern const Scale scales[];
 extern const int numScales;
+
+/**
+ * @return The note `steps` notes of a scale above (positive) or below (negative) a note, e.g. 2 steps = the
+ *         third above in a major scale. The note itself for 0 steps or when the result would leave the MIDI
+ *         range. The start note does not have to be in the scale. Shared by Mutate and Diatonic Harmonizer.
+ * @param root          Pitch class of the scale's root (0 = C).
+ * @param semitoneMask  Scale::semitoneMask.
+ */
+inline int moveByScaleSteps (int noteNumber, int steps, int root, unsigned short semitoneMask) noexcept
+{
+    if (semitoneMask == 0)
+        return noteNumber;
+    const int stepDirection = steps > 0 ? 1 : -1;
+    int note = noteNumber;
+    for (int stepsLeft = steps > 0 ? steps : -steps; stepsLeft > 0;)
+    {
+        note += stepDirection;
+        if (note < 0 || note > 127)
+            return noteNumber;
+        const int semitoneAboveRoot = ((note - root) % 12 + 12) % 12;
+        if ((semitoneMask >> semitoneAboveRoot) & 1u)
+            --stepsLeft;
+    }
+    return note;
+}
 
 /** A chord as semitone offsets from the played note. */
 struct ChordShape

@@ -12,17 +12,17 @@ namespace midiforge
 {
 
 const NoteDivision stepDivisions[] = {
-    { "1/32", 0.125 }, { "1/16T", 1.0 / 6.0 }, { "1/16", 0.25 }, { "1/8T", 1.0 / 3.0 }, { "1/16D", 0.375 },
-    { "1/8", 0.5 },    { "1/4T", 2.0 / 3.0 },  { "1/8D", 0.75 }, { "1/4", 1.0 },        { "1/2T", 4.0 / 3.0 },
-    { "1/4D", 1.5 },   { "1/2", 2.0 },         { "1 Bar", 4.0 },
+    { "1/32", 0.125 }, { "1/16T", 1.0 / 6.0 }, { "1/16", 0.25 },    { "1/8T", 1.0 / 3.0 }, { "1/16D", 0.375 },
+    { "1/8", 0.5 },    { "1/4T", 2.0 / 3.0 },  { "1/8D", 0.75 },    { "1/4", 1.0 },        { "1/2T", 4.0 / 3.0 },
+    { "1/4D", 1.5 },   { "1/2", 2.0 },         { "1 Bar", 4.0, 1 },
 };
 const int numStepDivisions = (int) std::size (stepDivisions);
 
 namespace
 {
-double stepLengthInBeats (const StepModulatorSettings& settings) noexcept
+const NoteDivision& divisionOf (const StepModulatorSettings& settings) noexcept
 {
-    return stepDivisions[std::clamp (settings.divisionIndex, 0, numStepDivisions - 1)].lengthInBeats;
+    return stepDivisions[std::clamp (settings.divisionIndex, 0, numStepDivisions - 1)];
 }
 
 int clampedNumberOfSteps (const StepModulatorSettings& settings) noexcept
@@ -46,7 +46,7 @@ void StepModulator::restart (const BlockContext& context) noexcept
 double StepModulator::stepPositionAt (const StepModulatorSettings& settings, const BlockContext& context) const noexcept
 {
     if (context.followsHostTransport())
-        return (context.ppqPositionAtBlockStart - restartBeat) / stepLengthInBeats (settings);
+        return divisionsBetween (divisionOf (settings), context, restartBeat, context.ppqPositionAtBlockStart);
     return freeRunningSteps;
 }
 
@@ -93,12 +93,12 @@ void StepModulator::advance (const StepModulatorSettings& settings, const BlockC
     {
         // Mirror the host position, so the steps continue smoothly when the transport stops.
         freeRunningSteps =
-            (context.ppqPositionAtBlockStart - restartBeat + context.numSamples / context.samplesPerBeat()) /
-            stepLengthInBeats (settings);
+            divisionsBetween (divisionOf (settings), context, restartBeat, context.beatAtSample (context.numSamples));
     }
     else
     {
-        freeRunningSteps += context.numSamples / context.samplesPerBeat() / stepLengthInBeats (settings);
+        freeRunningSteps += context.numSamples / context.samplesPerBeat() /
+                            divisionLengthInBeats (divisionOf (settings), context.timeSignature);
     }
 
     // Keep the number small; whole multiples of every possible step count (lcm of 4..16 = 720720) keep the step.

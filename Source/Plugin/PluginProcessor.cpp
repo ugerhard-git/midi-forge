@@ -522,6 +522,13 @@ BlockContext MidiForgeProcessor::readBlockContext (int numSamples)
                 context.hasPpqPosition = true;
                 context.ppqPositionAtBlockStart = *ppq;
             }
+            if (auto meter = position->getTimeSignature())
+                context.timeSignature = TimeSignature::fromHost (meter->numerator, meter->denominator);
+            if (auto barStart = position->getPpqPositionOfLastBarStart(); barStart && std::isfinite (*barStart))
+            {
+                context.hasBarStart = true;
+                context.ppqPositionOfBarStart = *barStart;
+            }
         }
     }
     return context;

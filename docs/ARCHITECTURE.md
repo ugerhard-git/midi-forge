@@ -30,8 +30,9 @@ connects it to JUCE, which provides the VST3 wrapper, parameters and the editor.
 
 | Path | Contents |
 |------|----------|
-| `Source/Engine/MidiEvent.h` | `MidiEvent` (one short MIDI message), `MidiEventList`, `BlockContext` (tempo, transport, block timing) |
-| `Source/Engine/ModuleDescriptions.*` | The table of all module types and their parameters; value conversion, formatting and parsing; scales, chords, note divisions |
+| `Source/Engine/MidiEvent.h` | `MidiEvent` (one short MIDI message), `MidiEventList`, `BlockContext` (tempo, transport, time signature, bar start, block timing; `barPositionAtBeat()`, `barsAtBeat()`) |
+| `Source/Engine/Meter.h` | `TimeSignature` (from the host, 4/4 fallback) and `BarStructure`: groups of two and three counts (`OddMeterGrouping` for 5/8, 7/8 …), accent levels of a position, backbeats |
+| `Source/Engine/ModuleDescriptions.*` | The table of all module types and their parameters; value conversion, formatting and parsing; scales and `moveByScaleSteps()` (Mutate, Diatonic Harmonizer), chords, note divisions (`divisionLengthInBeats()`, `divisionsBetween()` for bar-long divisions) |
 | `Source/Engine/MidiModule.*` | Base classes `MidiModule`, `NoteMappingModule`, `SchedulingModule`, helpers `SoundingNoteCounter`, `NoteMappingTable`; module factory |
 | `Source/Engine/Modules/*` | The modules, one file per category |
 | `Source/Engine/ModuleChain.*` | The eight-slot chain |
@@ -135,15 +136,15 @@ on all channels. The stress test also checks that no channel is left bent.
 - **`SchedulingModule`** – sends events in the future using a queue of absolute sample times
   (`BlockContext::blockStartSample`). Used by Arpeggiator, Repeater, Note Echo and Humanize.
 - **Groove** is a `SchedulingModule` (like Humanize): each note-on is delayed by Early plus the groove shift
-  of its nearest grid step (clamped at 0), its note-off by the same amount. `BlockContext::beatAtSample()` gives
-  the bar position (shared by modules that need it). The Early time is reported as latency (see
+  of its nearest grid step (clamped at 0), its note-off by the same amount. Grid steps count from the bar
+  start (`BlockContext::barPositionAtBeat()`); Laid-back Snare asks `BarStructure::isBackbeat()`. The Early time is reported as latency (see
   `reportLatencyOfModules()` below), so hosts compensate.
 - **Strum** (a `SchedulingModule`) collects note-ons arriving within Window, sorts them, and schedules them
   Speed apart starting Window after the first one; everything else is delayed by Window. Each key stores its
   delay for its note-off. A key already waiting in a chord is not collected twice.
 - **Ghost Notes** (a `SchedulingModule`) passes every event on time and schedules ghost note pairs (1/64 long)
-  after a note, and before the places where notes fell one bar earlier (a list of the last bar's note-ons,
-  while the host plays). A key repeated before its note-off ends the earlier note first, so the one note-off
+  after a note, and before the places where notes fell one bar earlier (a list of the last bar's note-ons
+  with their bar length, while the host plays). A key repeated before its note-off ends the earlier note first, so the one note-off
   upstream sends ends the right note.
 - `MidiForgeProcessor::reportLatencyOfModules()` adds up Groove's Early and Strum's Window of every
   switched-on slot and reports it with `setLatencySamples()`.
@@ -153,12 +154,20 @@ on all channels. The stress test also checks that no channel is left bent.
   their note, whatever the knobs say by then. A key that sounds again ends its previous note first, as a
   synth would. Free channels are counted per channel (`numNotesOnChannel`); the oldest is found by the order
   in which channels last got a note or chord.
-- **Mutate** derives from `MidiModule` directly. It keeps offsets in scale steps per loop position (64
-  sixteenths) or per pitch, changes them by a Return chance (one step home) and an Amount chance (1..Range
+- **Mutate** derives from `MidiModule` directly. It keeps offsets in scale steps per loop position (4 bars of
+  up to 64 sixteenths, counted from the bar start; cleared when the time signature changes) or per pitch, changes them by a Return chance (one step home) and an Amount chance (1..Range
   steps away, at most 7) whenever a single note plays, and maps each key to the pitch it started (for its
   note-off). Chord notes (onsets within 30 ms) pass; a changed first note of a chord is restarted at its own
   pitch. Its Reset is a `ParameterKind::Trigger` parameter: the module acts on the rising edge (also when
   modulated); the editor shows trigger parameters as a button that is on while held.
+- **Beat Thinning** is a `NoteMappingModule`; its `process()` keeps a pointer to the block context for
+  `createNoteOns()`. A note's nearest grid step gets an accent level from `BarStructure`; the drop chance is
+  Amount × level / finest level of the grid (bar start 0, the finest level 1). Notes within 30 ms of the
+  previous note share its decision.
+- **Diatonic Harmonizer** derives from `MidiModule` directly and keeps a `NoteMappingTable` and a
+  `SoundingNoteCounter` itself: a note-on starts the note plus its harmony notes (`moveByScaleSteps()`, octaves
+  ±12). A note-on within 30 ms of the previous one is a chord note: it plays alone and ends the harmony notes
+  of the previous note (entries 1.. of its mapping).
 - **Pitch Slide** derives from `MidiModule` directly: notes pass through on time, and the module adds pitch
   bend messages per channel (about one per millisecond while a slide moves, only when the value changes).
   It remembers the player's bend and adds the slide to it; when a channel's last held key ends, it sends the
@@ -213,6 +222,12 @@ strip in the footer for 8 seconds. Removal history is not saved in projects.
   switch between host and own clock, so steps are never replayed or fired in a burst. Gate lengths are capped one sample short of the step so
   a note always ends before the next starts.
 - Note Echo computes its delay from the tempo at note-on.
+- **Time signature:** `readBlockContext()` copies the host's time signature (`TimeSignature::fromHost()`, 4/4
+  when missing or nonsensical) and the start of the current bar (`getPpqPositionOfLastBarStart()`) into the
+  `BlockContext`. `barPositionAtBeat()` turns a position into bar number, position in the bar and bar length
+  (bars counted from that bar start; without one, from the song start). Bar-long divisions carry their
+  number of bars (`NoteDivision::bars`); LFOs and step modulators count them with `divisionsBetween()`, so
+  they stay on the bar grid in any meter. Owner's rule 11: no module may assume 4/4.
 
 ## Modulation
 

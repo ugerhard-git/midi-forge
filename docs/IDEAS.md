@@ -17,40 +17,23 @@ Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 1. ~~Step modulator ties (0.16)~~ built
 2. ~~Groove (0.17), with a shared "position in the bar" helper~~ built
 3. ~~Strum + Ghost Notes (0.18)~~ built
-4. Beat Thinning + Diatonic Harmonizer (0.19), with a shared scale helper and a time-signature-aware bar
-   helper; Groove, Ghost Notes and Mutate fixed to follow the time signature
+4. ~~Beat Thinning + Diatonic Harmonizer (0.19), time signatures followed everywhere~~ built
 5. Modulating the modulation (0.20)
 6. Pitch Slide: Fall Off (0.21)
 - Later, separately: Pitch Slide MPE. Parked until the owner wants it: macOS and CLAP builds.
 
 ## Planned
 
-### Time-signature-aware bar position (0.19, shared)
-
-`BlockContext` gets the host's time signature (`PositionInfo::getTimeSignature()`) and the start of the
-current bar (`getPpqPositionOfLastBarStart()`). A shared helper turns a sample position into "position in the
-bar" and "beat weight" for any meter; without host information it falls back to 4/4. Existing modules that
-assume 4/4 today are fixed to use it:
-
-- **Groove**: the Laid-back Snare template delays the backbeats of the current meter (beats 2 and 4 in 4/4,
-  beat 3 in 6/8 …) and the template repeats per bar of the real length.
-- **Ghost Notes**: "Before" remembers the last bar using its real length.
-- **Mutate**: the per-position memory (4 Bars / 2 Bars / 1 Bar) uses the real bar length.
-
-### Beat Thinning (Randomizer, 0.19)
-
-Like Probability, but each position in the bar has a weight from the meter: bar start almost always plays,
-other beats less, off-beat subdivisions drop out most. Knobs: **Amount**, **Grid** (1/8, 1/16, 1/32) and
-**Grouping** for odd meters (e.g. 7/8 as 2+2+3, 3+2+2 or 2+3+2; ignored where the meter has one natural
-grouping). Normal weighting only. A chord is kept or dropped as a whole.
-
-### Diatonic Harmonizer (Transform, 0.19)
-
-Adds up to two harmony notes that stay in key. Knobs: **Root**, **Scale** (shared scale helper with Mutate),
-**Voice 1**, **Voice 2** (Off or an interval in scale steps, above or below), **Velocity** of the added
-voices. Works on single notes only; chords pass through untouched.
+(nothing at the moment)
 
 ## Ideas
+
+### Arpeggiator and Repeater steps in odd meters
+
+Their steps run on a steady grid from the song start. In meters whose bar is not a whole number of steps
+(1/4 steps in 7/8, 1/4D in 4/4) the steps drift against the bar line. Options for the owner: (a) keep the
+steady grid (current); (b) restart the grid at every bar start (the last step of the bar is shortened);
+(c) a switch per module. Needs the owner's decision (rule 11).
 
 ### Modulating the modulation
 

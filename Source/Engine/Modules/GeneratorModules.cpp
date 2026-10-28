@@ -176,7 +176,8 @@ private:
         echoes = {};
         echoes.isActive = true;
         echoes.channel = (uint8_t) noteOn.channel();
-        echoes.delayInSamples = std::max<int64_t> (1, std::llround (division.lengthInBeats * context.samplesPerBeat()));
+        echoes.delayInSamples = std::max<int64_t> (
+            1, std::llround (divisionLengthInBeats (division, context.timeSignature) * context.samplesPerBeat()));
 
         const int repeats = std::min (integerParameter (parameterValues, numRepeats), maxRepeats);
         const float velocityFactor = (float) integerParameter (parameterValues, feedback) / 100.0f;
@@ -994,7 +995,8 @@ public:
                                    velocity, ghostLength);
 
             if (context.followsHostTransport())
-                remember (event, context.beatAtSample (event.samplePosition), getsGhosts, velocity);
+                remember (event, context.beatAtSample (event.samplePosition),
+                          context.timeSignature.barLengthInQuarters(), getsGhosts, velocity);
         }
         sendScheduledEventsInBlock (context, output);
     }
@@ -1018,6 +1020,7 @@ private:
     struct RememberedNote
     {
         double beat;
+        double barLength; ///< Length of its bar in quarter notes, so "one bar later" follows the time signature
         int channel;
         int noteNumber;
         int ghostVelocity;
@@ -1027,7 +1030,6 @@ private:
 
     static constexpr double ghostDistances[] = { 0.125, 1.0 / 6.0, 0.25, 0.5 }; // 1/32, 1/16T, 1/16, 1/8
     static constexpr double ghostLengthInBeats = 0.0625;                        // 1/64
-    static constexpr double beatsPerBar = 4.0;
     static constexpr int maxRememberedNotes = 128;
 
     void scheduleGhost (int64_t time, const MidiEvent& original, int velocity, int64_t length)
@@ -1036,15 +1038,16 @@ private:
         scheduleEvent (time + length, MidiEvent::noteOff (0, original.channel(), original.noteNumber()));
     }
 
-    void remember (const MidiEvent& noteOn, double beat, bool getsGhosts, int ghostVelocity)
+    void remember (const MidiEvent& noteOn, double beat, double barLength, bool getsGhosts, int ghostVelocity)
     {
         if (numRemembered == maxRememberedNotes)
         {
             std::move (remembered.begin() + 1, remembered.end(), remembered.begin()); // drop the oldest
             --numRemembered;
         }
-        remembered[(size_t) numRemembered++] = { beat,          noteOn.channel(), noteOn.noteNumber(),
-                                                 ghostVelocity, getsGhosts,       0 };
+        remembered[(size_t) numRemembered++] = {
+            beat, barLength, noteOn.channel(), noteOn.noteNumber(), ghostVelocity, getsGhosts, 0
+        };
     }
 
     /** Plays the ghosts that fall into this block before the places where notes fell one bar ago. */
@@ -1057,7 +1060,7 @@ private:
         for (int index = 0; index < numRemembered; ++index)
         {
             auto& note = remembered[(size_t) index];
-            const double nextBarBeat = note.beat + beatsPerBar;
+            const double nextBarBeat = note.beat + note.barLength;
             if (nextBarBeat < blockStartBeat) // its place has passed (or the host jumped): forget it
                 continue;
             for (int ghost = 1; ghost <= count && note.getsGhosts; ++ghost)

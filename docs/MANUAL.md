@@ -104,6 +104,25 @@ MIDI Forge takes care that no note gets stuck, even when you change modules whil
   through that slot. Keep holding the key and nothing restarts until you press it again.
 - SysEx messages pass through untouched; MIDI clock and other system messages pass through every module.
 
+### Time signatures
+
+MIDI Forge follows your DAW's **time signature** – 4/4, 3/4, 6/8, 7/8, 5/4, and changes in the middle of a
+song. Everything that thinks in bars uses the real bar: Groove's backbeats, Ghost Notes' *Before*, Mutate's
+memory, Beat Thinning's strong and weak places, and every "Bar" length (*1 Bar* echoes, slides and steps, LFO
+rates of 1 to 8 bars, which stay aligned to the bar start). If the DAW reports no time signature, 4/4 is used.
+
+How a bar is felt: its counts (quarter notes in x/4, eighth notes in x/8) are grouped in twos and threes.
+
+| Time signature | Groups | Backbeats (Groove's Laid-back Snare) |
+|----------------|--------|--------------------------------------|
+| 2/4, 4/4 | 2 / 2+2 | beat 2 / beats 2 and 4 |
+| 3/4 | 3 | beats 2 and 3 |
+| 6/8, 9/8, 12/8 | 3+3, 3+3+3, 3+3+3+3 | the second dotted quarter / the 2nd and 3rd / the 2nd and 4th |
+| 5/8, 7/8, 5/4, 7/4 … | twos and one three, e.g. 2+2+3 | every group after the first |
+
+Beat Thinning has a *Grouping* knob for odd meters (2+2+3, 3+2+2 or 2+3+2); elsewhere the long group comes
+last. The Arpeggiator's and Repeater's steps run on a steady grid from the song start, whatever the meter.
+
 ## Modules
 
 The knobs of a slot are called **A … H** in your DAW's automation lists (most modules use A … D; page 2 is
@@ -198,7 +217,8 @@ If two keys land on the same scale note, it keeps sounding until both keys are r
 | To | 1 … 16 | Target channel |
 
 **Groove** – pulls notes onto a groove, so programmed parts get a pocket instead of sitting rigidly on the
-grid. Each note moves towards the groove position of its nearest grid step (*Amount* decides how far: 100 %
+grid. The grooves repeat every bar, whatever the time signature. Each note moves towards the groove position
+of its nearest grid step (*Amount* decides how far: 100 %
 puts it exactly there, which also tidies up sloppy timing), and the groove's accents change its velocity.
 The note-off moves with its note, so note lengths stay. Groove needs the bar position, so it works while the
 DAW plays; when it is stopped, notes pass unchanged.
@@ -206,7 +226,7 @@ DAW plays; when it is stopped, notes pass unchanged.
 | Groove | What it does |
 |--------|--------------|
 | Swing | Every second grid step comes later (60 % swing) and a little softer |
-| Laid-back Snare | Beats 2 and 4 sit slightly behind the beat and are accented |
+| Laid-back Snare | The backbeats (beats 2 and 4 in 4/4; see [Time signatures](#time-signatures) for other meters) sit slightly behind the beat and are accented |
 | Pushed Off-beats | The "and" between the beats comes slightly early (needs *Early*, see below) and is accented |
 | Shuffle | A full triplet feel: every second grid step two thirds of the way |
 | Drunk | Every grid step a little early or late in a four-step pattern |
@@ -228,6 +248,26 @@ Strum's *Window* is reported the same way, and the delays of several modules add
 Without Early, grooves can only move notes later (which is all Swing, Shuffle and Laid-back Snare need), and
 late-played notes cannot be pulled back onto the beat. Keep a Groove with Early switched on: switching the
 slot on and off (also by modulation) changes the delay.
+
+**Diatonic Harmonizer** – plays one or two harmony notes along with every single note, taken from a key and
+scale, so a "third above" is a major or a minor third as the key demands (unlike the fixed intervals of
+*Chord*). In C major, C gets an E, D gets an F, B gets a D.
+
+- Intervals count notes of the **scale**: *3rd Up* is two scale notes up, *5th Down* four scale notes down.
+  In scales with fewer than seven notes (pentatonic, blues, whole tone) the intervals are wider. *Oct Up* and
+  *Oct Down* are always 12 semitones.
+- Played notes that are not in the scale still get harmony notes from the scale.
+- **Chords pass untouched:** notes starting within 30 ms of each other. A plug-in cannot look ahead, so the
+  first note of a chord starts with its harmony notes, which end the moment the second note arrives.
+- Harmony notes outside the MIDI range are left out.
+
+| Knob | Range | Meaning |
+|------|-------|---------|
+| Voice 1 | Oct Down, 7th Down … 2nd Down, Off, 2nd Up … 7th Up, Oct Up | The first harmony note (default 3rd Up) |
+| Voice 2 | as Voice 1 | A second harmony note (default Off) |
+| Root | C … B | Key of the scale |
+| Scale | Major, Minor … Whole Tone (as in Scale Quantize) | The scale the harmony notes are taken from (default Major) |
+| Velocity *(page 2)* | 10 … 100 % | Velocity of the harmony notes as a share of the played note's (default 80 %) |
 
 **Note Dispatcher** – spreads notes over several MIDI channels, picking a **free** channel for every note
 (or every chord). Use it to play several mono synths as one polyphonic instrument, or to alternate between
@@ -345,7 +385,7 @@ themselves pass on time and unchanged.
 
 Ghost notes are short (a 1/64 note) and have the same pitch as their note. **Before:** a plug-in cannot play
 before a note it has not received yet, so Ghost Notes remembers where notes fell in the previous bar and plays
-the ghosts just before the same places in the current bar – ideal for loops and steady grooves. This needs
+the ghosts just before the same places in the current bar (a bar as long as the time signature says) – ideal for loops and steady grooves. This needs
 the DAW playing; when it is stopped, only *After* works.
 
 ### Randomizers (purple)
@@ -372,6 +412,25 @@ varied. The note-off is delayed by the same amount, so note lengths stay as play
 | Chance | 0 … 100 % | Share of notes that get shifted |
 | Mode | Any / Octaves / 5ths + Oct | Which intervals are used |
 
+**Beat Thinning** – like *Probability*, but every place in the bar has its own chance, taken from the
+time signature: the **bar start always plays**, the start of a group (beat 3 in 4/4, the second half of a 6/8
+bar) is rarely dropped, other beats more often, and off-beats most. The part gets sparser and varies, but its
+backbone stays. Each note counts at its nearest *Grid* step.
+
+At 100 % with a 1/16 grid in 4/4: beat 3 plays 75 % of the time, beats 2 and 4 50 %, the "and"s 25 % and the
+sixteenths in between never. Lower *Amount* scales all these chances down; at 0 % everything plays.
+
+- **Chords** (notes within 30 ms) are kept or dropped together.
+- It needs the DAW playing (for the bar position); when it is stopped, every note passes.
+- **Grouping** decides how odd meters are felt: 7/8 as 2+2+3, 3+2+2 or 2+3+2 (5/8 as 2+3 or 3+2). The first
+  eighth of each group is stronger than the eighths inside it. It makes no difference in 4/4, 3/4 or 6/8.
+
+| Knob | Range | Meaning |
+|------|-------|---------|
+| Amount | 0 … 100 % | How much is thinned out (default 50 %) |
+| Grid | 1/8, 1/16, 1/32 | The grid notes are placed on to weigh them; its finest steps drop out most (default 1/16) |
+| Grouping | 3 Last (2+2+3), 3 First (3+2+2), 3 Middle (2+3+2) | Where the group of three goes in odd meters |
+
 **Mutate** – lets a looped melody or bassline evolve slowly while staying in key. Every time a note plays,
 it may move **one more step** to a neighbouring note of the scale (a C in C minor becomes a D or a B♭ …),
 or back towards its original pitch – and Mutate **remembers** where each note has wandered to. Over minutes
@@ -379,8 +438,10 @@ the line drifts away from the original and, with *Return*, keeps finding its way
 varies a riff.
 
 - **Memory per position** (*4 Bars*, *2 Bars*, *1 Bar*): each place in a loop of that length (on a sixteenth
-  grid) remembers its own change, so the same pitch can change in one place and stay in another. Set it to
-  the length of your loop. This needs the DAW playing; when it is stopped, Mutate remembers per pitch.
+  grid from the bar start, with bars as long as the time signature says) remembers its own change, so the
+  same pitch can change in one place and stay in another. Set it to the length of your loop. This needs the
+  DAW playing; when it is stopped, Mutate remembers per pitch. When the time signature changes, the places
+  no longer match, so Mutate starts again from the original melody.
 - **Memory per pitch:** every C moves together, every D together …
 - **Chords pass untouched:** notes starting within 30 ms of each other. (Mutate cannot look ahead: if the first
   note of a chord was already changed, it is restarted at its own pitch a moment later.) Legato melody notes
@@ -463,7 +524,8 @@ its current output (−100 … +100). For the random waves the preview shows an 
 
 **Timing:** a tempo-synced LFO follows the DAW's bar grid while the transport runs, so it is always at the
 same place at the same bar, even when you jump around in the song. When the transport is stopped it keeps
-running at the project tempo. A free LFO always runs on its own clock.
+running at the project tempo. A free LFO always runs on its own clock. Rates of 1 to 8 bars last as long as
+the bars of your time signature (a *1 Bar* LFO in 3/4 lasts three quarter notes).
 
 ### Random modulators
 

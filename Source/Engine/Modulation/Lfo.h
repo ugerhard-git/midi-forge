@@ -92,7 +92,7 @@ public:
     float waveformValue (LfoWaveform waveform, double cyclePosition, double pulseWidth) const noexcept;
 
     /** @return Cycles per second for the given settings and tempo. */
-    static double cyclesPerSecond (const LfoSettings& settings, double tempoBpm) noexcept;
+    static double cyclesPerSecond (const LfoSettings& settings, const BlockContext& context) noexcept;
 
 private:
     /** A random value in -1..+1 that depends only on the cycle number and the seed. */

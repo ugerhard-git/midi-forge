@@ -59,6 +59,10 @@ const char* const grooveGridLabels[] = { "1/8", "1/16", "1/32" };
 const char* const strumDirectionLabels[] = { "Up", "Down", "Alternate", "Random" };
 const char* const ghostPositionLabels[] = { "After", "Before", "Both" };
 const char* const ghostDistanceLabels[] = { "1/32", "1/16T", "1/16", "1/8" };
+const char* const meterGroupingLabels[] = { "3 Last (2+2+3)", "3 First (3+2+2)", "3 Middle (2+3+2)" };
+const char* const harmonyIntervalLabels[] = { "Oct Down", "7th Down", "6th Down", "5th Down", "4th Down",
+                                              "3rd Down", "2nd Down", "Off",      "2nd Up",   "3rd Up",
+                                              "4th Up",   "5th Up",   "6th Up",   "7th Up",   "Oct Up" };
 const char* const echoDivisionLabels[] = { "1/32", "1/16T", "1/16", "1/16D", "1/8T", "1/8",
                                            "1/8D", "1/4T",  "1/4",  "1/4D",  "1/2",  "1 Bar" };
 const char* const arpeggiatorDivisionLabels[] = { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
@@ -406,6 +410,39 @@ const ModuleDescription* createModuleTable()
           "play before a note it has not received yet, so Before works from the previous bar: ghost notes come "
           "just before the places where notes fell one bar earlier (needs the DAW playing). Put a Note Split in "
           "front to give only one drum ghost notes." },
+
+        // Added in 0.19.0 --------------------------------------------------------------------------
+        { "Beat Thinning",
+          ModuleCategory::Randomizer,
+          "Drops notes by their place in the bar: off-beats go first.",
+          { percentParameter ("Amount", 0, 100, 50)
+                .withHelp ("How much is thinned out. The bar start always plays; at 100 % the finest off-beats "
+                           "never do."),
+            choiceParameter ("Grid", grooveGridLabels, 1).withHelp ("The grid notes are placed on to weigh them."),
+            choiceParameter ("Grouping", meterGroupingLabels, 0)
+                .withHelp ("For odd meters (5/8, 7/8, 7/4 …): where the group of three goes. 5/8 is 2+3 or 3+2.") },
+          "Like Probability, but every place in the bar has its own chance, taken from the DAW's time signature: "
+          "the bar start always plays, the start of a beat group (beat 3 in 4/4, the second half of 6/8) rarely "
+          "drops, other beats more often and off-beats most. Variation without losing the backbone of the "
+          "groove. Odd meters are split into groups of two and three as set by Grouping. Notes within 30 ms "
+          "count as a chord and are kept or dropped together. Works while the DAW plays; otherwise every note "
+          "passes." },
+        { "Diatonic Harmonizer",
+          ModuleCategory::Transform,
+          "Adds one or two harmony notes that stay in key.",
+          { choiceParameter ("Voice 1", harmonyIntervalLabels, 9)
+                .withHelp ("The first harmony note, counted in notes of the scale (3rd Up = two scale notes up)."),
+            choiceParameter ("Voice 2", harmonyIntervalLabels, 7).withHelp ("A second harmony note, or Off."),
+            choiceParameter ("Root", pitchClassLabels, 0).withHelp ("Key of the scale."),
+            choiceParameter ("Scale", scaleLabels, 0).withHelp ("The scale the harmony notes are taken from."),
+            // Page 2
+            percentParameter ("Velocity", 10, 100, 80)
+                .withHelp ("Velocity of the harmony notes, as a share of the played note's.") },
+          "Plays harmony notes along with every single note, taken from the scale, so a third above is major or "
+          "minor as the key demands (unlike the fixed intervals of Chord). Intervals count notes of the scale; in "
+          "scales with fewer than seven notes they are wider. Octaves are always 12 semitones. Chords (notes "
+          "within 30 ms) pass untouched: a plug-in cannot look ahead, so when a note turns out to start a chord, "
+          "its harmony notes are ended." },
     };
     return table;
 }
@@ -417,7 +454,7 @@ const ModuleDescription* createModuleTable()
 const NoteDivision echoDivisions[] = {
     { "1/32", 0.125 },     { "1/16T", 1.0 / 6.0 }, { "1/16", 0.25 }, { "1/16D", 0.375 },
     { "1/8T", 1.0 / 3.0 }, { "1/8", 0.5 },         { "1/8D", 0.75 }, { "1/4T", 2.0 / 3.0 },
-    { "1/4", 1.0 },        { "1/4D", 1.5 },        { "1/2", 2.0 },   { "1 Bar", 4.0 },
+    { "1/4", 1.0 },        { "1/4D", 1.5 },        { "1/2", 2.0 },   { "1 Bar", 4.0, 1 },
 };
 const int numEchoDivisions = (int) std::size (echoDivisions);
 
@@ -438,7 +475,7 @@ const NoteDivision slideDivisions[] = {
     { "1/64", 0.0625 }, { "1/32T", 1.0 / 12.0 }, { "1/32", 0.125 },     { "1/16T", 1.0 / 6.0 }, { "1/32D", 0.1875 },
     { "1/16", 0.25 },   { "1/8T", 1.0 / 3.0 },   { "1/16D", 0.375 },    { "1/8", 0.5 },         { "1/4T", 2.0 / 3.0 },
     { "1/8D", 0.75 },   { "1/4", 1.0 },          { "1/2T", 4.0 / 3.0 }, { "1/4D", 1.5 },        { "1/2", 2.0 },
-    { "1/2D", 3.0 },    { "1 Bar", 4.0 },
+    { "1/2D", 3.0 },    { "1 Bar", 4.0, 1 },
 };
 const int numSlideDivisions = (int) std::size (slideDivisions);
 

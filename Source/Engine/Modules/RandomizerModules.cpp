@@ -1,6 +1,7 @@
 /**
  * @file RandomizerModules.cpp
- * @brief Modules that add controlled randomness: Humanize, Probability, Random Pitch, Pitch Slide, Mutate.
+ * @brief Modules that add controlled randomness: Humanize, Probability, Random Pitch, Pitch Slide, Mutate,
+ *        Beat Thinning.
  */
 #include "RandomizerModules.h"
 
@@ -311,7 +312,8 @@ private:
         const double samplesPerBeat = context.samplesPerBeat();
         const int lengthIndex = std::clamp (integerParameter (parameterValues, slideLength), 0, numSlideDivisions - 1);
         const int delayIndex = std::clamp (integerParameter (parameterValues, slideDelay), 0, numSlideDivisions);
-        const double delayInBeats = delayIndex == 0 ? 0.0 : slideDivisions[delayIndex - 1].lengthInBeats;
+        const double delayInBeats =
+            delayIndex == 0 ? 0.0 : divisionLengthInBeats (slideDivisions[delayIndex - 1], context.timeSignature);
 
         channel.hasSlide = channel.isMoving = true;
         channel.fromSemitones = isSlideIn ? offset : 0.0f;
@@ -319,9 +321,10 @@ private:
         // Curve -100..+100 maps to an exponent of 1/4..4: below 1 the slide starts fast, above 1 it starts slow.
         channel.curveExponent = (float) std::pow (2.0, 2.0 * integerParameter (parameterValues, curveAmount) / 100.0);
         channel.moveStartTime = eventTime + (int64_t) std::llround (delayInBeats * samplesPerBeat);
-        channel.moveEndTime =
-            channel.moveStartTime +
-            std::max<int64_t> (1, std::llround (slideDivisions[lengthIndex].lengthInBeats * samplesPerBeat));
+        channel.moveEndTime = channel.moveStartTime +
+                              std::max<int64_t> (1, std::llround (divisionLengthInBeats (slideDivisions[lengthIndex],
+                                                                                         context.timeSignature) *
+                                                                  samplesPerBeat));
         channel.nextUpdateTime = channel.moveStartTime;
     }
 
@@ -382,9 +385,10 @@ private:
  * Lets a looped melody drift: every time a (single) note plays, it may move one more step to a neighbouring
  * note of the scale, or back towards its original pitch, and the module remembers where each note is now.
  *
- * Memory: per position in a loop of 4, 2 or 1 bars (on a sixteenth grid, needs the DAW playing; otherwise it
- * falls back to per pitch), or per pitch. The memory holds an offset in scale steps. It is cleared by the
- * Reset button (when it turns on, also by modulation) and when the DAW starts playing.
+ * Memory: per position in a loop of 4, 2 or 1 bars (on a sixteenth grid from the bar start, in any time
+ * signature; needs the DAW playing, otherwise it falls back to per pitch), or per pitch. The memory holds an
+ * offset in scale steps. It is cleared by the Reset button (when it turns on, also by modulation), when the
+ * DAW starts playing and when the time signature changes (the positions no longer match).
  *
  * Chords pass untouched: notes starting within chordWindowMilliseconds of each other. Because a plug-in cannot
  * look ahead, a mutated note that turns out to be the first note of a chord is restarted at its own pitch.
@@ -404,6 +408,7 @@ public:
         lastNoteWasMutated = false;
         wasResetOn = false;
         wasPlaying = false;
+        lastTimeSignature = {};
         soundingNotes.clear();
     }
 
@@ -411,9 +416,11 @@ public:
                   const float* parameterValues) override
     {
         const bool isResetOn = integerParameter (parameterValues, resetButton) != 0;
-        if ((isResetOn && ! wasResetOn) || (context.isPlaying && ! wasPlaying))
+        if ((isResetOn && ! wasResetOn) || (context.isPlaying && ! wasPlaying) ||
+            context.timeSignature != lastTimeSignature)
             clearMemory();
         wasResetOn = isResetOn;
+        lastTimeSignature = context.timeSignature;
         wasPlaying = context.isPlaying;
 
         for (const auto& event : input)
@@ -460,7 +467,8 @@ private:
     };
 
     static constexpr double chordWindowMilliseconds = 30.0;
-    static constexpr int sixteenthsPerBar = 16;
+    /** Memory places per bar: sixteenths of bars up to 16 quarter notes long (longer bars wrap around). */
+    static constexpr int sixteenthsPerBar = 64;
     static constexpr int maximumOffset = 7; ///< Scale steps a note can drift at most (about an octave)
     static constexpr int16_t noOutputNote = -1;
 
@@ -569,31 +577,17 @@ private:
             return pitchOffsets[(size_t) noteOn.noteNumber()];
 
         const int loopBars = mode == fourBars ? 4 : (mode == twoBars ? 2 : 1);
-        const int loopSixteenths = loopBars * sixteenthsPerBar;
-        const double beat = context.ppqPositionAtBlockStart +
-                            (double) (eventTime - context.blockStartSample) / context.samplesPerBeat();
-        const auto sixteenth = (int64_t) std::llround (beat * 4.0);
-        return positionOffsets[(size_t) (((sixteenth % loopSixteenths) + loopSixteenths) % loopSixteenths)];
-    }
-
-    /**
-     * @return The note `steps` scale notes above (positive) or below (negative) a note; the note itself for 0
-     *         steps or when the result would leave the MIDI range.
-     */
-    static int moveByScaleSteps (int noteNumber, int steps, int root, unsigned short semitoneMask) noexcept
-    {
-        const int stepDirection = steps > 0 ? 1 : -1;
-        int note = noteNumber;
-        for (int stepsLeft = std::abs (steps); stepsLeft > 0;)
+        const auto bar =
+            context.barPositionAtBeat (context.beatAtSample ((int) (eventTime - context.blockStartSample)));
+        int64_t barNumber = bar.barNumber;
+        auto sixteenthInBar = (int64_t) std::llround (bar.positionInBar * 4.0);
+        if ((double) sixteenthInBar * 0.25 >= bar.barLength - 1.0e-9) // rounds to the start of the next bar
         {
-            note += stepDirection;
-            if (note < 0 || note >= numMidiNotes)
-                return noteNumber;
-            const int semitoneAboveRoot = ((note - root) % 12 + 12) % 12;
-            if ((semitoneMask >> semitoneAboveRoot) & 1u)
-                --stepsLeft;
+            ++barNumber;
+            sixteenthInBar = 0;
         }
-        return note;
+        const auto barInLoop = (size_t) (((barNumber % loopBars) + loopBars) % loopBars);
+        return positionOffsets[barInLoop * sixteenthsPerBar + (size_t) (sixteenthInBar % sixteenthsPerBar)];
     }
 
     std::array<int8_t, 4 * sixteenthsPerBar> positionOffsets {};
@@ -605,7 +599,108 @@ private:
     bool lastNoteWasMutated = false;
     bool wasResetOn = false;
     bool wasPlaying = false;
+    TimeSignature lastTimeSignature; ///< Time signature of the previous block; a change clears the memory
     SoundingNoteCounter soundingNotes;
+};
+
+/**
+ * Like Probability, but the chance depends on where in the bar a note falls, from the host's time signature
+ * (see BarStructure): the bar start always plays, the finest off-beats of the grid drop out most. A note's
+ * place is its nearest grid step. Notes within chordWindowMilliseconds of the previous note share its
+ * decision, so chords are kept or dropped whole. While the DAW is stopped every note passes.
+ */
+class BeatThinning final : public NoteMappingModule
+{
+public:
+    BeatThinning() : NoteMappingModule (ModuleType::BeatThinning) {}
+
+    void reset() override
+    {
+        NoteMappingModule::reset();
+        lastNoteOnTime = std::numeric_limits<int64_t>::min() / 2;
+        lastNoteWasKept = true;
+    }
+
+    void process (const MidiEventList& input, MidiEventList& output, const BlockContext& context,
+                  const float* parameterValues) override
+    {
+        blockContext = &context; // createNoteOns() needs the bar position
+        NoteMappingModule::process (input, output, context, parameterValues);
+        blockContext = nullptr;
+    }
+
+    /**
+     * @return How likely a note at an accent level is dropped at Amount 100 %: 0 at the bar start, rising
+     *         evenly to 1 at the finest level the grid reaches.
+     * @param finestLevel The weakest accent level a grid step can have (see finestLevelOfGrid()).
+     */
+    static double dropWeight (BarStructure::AccentLevel level, BarStructure::AccentLevel finestLevel) noexcept
+    {
+        if (finestLevel <= BarStructure::barStart)
+            return 0.0;
+        return std::min (1.0, (double) level / (double) finestLevel);
+    }
+
+    /** @return The weakest accent level a step of a grid (in quarter notes) can have in a time signature. */
+    static BarStructure::AccentLevel finestLevelOfGrid (double gridInQuarters, const TimeSignature& meter) noexcept
+    {
+        const double stepsPerCount = meter.countLengthInQuarters() / gridInQuarters;
+        if (stepsPerCount <= 1.0 + 1.0e-9)
+            return meter.numerator > 1 ? BarStructure::countStart : BarStructure::barStart;
+        if (stepsPerCount <= 2.0 + 1.0e-9)
+            return BarStructure::halfCount;
+        if (stepsPerCount <= 4.0 + 1.0e-9)
+            return BarStructure::quarterCount;
+        return BarStructure::finer;
+    }
+
+private:
+    enum Parameter
+    {
+        amountPercent,
+        gridIndex,
+        groupingIndex
+    };
+    static constexpr double chordWindowMilliseconds = 30.0;
+    static constexpr double gridLengthsInQuarters[] = { 0.5, 0.25, 0.125 }; // 1/8, 1/16, 1/32
+
+    int createNoteOns (const MidiEvent& noteOn, MidiEvent* outputNoteOns, const float* parameterValues) override
+    {
+        const BlockContext& context = *blockContext;
+        const int64_t eventTime = context.blockStartSample + noteOn.samplePosition;
+        const auto chordWindow = (int64_t) (chordWindowMilliseconds / 1000.0 * context.sampleRate);
+        const bool isChordNote = eventTime - lastNoteOnTime <= chordWindow;
+        lastNoteOnTime = eventTime;
+
+        if (! isChordNote)
+            lastNoteWasKept = ! context.followsHostTransport() ||
+                              randomUnitValue() >= dropChanceOf (noteOn, context, parameterValues);
+        if (! lastNoteWasKept)
+            return 0;
+        outputNoteOns[0] = noteOn;
+        return 1;
+    }
+
+    /** @return The chance (0..1) that a note is dropped, from its nearest grid step in the bar. */
+    double dropChanceOf (const MidiEvent& noteOn, const BlockContext& context,
+                         const float* parameterValues) const noexcept
+    {
+        const double grid = gridLengthsInQuarters[std::clamp (integerParameter (parameterValues, gridIndex), 0, 2)];
+        const auto bar = context.barPositionAtBeat (context.beatAtSample (noteOn.samplePosition));
+        double snappedPosition = std::round (bar.positionInBar / grid) * grid;
+        if (snappedPosition >= bar.barLength - 1.0e-9) // nearest step is the start of the next bar
+            snappedPosition = 0.0;
+
+        const auto grouping = (OddMeterGrouping) std::clamp (integerParameter (parameterValues, groupingIndex), 0, 2);
+        const BarStructure structure (context.timeSignature, grouping);
+        const auto finestLevel = finestLevelOfGrid (grid, context.timeSignature);
+        const auto level = std::min (structure.accentLevelAt (snappedPosition), finestLevel);
+        return integerParameter (parameterValues, amountPercent) / 100.0 * dropWeight (level, finestLevel);
+    }
+
+    const BlockContext* blockContext = nullptr;
+    int64_t lastNoteOnTime = std::numeric_limits<int64_t>::min() / 2;
+    bool lastNoteWasKept = true;
 };
 
 } // namespace
@@ -619,6 +714,7 @@ std::unique_ptr<MidiModule> createRandomizerModule (ModuleType type)
         case ModuleType::RandomPitch: return std::make_unique<RandomPitch>();
         case ModuleType::PitchSlide: return std::make_unique<PitchSlide>();
         case ModuleType::Mutate: return std::make_unique<Mutate>();
+        case ModuleType::BeatThinning: return std::make_unique<BeatThinning>();
         default: return nullptr;
     }
 }

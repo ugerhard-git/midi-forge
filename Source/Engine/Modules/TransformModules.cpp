@@ -1,11 +1,12 @@
 /**
  * @file TransformModules.cpp
  * @brief Modules that change events: Transpose, Scale Quantize, Velocity Curve, Channel Remap,
- *        Note Dispatcher, Groove.
+ *        Note Dispatcher, Groove, Diatonic Harmonizer.
  */
 #include "TransformModules.h"
 
 #include <cmath>
+#include <initializer_list>
 #include <limits>
 
 namespace midiforge
@@ -558,21 +559,26 @@ public:
 
     /**
      * @return The template's timing and accent for a grid step.
-     * @param stepInBar   The grid step counted from the start of the bar.
+     * @param stepInBar    The grid step counted from the start of the bar.
      * @param stepsPerBeat Grid steps per quarter note (2, 4 or 8).
+     * @param bar          The beat structure of the bar; Laid-back Snare delays its backbeats (2 and 4 in 4/4,
+     *                     the second group in 6/8, groups 2 and 3 in 7/8 as 2+2+3).
      */
-    static GroovePoint groovePoint (int grooveTemplate, int64_t stepInBar, int stepsPerBeat) noexcept
+    static GroovePoint groovePoint (int grooveTemplate, int64_t stepInBar, int stepsPerBeat,
+                                    const BarStructure& bar) noexcept
     {
         const auto stepInBeat = (int) (stepInBar % stepsPerBeat);
-        const auto beatInBar = (int) ((stepInBar / stepsPerBeat) % 4);
         const bool isOffStep = (stepInBar % 2) != 0;
         switch (grooveTemplate)
         {
             case swing: return { isOffStep ? 0.2 : 0.0, isOffStep ? -10 : 8 }; // 60 % swing
             case laidBackSnare:
             {
-                const bool isSnareBeat = stepInBeat == 0 && (beatInBar == 1 || beatInBar == 3);
-                return { isSnareBeat ? 0.2 : 0.0, isSnareBeat ? 12 : (stepInBeat == 0 ? 4 : -4) };
+                const double positionInBar = (double) stepInBar / stepsPerBeat;
+                const double countPosition = positionInBar / bar.getTimeSignature().countLengthInQuarters();
+                const bool isOnCount = std::abs (countPosition - std::round (countPosition)) < 1.0e-6;
+                const bool isSnareBeat = isOnCount && bar.isBackbeat (bar.countAt (positionInBar));
+                return { isSnareBeat ? 0.2 : 0.0, isSnareBeat ? 12 : (isOnCount ? 4 : -4) };
             }
             case pushedOffBeats:
             {
@@ -616,15 +622,23 @@ private:
         const int stepsPerBeat = stepsPerBeatOfGrid[std::clamp (integerParameter (parameterValues, gridIndex), 0, 2)];
         const double stepLengthInBeats = 1.0 / stepsPerBeat;
 
+        // Steps count from the start of the bar, so the groove repeats every bar in any time signature.
         const double beat = context.beatAtSample (samplePosition);
-        const auto nearestStep = (int64_t) std::llround (beat / stepLengthInBeats);
-        const int64_t stepsPerBar = 4 * (int64_t) stepsPerBeat; // 4/4
-        const int64_t stepInBar = ((nearestStep % stepsPerBar) + stepsPerBar) % stepsPerBar;
-        const auto point =
-            groovePoint (integerParameter (parameterValues, grooveTemplateIndex), stepInBar, stepsPerBeat);
+        const auto bar = context.barPositionAtBeat (beat);
+        auto stepInBar = (int64_t) std::llround (bar.positionInBar / stepLengthInBeats);
+        double stepPositionInBar = (double) stepInBar * stepLengthInBeats;
+        if (stepPositionInBar >= bar.barLength - 1.0e-9) // nearest step is the first one of the next bar
+        {
+            stepInBar = 0;
+            stepPositionInBar = bar.barLength;
+        }
+        const BarStructure barStructure (context.timeSignature);
+        const auto point = groovePoint (integerParameter (parameterValues, grooveTemplateIndex), stepInBar,
+                                        stepsPerBeat, barStructure);
 
         const double amount = integerParameter (parameterValues, amountPercent) / 100.0;
-        const double targetBeat = ((double) nearestStep + point.offsetInSteps) * stepLengthInBeats;
+        const double targetBeat =
+            beat - bar.positionInBar + stepPositionInBar + point.offsetInSteps * stepLengthInBeats;
         const double shiftInBeats = (targetBeat - beat) * amount;
         velocityChange =
             (int) std::lround (point.velocityAccent * integerParameter (parameterValues, velocityPercent) / 100.0);
@@ -632,6 +646,161 @@ private:
     }
 
     std::array<int64_t, numChannelNoteCombinations> delayOfHeldNote {};
+};
+
+/**
+ * Adds up to two harmony notes to every single note, taken from a scale (Root, Scale), with a share of its
+ * velocity. Intervals count notes of the scale; octaves are 12 semitones. Notes starting within
+ * chordWindowMilliseconds of the previous note are chord notes and pass alone; because a plug-in cannot look
+ * ahead, the harmony notes of the chord's first note are ended when the second one arrives.
+ */
+class DiatonicHarmonizer final : public MidiModule
+{
+public:
+    DiatonicHarmonizer() : MidiModule (ModuleType::DiatonicHarmonizer) { reset(); }
+
+    void reset() override
+    {
+        mappingTable.clear();
+        soundingNotes.clear();
+        lastNoteOnTime = std::numeric_limits<int64_t>::min() / 2;
+        lastChannel = lastNoteNumber = 0;
+    }
+
+    void process (const MidiEventList& input, MidiEventList& output, const BlockContext& context,
+                  const float* parameterValues) override
+    {
+        for (const auto& event : input)
+        {
+            if (event.isNoteOn())
+                handleNoteOn (event, context, parameterValues, output);
+            else if (event.isNoteOff())
+            {
+                auto& outputNotes = mappingTable.forInputNote (event.channel(), event.noteNumber());
+                if (outputNotes.count == 0)
+                    output.push_back (event); // a note from before this module was there (rule 1)
+                else
+                    releaseNotes (outputNotes, 0, event.samplePosition,
+                                  event.messageType() == MidiStatus::noteOff ? event.velocity() : 0, output);
+            }
+            else if (event.isPolyPressure())
+            {
+                const auto& outputNotes = mappingTable.forInputNote (event.channel(), event.noteNumber());
+                if (outputNotes.count == 0)
+                    output.push_back (event);
+                for (int index = 0; index < outputNotes.count; ++index)
+                {
+                    auto pressure = event;
+                    pressure.data1 = outputNotes.noteNumbers[index];
+                    output.push_back (pressure);
+                }
+            }
+            else
+                output.push_back (event);
+        }
+    }
+
+    /**
+     * @return The harmony note for a Voice knob position, or -1 for Off or when it would leave the MIDI range.
+     * @param intervalIndex Index into the Voice labels: 0 = octave down, 7 = Off, 14 = octave up; in between
+     *                      the number of scale notes below (index < 7) or above (index > 7).
+     */
+    static int harmonyNote (int noteNumber, int intervalIndex, int root, unsigned short semitoneMask) noexcept
+    {
+        const int steps = intervalIndex - offIntervalIndex;
+        if (steps == 0)
+            return -1;
+        int harmony = noteNumber;
+        if (steps == -octaveIntervalSteps || steps == octaveIntervalSteps)
+            harmony = noteNumber + (steps > 0 ? 12 : -12);
+        else
+            harmony = moveByScaleSteps (noteNumber, steps, root, semitoneMask);
+        return (harmony == noteNumber || harmony < 0 || harmony > 127) ? -1 : harmony;
+    }
+
+private:
+    enum Parameter
+    {
+        voice1Interval,
+        voice2Interval,
+        rootPitchClass,
+        scaleIndex,
+        velocityPercent ///< page 2
+    };
+    static constexpr int offIntervalIndex = 7;
+    static constexpr int octaveIntervalSteps = 7;
+    static constexpr double chordWindowMilliseconds = 30.0;
+
+    void handleNoteOn (const MidiEvent& noteOn, const BlockContext& context, const float* parameterValues,
+                       MidiEventList& output)
+    {
+        auto& outputNotes = mappingTable.forInputNote (noteOn.channel(), noteOn.noteNumber());
+        if (outputNotes.count > 0) // played again without a note-off: end what it started
+            releaseNotes (outputNotes, 0, noteOn.samplePosition, 0, output);
+
+        const int64_t eventTime = context.blockStartSample + noteOn.samplePosition;
+        const auto chordWindow = (int64_t) (chordWindowMilliseconds / 1000.0 * context.sampleRate);
+        const bool isChordNote = eventTime - lastNoteOnTime <= chordWindow;
+        if (isChordNote) // the previous note turned out to start a chord: it plays alone, too
+            releaseNotes (mappingTable.forInputNote (lastChannel, lastNoteNumber), 1, noteOn.samplePosition, 0, output);
+        lastNoteOnTime = eventTime;
+        lastChannel = noteOn.channel();
+        lastNoteNumber = noteOn.noteNumber();
+
+        startNote (outputNotes, noteOn.channel(), noteOn.noteNumber(), noteOn.velocity(), noteOn.samplePosition,
+                   output);
+        if (isChordNote)
+            return;
+
+        const int root = std::clamp (integerParameter (parameterValues, rootPitchClass), 0, 11);
+        const auto mask =
+            scales[std::clamp (integerParameter (parameterValues, scaleIndex), 0, numScales - 1)].semitoneMask;
+        const int velocity = std::max (
+            1, (int) std::lround (noteOn.velocity() * integerParameter (parameterValues, velocityPercent) / 100.0));
+        for (const auto voice : { voice1Interval, voice2Interval })
+        {
+            const int harmony =
+                harmonyNote (noteOn.noteNumber(), integerParameter (parameterValues, voice), root, mask);
+            const bool isNew = harmony >= 0 && ! contains (outputNotes, harmony);
+            if (isNew)
+                startNote (outputNotes, noteOn.channel(), harmony, velocity, noteOn.samplePosition, output);
+        }
+    }
+
+    static bool contains (const NoteMappingTable::OutputNotes& outputNotes, int noteNumber) noexcept
+    {
+        for (int index = 0; index < outputNotes.count; ++index)
+            if (outputNotes.noteNumbers[index] == noteNumber)
+                return true;
+        return false;
+    }
+
+    void startNote (NoteMappingTable::OutputNotes& outputNotes, int channel, int noteNumber, int velocity,
+                    int samplePosition, MidiEventList& output)
+    {
+        outputNotes.channels[outputNotes.count] = (uint8_t) channel;
+        outputNotes.noteNumbers[outputNotes.count] = (uint8_t) noteNumber;
+        ++outputNotes.count;
+        soundingNotes.noteStarted (channel, noteNumber);
+        output.push_back (MidiEvent::noteOn (samplePosition, channel, noteNumber, velocity));
+    }
+
+    /** Ends the output notes of an input note from index `first` on (0 = all, 1 = only the harmony notes). */
+    void releaseNotes (NoteMappingTable::OutputNotes& outputNotes, int first, int samplePosition, int releaseVelocity,
+                       MidiEventList& output)
+    {
+        for (int index = first; index < outputNotes.count; ++index)
+            if (soundingNotes.noteEnded (outputNotes.channels[index], outputNotes.noteNumbers[index]))
+                output.push_back (MidiEvent::noteOff (samplePosition, outputNotes.channels[index],
+                                                      outputNotes.noteNumbers[index], releaseVelocity));
+        outputNotes.count = (uint8_t) std::min<int> (outputNotes.count, first);
+    }
+
+    NoteMappingTable mappingTable;
+    SoundingNoteCounter soundingNotes;
+    int64_t lastNoteOnTime = 0;
+    int lastChannel = 0;
+    int lastNoteNumber = 0;
 };
 
 } // namespace
@@ -646,6 +815,7 @@ std::unique_ptr<MidiModule> createTransformModule (ModuleType type)
         case ModuleType::ChannelRemap: return std::make_unique<ChannelRemap>();
         case ModuleType::NoteDispatcher: return std::make_unique<NoteDispatcher>();
         case ModuleType::Groove: return std::make_unique<Groove>();
+        case ModuleType::DiatonicHarmonizer: return std::make_unique<DiatonicHarmonizer>();
         default: return nullptr;
     }
 }

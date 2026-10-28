@@ -101,6 +101,12 @@ TEST_CASE ("chain: randomized stress test leaves no stuck notes and no pitch ben
         ChainTestRig rig;
         rig.context.tempoBpm = 60 + randomInteger (0, 180);
         rig.context.isPlaying = rig.context.hasPpqPosition = randomInteger (0, 1) == 1;
+        const auto randomTimeSignature = [&]
+        {
+            static constexpr int denominators[] = { 2, 4, 8, 16 };
+            return TimeSignature::fromHost (randomInteger (1, 13), denominators[randomInteger (0, 3)]);
+        };
+        rig.context.timeSignature = randomTimeSignature();
         for (auto& slot : rig.slots)
         {
             slot.moduleType = randomInteger (0, 3) == 0 ? 0 : randomInteger (1, numModuleTypes - 1);
@@ -206,6 +212,8 @@ TEST_CASE ("chain: randomized stress test leaves no stuck notes and no pitch ben
             }
             if (randomInteger (0, 80) == 0)
                 rig.context.isPlaying = rig.context.hasPpqPosition = ! rig.context.isPlaying;
+            if (randomInteger (0, 200) == 0)
+                rig.context.timeSignature = randomTimeSignature(); // the song changes its meter
             if (randomInteger (0, 300) == 0)
                 rig.engine.requestPanic();
             if (usesModulation && randomInteger (0, 40) == 0)

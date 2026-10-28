@@ -11,7 +11,7 @@
 
 cmake_minimum_required(VERSION 3.28)
 
-project(MidiForge VERSION 0.18.0 LANGUAGES C CXX)
+project(MidiForge VERSION 0.19.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -59,6 +59,7 @@ endif()
 
 add_library(midi_forge_engine STATIC
     Source/Engine/MidiEvent.h
+    Source/Engine/Meter.h
     Source/Engine/ModuleDescriptions.h
     Source/Engine/ModuleDescriptions.cpp
     Source/Engine/MidiModule.h
@@ -107,7 +108,9 @@ if(MIDI_FORGE_BUILD_ENGINE_TESTS)
         Tests/Engine/StepModulatorTests.cpp
         Tests/Engine/MutateTests.cpp
         Tests/Engine/GrooveTests.cpp
-        Tests/Engine/StrumAndGhostNotesTests.cpp)
+        Tests/Engine/StrumAndGhostNotesTests.cpp
+        Tests/Engine/MeterTests.cpp
+        Tests/Engine/BeatThinningAndHarmonizerTests.cpp)
     target_link_libraries(midi_forge_engine_tests PRIVATE midi_forge_engine midi_forge_warnings)
     add_test(NAME engine COMMAND midi_forge_engine_tests)
 endif()

@@ -7,7 +7,10 @@
  */
 #pragma once
 
+#include "Meter.h"
+
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -139,6 +142,9 @@ struct BlockContext
     double ppqPositionAtBlockStart = 0.0; ///< Host position in quarter notes at sample 0 of this block.
     int numSamples = 0;                   ///< Length of the block.
     int64_t blockStartSample = 0;         ///< Running sample counter, maintained by the ModuleChain.
+    TimeSignature timeSignature;          ///< The host's time signature; 4/4 when it reports none.
+    bool hasBarStart = false;             ///< True if the host reported where the current bar started.
+    double ppqPositionOfBarStart = 0.0;   ///< Host position (quarter notes) of the start of the current bar.
 
     /** @return How many samples one quarter note lasts at the current tempo. */
     double samplesPerBeat() const noexcept { return sampleRate * 60.0 / std::max (1.0, tempoBpm); }
@@ -150,6 +156,37 @@ struct BlockContext
     double beatAtSample (int samplePosition) const noexcept
     {
         return ppqPositionAtBlockStart + samplePosition / samplesPerBeat();
+    }
+
+    /** Where a musical position lies in the bars of the song. */
+    struct BarPosition
+    {
+        int64_t barNumber;    ///< Bars since the song start (0 = first bar); see barPositionAtBeat()
+        double positionInBar; ///< Quarter notes since the start of that bar
+        double barLength;     ///< Length of the bar in quarter notes
+    };
+
+    /**
+     * @return The bar a musical position (quarter notes) falls into and the position within it, using the
+     *         host's time signature and bar start. Without a bar start from the host, bars are counted from
+     *         the song start. After a change of time signature the bar number is an estimate (the host
+     *         reports only the current bar's start), which only matters for multi-bar loops.
+     */
+    BarPosition barPositionAtBeat (double beat) const noexcept
+    {
+        const double barLength = timeSignature.barLengthInQuarters();
+        const double anchor = hasBarStart ? ppqPositionOfBarStart : 0.0;
+        const auto anchorBar = (int64_t) std::llround (anchor / barLength);
+        const double barsFromAnchor = std::floor ((beat - anchor) / barLength + 1.0e-9);
+        const double barStart = anchor + barsFromAnchor * barLength;
+        return { anchorBar + (int64_t) barsFromAnchor, std::max (0.0, beat - barStart), barLength };
+    }
+
+    /** @return The musical position in bars, e.g. 3.5 = halfway through the fourth bar. */
+    double barsAtBeat (double beat) const noexcept
+    {
+        const auto position = barPositionAtBeat (beat);
+        return (double) position.barNumber + position.positionInBar / position.barLength;
     }
 
     /** @return True if tempo-synced modules should follow the host's musical position. */
