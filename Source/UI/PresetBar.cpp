@@ -23,6 +23,9 @@ enum MoreMenuItem
     showFolderItem,
     aboutItem
 };
+
+/** Result of the About dialog's "Source code" button (namespace scope, so lambdas can use it uncaptured). */
+constexpr int openSourcePageResult = 2;
 } // namespace
 
 juce::String getAboutText()
@@ -367,7 +370,6 @@ void PresetBar::askToConfirm (const juce::String& title, const juce::String& mes
 
 void PresetBar::showAbout()
 {
-    constexpr int openSourcePageResult = 2;
     auto* dialog = new juce::AlertWindow ("About MIDI Forge", getAboutText(), juce::MessageBoxIconType::NoIcon, this);
     trackDialog (dialog);
     dialog->addButton ("Source code", openSourcePageResult);
