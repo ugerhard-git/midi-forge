@@ -327,6 +327,8 @@ Actions are pinned to commit SHAs and updated by Dependabot.
 MIDI Forge is licensed under the **GNU Affero General Public License v3** (`LICENSE`). JUCE 9 is dual
 licensed (AGPLv3 or a commercial JUCE licence); MIDI Forge uses it under the AGPLv3, so the plug-in as a whole
 is AGPLv3. The VST3 SDK that JUCE ships is MIT licensed since VST 3.8. Every release zip contains the licence
-(`LICENSE.txt`) and `INSTALL.txt`, which names the licence, the missing warranty and where the source is.
+(`LICENSE.txt`) and `INSTALL.txt`, which names the licence, the missing warranty and where the source is. The
+editor shows the same notices under ⋯ → About MIDI Forge (`getAboutText()` in `PresetBar`), as the AGPLv3
+asks of interactive programs.
 Contributions are accepted under the same licence. Dependencies are pinned: JUCE by tag plus a check of the
 fetched commit in `CMakeLists.txt`, CLAP extensions by commit.

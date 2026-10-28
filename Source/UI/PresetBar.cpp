@@ -20,9 +20,20 @@ enum MoreMenuItem
     renameItem,
     deleteItem,
     importItem,
-    showFolderItem
+    showFolderItem,
+    aboutItem
 };
 } // namespace
+
+juce::String getAboutText()
+{
+    return juce::String ("MIDI Forge ") + JucePlugin_VersionString +
+           "\nCopyright (C) 2026 Udo Gerhards\n\n"
+           "This program is free software: you can redistribute it and/or modify it under the terms of the GNU "
+           "Affero General Public License, version 3. It comes with ABSOLUTELY NO WARRANTY.\n\n"
+           "Source code: " +
+           sourceCodeUrl + "\n\nBuilt with JUCE, used under the AGPLv3.";
+}
 
 PresetBar::PresetBar (MidiForgeProcessor& processorToControl) : processor (processorToControl)
 {
@@ -289,6 +300,8 @@ void PresetBar::showMoreMenu()
     menu.addSeparator();
     menu.addItem (importItem, "Import...");
     menu.addItem (showFolderItem, "Show preset folder");
+    menu.addSeparator();
+    menu.addItem (aboutItem, "About MIDI Forge...");
 
     menu.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (moreButton),
                         [weakThis = juce::WeakReference<PresetBar> (this)] (int chosenItem)
@@ -302,6 +315,7 @@ void PresetBar::showMoreMenu()
                                 case deleteItem: weakThis->deleteCurrent(); break;
                                 case importItem: weakThis->importPreset(); break;
                                 case showFolderItem: weakThis->processor.getUserPresetLibrary().revealFolder(); break;
+                                case aboutItem: weakThis->showAbout(); break;
                                 default: break;
                             }
                         });
@@ -347,6 +361,23 @@ void PresetBar::askToConfirm (const juce::String& title, const juce::String& mes
                                  {
                                      if (result == 1)
                                          onConfirm();
+                                 }),
+                             true);
+}
+
+void PresetBar::showAbout()
+{
+    constexpr int openSourcePageResult = 2;
+    auto* dialog = new juce::AlertWindow ("About MIDI Forge", getAboutText(), juce::MessageBoxIconType::NoIcon, this);
+    trackDialog (dialog);
+    dialog->addButton ("Source code", openSourcePageResult);
+    dialog->addButton ("OK", 0, juce::KeyPress (juce::KeyPress::returnKey), juce::KeyPress (juce::KeyPress::escapeKey));
+    dialog->enterModalState (true,
+                             juce::ModalCallbackFunction::create (
+                                 [] (int result)
+                                 {
+                                     if (result == openSourcePageResult)
+                                         juce::URL (sourceCodeUrl).launchInDefaultBrowser();
                                  }),
                              true);
 }

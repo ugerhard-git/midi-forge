@@ -14,6 +14,7 @@ Using it
 
 Licence and source code
 -----------------------
+  Copyright (C) 2026 Udo Gerhards.
   MIDI Forge is free software under the GNU Affero General Public License, version 3 (see LICENSE.txt).
   It comes with ABSOLUTELY NO WARRANTY. The complete source code is at
   https://github.com/ugerhard-git/midi-forge

@@ -643,6 +643,7 @@ A preset stores the complete setup: all eight slots, the four LFOs and the eight
 | **⋯ → Delete** | Moves the loaded user preset to the trash (asks first). Your current settings stay as they are |
 | **⋯ → Import…** | Copies a `.mfpreset` file (e.g. one someone sent you) into your presets and loads it. Never overwrites: a second copy gets " (2)" |
 | **⋯ → Show preset folder** | Opens the folder in Explorer / Finder |
+| **⋯ → About MIDI Forge** | Version, copyright and licence (GNU AGPLv3, no warranty); *Source code* opens the project page with the complete source |
 
 Factory presets cannot be changed or deleted; save your changes as your own preset instead.
 

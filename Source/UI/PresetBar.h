@@ -1,7 +1,7 @@
 /**
  * @file PresetBar.h
  * @brief The preset controls in the header: ◀ preset menu ▶, Save, and a "⋯" menu with
- *        Save As, Rename, Delete, Import and Show folder.
+ *        Save As, Rename, Delete, Import, Show folder and About MIDI Forge.
  */
 #pragma once
 
@@ -11,6 +11,15 @@
 
 namespace midiforge
 {
+
+/** Where the complete source code of MIDI Forge is published (shown in About, required by the AGPLv3). */
+inline constexpr const char* sourceCodeUrl = "https://github.com/ugerhard-git/midi-forge";
+
+/**
+ * @return The text of the About dialog: version, copyright, licence, the missing warranty and where the
+ *         source code is (the "Appropriate Legal Notices" the AGPLv3 asks interactive programs to show).
+ */
+juce::String getAboutText();
 
 class PresetBar final : public juce::Component
 {
@@ -41,6 +50,8 @@ private:
     void askToConfirm (const juce::String& title, const juce::String& message, const juce::String& confirmButtonText,
                        std::function<void()> onConfirm);
     void showError (const juce::String& message);
+    /** Shows version, copyright and licence, with a button that opens the source code page. */
+    void showAbout();
     void saveAs();
     void saveWithName (const juce::String& name);
     void renameCurrent();

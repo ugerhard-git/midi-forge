@@ -38,6 +38,6 @@ Built with [JUCE](https://juce.com).
 
 ## Licence
 
-MIDI Forge is free software: you can redistribute it and/or modify it under the terms of the
+Copyright (C) 2026 Udo Gerhards. MIDI Forge is free software: you can redistribute it and/or modify it under the terms of the
 [GNU Affero General Public License, version 3](LICENSE). It comes with no warranty. JUCE is used under
 its AGPLv3 licence.

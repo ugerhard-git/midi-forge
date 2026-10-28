@@ -17,6 +17,7 @@
 #include "Plugin/UserPresetLibrary.h"
 #include "UI/ModuleBrowser.h"
 #include "UI/PluginEditor.h"
+#include "UI/PresetBar.h"
 #include "UI/Theme.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -1608,4 +1609,14 @@ int main (int argc, char** argv)
         writePopupSnapshots (snapshotDirectory);
     }
     return result;
+}
+
+TEST_CASE ("about: shows version, copyright, licence, the missing warranty and the source code link")
+{
+    const auto text = getAboutText();
+    EXPECT (text.contains (juce::String ("MIDI Forge ") + JucePlugin_VersionString));
+    EXPECT (text.contains ("Copyright (C) 2026 Udo Gerhards"));
+    EXPECT (text.contains ("GNU Affero General Public License, version 3"));
+    EXPECT (text.contains ("NO WARRANTY"));
+    EXPECT (text.contains ("https://github.com/ugerhard-git/midi-forge"));
 }
