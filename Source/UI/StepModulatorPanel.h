@@ -15,7 +15,8 @@ namespace midiforge
 /**
  * Shows the steps of a step modulator as bars around a centre line and lets the user draw them:
  * click or drag to set values, hold Shift to snap to quarters (−100, −75 … +100), double-click a step to set
- * it to 0. The step playing right now is highlighted.
+ * it to 0. A strip of small boxes below ties a step to the one before (Alt+click on a step does the same);
+ * tied steps are drawn as one wide bar. The step playing right now is highlighted.
  */
 class StepEditor final : public juce::Component, public juce::SettableTooltipClient
 {
@@ -34,18 +35,24 @@ public:
     int stepAt (float x) const noexcept;
     /** @return The value (-100..+100) for a y position; with snapping, rounded to quarters. */
     float valueAt (float y, bool snapsToQuarters) const noexcept;
-    /** Sets one step's value (-100..+100) as a host parameter gesture. */
+    /** Sets one step's value (-100..+100) as a host parameter gesture (for a tied step: its group's value). */
     void setStepValue (int step, float valuePercent);
+    /** Ties a step to the one before it, or unties it (step 1 cannot be tied). */
+    void toggleTie (int step);
+    /** The area of the bars and of the tie strip below them. */
+    juce::Rectangle<float> barArea() const noexcept;
+    juce::Rectangle<float> tieStripArea() const noexcept;
 
 private:
     /** Sets the step under the mouse to the value under the mouse. */
     void drawAt (const juce::MouseEvent& event);
-    juce::Rectangle<float> barArea() const noexcept { return getLocalBounds().toFloat().reduced (4.0f, 4.0f); }
 
     MidiForgeProcessor& processor;
     const int stepModulatorIndex;
     StepModulatorSettings shownSettings;
     int shownStep = -1;
+    bool isEditingTies = false; ///< The current mouse gesture started in the tie strip (or with Alt)
+    static constexpr float tieStripHeight = 7.0f;
 };
 
 /** All controls of one step modulator. */

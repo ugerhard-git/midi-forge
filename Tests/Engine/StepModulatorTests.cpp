@@ -114,3 +114,22 @@ TEST_CASE ("step modulator: steps drive a module through a route, locked to the 
     EXPECT (rig.playedNoteNumbers() == expectedNotes);
     EXPECT (rig.notesStillSounding().empty());
 }
+
+TEST_CASE ("step modulator: a tied step continues the step before it, and glide waits for the end of the group")
+{
+    // 8 steps, steps 2 and 6 tied: long-short-short-long-short-short ... in values A A B C D D E F.
+    auto settings = stepsWithValues ({ 0.5f, -1.0f, 0.25f, -0.25f, 1.0f, -1.0f, 0.75f, -0.75f });
+    settings.isTied[1] = true;
+    settings.isTied[5] = true;
+    settings.isTied[0] = true; // step 1 cannot be tied: ignored
+    const float expected[] = { 0.5f, 0.5f, 0.25f, -0.25f, 1.0f, 1.0f, 0.75f, -0.75f };
+    for (int step = 0; step < 8; ++step)
+        EXPECT (std::abs (StepModulator::valueAtStepPosition (settings, step + 0.5) - expected[step]) < 1.0e-6f);
+
+    // Glide 50 % over a two-step group: still on the value after one and a half steps, halfway at 1.5 of 2 ...
+    settings.glide = 0.5;
+    EXPECT (std::abs (StepModulator::valueAtStepPosition (settings, 0.9) - 0.5f) < 1.0e-6f);
+    EXPECT (std::abs (StepModulator::valueAtStepPosition (settings, 1.5) - 0.375f) < 1.0e-6f); // halfway to 0.25
+    EXPECT (std::abs (StepModulator::valueAtStepPosition (settings, 1.999) - 0.25f) < 1.0e-3f);
+    EXPECT (settings.groupStartOf (5) == 4 && settings.groupEndOf (4, 8) == 6 && settings.groupEndOf (7, 8) == 8);
+}

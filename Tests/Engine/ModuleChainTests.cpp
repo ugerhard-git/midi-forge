@@ -139,6 +139,8 @@ TEST_CASE ("chain: randomized stress test leaves no stuck notes and no pitch ben
                 stepModulator.divisionIndex = randomInteger (0, numStepDivisions - 1);
                 stepModulator.glide = randomInteger (0, 1) == 0 ? 0.0 : randomUnit();
                 stepModulator.restartsOnFirstKey = randomInteger (0, 1) == 1;
+                for (bool& isTied : stepModulator.isTied)
+                    isTied = randomInteger (0, 3) == 0;
             }
             for (auto& route : rig.settings.routes)
             {

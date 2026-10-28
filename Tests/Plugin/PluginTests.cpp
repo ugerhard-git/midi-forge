@@ -59,7 +59,7 @@ TEST_CASE ("plugin: exposes slot, LFO and route parameters with stable IDs")
         if (dynamic_cast<juce::AudioProcessorParameterWithID*> (parameter) != nullptr)
             ++numOurParameters;
     constexpr int parametersPerSlot = 10, parametersPerLfo = 7, parametersPerRoute = 4, parametersPerRandom = 3,
-                  parametersPerStepModulator = 4 + maximumSteps;
+                  parametersPerStepModulator = 4 + maximumSteps + (maximumSteps - 1); // incl. ties (0.16.0)
     EXPECT (numOurParameters == numSlots * parametersPerSlot + numLfos * parametersPerLfo +
                                     numModulationRoutes * parametersPerRoute + numNoteRandoms * parametersPerRandom +
                                     numStepModulators * parametersPerStepModulator);
@@ -68,14 +68,15 @@ TEST_CASE ("plugin: exposes slot, LFO and route parameters with stable IDs")
     const auto idAt = [&processor] (int index)
     { return dynamic_cast<juce::AudioProcessorParameterWithID*> (processor.getParameters()[index])->paramID; };
     const int numStepParameters = numStepModulators * parametersPerStepModulator;
-    EXPECT (idAt (numSlots * 6 + numLfos * 7 + numModulationRoutes * 3 - 1) == "r8_amount");  // last of 0.2.0
-    EXPECT (idAt (numOurParameters - 1 - numStepParameters - numSlots * 4) == "r8_polarity"); // last of 0.6.0
-    EXPECT (idAt (numOurParameters - 1 - numStepParameters) == "s8_h");                       // last of 0.7.0
-    EXPECT (idAt (numOurParameters - 1) == "q4_v16");                                         // steps (0.14.0) last
+    EXPECT (idAt (numSlots * 6 + numLfos * 7 + numModulationRoutes * 3 - 1) == "r8_amount");   // last of 0.2.0
+    EXPECT (idAt (numOurParameters - 1 - numStepParameters - numSlots * 4) == "r8_polarity");  // last of 0.6.0
+    EXPECT (idAt (numOurParameters - 1 - numStepParameters) == "s8_h");                        // last of 0.7.0
+    EXPECT (idAt (numOurParameters - 1 - numStepModulators * (maximumSteps - 1)) == "q4_v16"); // last of 0.14.0
+    EXPECT (idAt (numOurParameters - 1) == "q4_t16");                                          // ties (0.16.0) last
 
     for (const char* id :
          { "s1_type", "s8_d", "l1_wave", "l4_restart", "r1_source", "r8_amount", "r1_polarity", "n1_window", "n4_steps",
-           "s1_e", "s8_h", "q1_steps", "q2_rate", "q3_glide", "q4_restart", "q1_v1", "q4_v16" })
+           "s1_e", "s8_h", "q1_steps", "q2_rate", "q3_glide", "q4_restart", "q1_v1", "q4_v16", "q1_t2", "q4_t16" })
         EXPECT (processor.parameters.getParameter (id) != nullptr);
     EXPECT (processor.isMidiEffect() && processor.acceptsMidi() && processor.producesMidi());
 
@@ -1414,15 +1415,27 @@ TEST_CASE ("step modulators: the Steps sub-tab shows the panels, and drawing set
     auto& stepEditor = page.getStepModulatorPanel (1).editor;
     EXPECT (page.getStepModulatorPanel (1).isVisible());
 
-    // 16 steps across the editor: the 4th step is under x at 3.5/16 of the bar area, full height is +100.
-    const float width = (float) stepEditor.getWidth();
-    EXPECT (stepEditor.stepAt (4.0f + (width - 8.0f) * 3.5f / 16.0f) == 3);
-    EXPECT (std::abs (stepEditor.valueAt (4.0f, false) - 100.0f) < 0.5f);
-    EXPECT (std::abs (stepEditor.valueAt ((float) stepEditor.getHeight() / 2.0f, false)) < 1.0f);
-    EXPECT (std::abs (std::fmod (stepEditor.valueAt (17.0f, true), 25.0f)) < 1.0e-3f); // snapped with Shift
+    // 16 steps across the bar area: the 4th step is under x at 3.5/16 of it; its top is +100, its middle 0.
+    const auto bars = stepEditor.barArea();
+    EXPECT (stepEditor.stepAt (bars.getX() + bars.getWidth() * 3.5f / 16.0f) == 3);
+    EXPECT (std::abs (stepEditor.valueAt (bars.getY(), false) - 100.0f) < 0.5f);
+    EXPECT (std::abs (stepEditor.valueAt (bars.getCentreY(), false)) < 1.0f);
+    EXPECT (std::abs (std::fmod (stepEditor.valueAt (bars.getY() + 13.0f, true), 25.0f)) < 1.0e-3f); // Shift snaps
+    EXPECT (stepEditor.tieStripArea().getY() > bars.getBottom());
 
     stepEditor.setStepValue (3, -60.0f);
     EXPECT (std::abs (processor.getStepModulatorSettings (1).stepValues[3] - -0.6f) < 1.0e-6f);
+
+    // Ties: step 5 tied to step 4; drawing on step 5 changes step 4's value; step 1 cannot be tied.
+    stepEditor.toggleTie (4);
+    stepEditor.toggleTie (0);
+    EXPECT (processor.getStepModulatorSettings (1).isTied[4] && ! processor.getStepModulatorSettings (1).isTied[0]);
+    stepEditor.setStepValue (4, 80.0f);
+    EXPECT (std::abs (processor.getStepModulatorSettings (1).stepValues[3] - 0.8f) < 1.0e-6f);
+    EXPECT (std::abs (processor.getStepModulatorSettings (1).stepValues[4]) < 1.0e-6f);
+    stepEditor.toggleTie (4);
+    EXPECT (! processor.getStepModulatorSettings (1).isTied[4]);
+    EXPECT (processor.parameters.getParameter (ParameterIds::stepTie (1, 4)) != nullptr);
 }
 
 //==============================================================================

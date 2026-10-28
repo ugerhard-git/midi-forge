@@ -426,6 +426,11 @@ when it is stopped, they run at the project tempo.
   Hold **Shift** to snap to quarters (−100, −75 … +100); **double-click** a step to set it to 0.
 - The step playing right now is highlighted; the top line shows it with the current value, e.g.
   *step 6 / 16 · −20* (or *not routed* when no route uses the modulator).
+- **Ties:** click a small box in the strip under the bars (or **Alt+click** a step) to tie that step to the one
+  before it. A tied step continues the step before: that one lasts longer and keeps its value, so one step
+  modulator can play long–short–short rhythms. Tied steps are drawn as one wide bar; drawing on it changes its
+  value. With *Glide*, the slide to the next value happens at the end of the whole tied group. Step 1 cannot be
+  tied.
 - Like the LFOs, a **±** route uses the values as they are; a **+** route reads them as 0 … 100 % (−100 = 0 %,
   +100 = 100 %).
 
@@ -524,7 +529,7 @@ than 256 KB are refused, and values outside a parameter's range are limited to t
 | Ratchet Chords | Chord (Min7, open voicing) → Repeater (1/16, swing 58 %, accents on the beat); LFO 1 (S&H, 1/2 bar) switches the ratchet speed between 1/8T, 1/16 and 1/16T |
 | Hi-Hat Ratchet (Drums) | Note Split (F#1, the General MIDI closed hi-hat) → Repeater (1/16, swing 56 %, accents on the beat) → Humanize; kick, snare and everything else pass untouched |
 | Random Voicings | Chord (Maj7) → Velocity Curve (40–100) → Humanize; Random 1 (4 steps, **+**) gives every chord one of the four inversions, Random 2 (smooth, **±**) gives it its own loudness |
-| Breathing Steps | Arpeggiator (1/16, Up/Down, 2 octaves) → Velocity Curve (40–105) → Note Echo (1/8); Steps 1 (16 steps) shapes the arpeggio's gate, Steps 2 (7 steps) adds accents that move against the bar, Steps 3 (4 steps of 1 bar) switches the echo on only in every fourth bar |
+| Breathing Steps | Arpeggiator (1/16, Up/Down, 2 octaves) → Velocity Curve (40–105) → Note Echo (1/8); Steps 1 (16 steps, some tied into long steps) shapes the arpeggio's gate, Steps 2 (7 steps) adds accents that move against the bar, Steps 3 (4 steps of 1 bar) switches the echo on only in every fourth bar |
 
 Your current settings are also saved with your DAW project, together with the name of the loaded preset.
 Your DAW's own program list shows only the factory presets; your DAW's preset functions keep working too.
@@ -534,7 +539,7 @@ Your DAW's own program list shows only the factory presets; your DAW's preset fu
 Each slot has ten automatable parameters: **Slot n Module**, **Slot n On** and **Slot n A … H**.
 The LFOs (**LFO n Wave, Sync, Rate, Division, Phase, Pulse Width, Restart On Key**), the Random modulators
 (**Random n Chord Window, New Value On, Steps**), the step modulators (**Steps n Count, Rate, Glide, Restart On
-Key, Step 1 … 16**) and the routes (**Route n Source, Target, Amount, Polarity**) can be automated too.
+Key, Step 1 … 16, Tie 2 … 16**) and the routes (**Route n Source, Target, Amount, Polarity**) can be automated too.
 Your DAW displays A … H in the units of the module currently loaded in that slot, and you can type
 values in those units (e.g. `+7 st`, `1/16`, `C3`, `75%`). Automation is not stepped: the modules round
 to the nearest step themselves.

@@ -37,8 +37,22 @@ void setPlainValueAsGesture (juce::RangedAudioParameter& parameter, float plainV
 StepEditor::StepEditor (MidiForgeProcessor& processorToControl, int stepModulatorIndexToShow)
     : processor (processorToControl), stepModulatorIndex (stepModulatorIndexToShow)
 {
-    setTooltip ("Click or drag to draw the steps. Hold Shift to snap to quarters. Double-click a step to set it to 0.");
+    setTooltip ("Click or drag to draw the steps. Hold Shift to snap to quarters. Double-click a step to set it to 0. "
+                "Click a box in the strip below (or Alt+click a step) to tie it to the step before.");
     shownSettings = processor.getStepModulatorSettings (stepModulatorIndex);
+}
+
+juce::Rectangle<float> StepEditor::barArea() const noexcept
+{
+    auto area = getLocalBounds().toFloat().reduced (4.0f, 4.0f);
+    area.removeFromBottom (tieStripHeight + 3.0f);
+    return area;
+}
+
+juce::Rectangle<float> StepEditor::tieStripArea() const noexcept
+{
+    const auto bars = barArea();
+    return { bars.getX(), bars.getBottom() + 3.0f, bars.getWidth(), tieStripHeight };
 }
 
 int StepEditor::stepAt (float x) const noexcept
@@ -58,8 +72,19 @@ float StepEditor::valueAt (float y, bool snapsToQuarters) const noexcept
 
 void StepEditor::setStepValue (int step, float valuePercent)
 {
-    if (auto* parameter = processor.parameters.getParameter (ParameterIds::stepValue (stepModulatorIndex, step)))
+    // A tied step has no value of its own: drawing on it changes the first step of its group.
+    const int groupStart = shownSettings.groupStartOf (step);
+    if (auto* parameter = processor.parameters.getParameter (ParameterIds::stepValue (stepModulatorIndex, groupStart)))
         setPlainValueAsGesture (*parameter, valuePercent);
+    refreshFromProcessor();
+}
+
+void StepEditor::toggleTie (int step)
+{
+    if (step <= 0) // step 1 cannot be tied
+        return;
+    if (auto* parameter = processor.parameters.getParameter (ParameterIds::stepTie (stepModulatorIndex, step)))
+        setPlainValueAsGesture (*parameter, shownSettings.isTied[step] ? 0.0f : 1.0f);
     refreshFromProcessor();
 }
 
@@ -70,17 +95,23 @@ void StepEditor::drawAt (const juce::MouseEvent& event)
 
 void StepEditor::mouseDown (const juce::MouseEvent& event)
 {
-    drawAt (event);
+    isEditingTies = event.position.y >= tieStripArea().getY() - 1.0f || event.mods.isAltDown();
+    if (isEditingTies)
+        toggleTie (stepAt (event.position.x));
+    else
+        drawAt (event);
 }
 
 void StepEditor::mouseDrag (const juce::MouseEvent& event)
 {
-    drawAt (event);
+    if (! isEditingTies)
+        drawAt (event);
 }
 
 void StepEditor::mouseDoubleClick (const juce::MouseEvent& event)
 {
-    setStepValue (stepAt (event.position.x), 0.0f);
+    if (! isEditingTies)
+        setStepValue (stepAt (event.position.x), 0.0f);
 }
 
 void StepEditor::refreshFromProcessor()
@@ -89,7 +120,8 @@ void StepEditor::refreshFromProcessor()
     const int step = processor.getCurrentStep (stepModulatorIndex);
     bool changed = settings.numSteps != shownSettings.numSteps || step != shownStep;
     for (int index = 0; index < maximumSteps && ! changed; ++index)
-        changed = std::abs (settings.stepValues[index] - shownSettings.stepValues[index]) > 1.0e-4f;
+        changed = std::abs (settings.stepValues[index] - shownSettings.stepValues[index]) > 1.0e-4f ||
+                  settings.isTied[index] != shownSettings.isTied[index];
     if (! changed)
         return;
     shownSettings = settings;
@@ -111,18 +143,40 @@ void StepEditor::paint (juce::Graphics& graphics)
     const int numSteps = shownSettings.numSteps;
     const float stepWidth = area.getWidth() / (float) numSteps;
     const float gap = juce::jmin (3.0f, stepWidth * 0.15f);
-    for (int step = 0; step < numSteps; ++step)
+    const int currentGroupStart = shownStep >= 0 ? shownSettings.groupStartOf (shownStep) : -1;
+
+    // One bar per group: a step and the steps tied to it are drawn as one wide bar.
+    for (int groupStart = 0; groupStart < numSteps;)
     {
-        const float value = shownSettings.stepValues[step];
+        const int groupEnd = shownSettings.groupEndOf (groupStart, numSteps);
+        const float value = shownSettings.stepValues[groupStart];
         const float height = std::abs (value) * area.getHeight() / 2.0f;
-        const float x = area.getX() + (float) step * stepWidth + gap / 2.0f;
-        auto bar = juce::Rectangle<float> (x, value >= 0.0f ? centreY - height : centreY, stepWidth - gap,
-                                           juce::jmax (height, 1.5f));
-        const bool isCurrent = step == shownStep;
+        const float x = area.getX() + (float) groupStart * stepWidth + gap / 2.0f;
+        const float width = (float) (groupEnd - groupStart) * stepWidth - gap;
+        const auto bar =
+            juce::Rectangle<float> (x, value >= 0.0f ? centreY - height : centreY, width, juce::jmax (height, 1.5f));
+        const bool isCurrent = groupStart == currentGroupStart;
         graphics.setColour (isCurrent ? Theme::Colours::modulation : Theme::Colours::modulation.withAlpha (0.45f));
         graphics.fillRoundedRectangle (bar, 2.0f);
-        if (isCurrent)
-            graphics.fillRect (x, bounds.getBottom() - 2.0f, stepWidth - gap, 2.0f);
+        groupStart = groupEnd;
+    }
+
+    // The tie strip: a box per step (from step 2); filled when the step is tied to the one before.
+    const auto strip = tieStripArea();
+    for (int step = 1; step < numSteps; ++step)
+    {
+        const auto box = juce::Rectangle<float> (strip.getX() + (float) step * stepWidth + gap / 2.0f, strip.getY(),
+                                                 stepWidth - gap, strip.getHeight());
+        graphics.setColour (shownSettings.isTied[step] ? Theme::Colours::modulation.withAlpha (0.8f)
+                                                       : Theme::Colours::controlTrack);
+        graphics.fillRoundedRectangle (box, 2.0f);
+    }
+    // The step playing now, under the strip's first box position for step 1
+    if (shownStep >= 0 && shownStep < numSteps)
+    {
+        graphics.setColour (Theme::Colours::modulation);
+        graphics.fillRect (area.getX() + (float) shownStep * stepWidth + gap / 2.0f, bounds.getBottom() - 2.0f,
+                           stepWidth - gap, 2.0f);
     }
 }
 

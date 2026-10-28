@@ -128,6 +128,8 @@ MidiForgeProcessor::MidiForgeProcessor()
         for (int step = 0; step < maximumSteps; ++step)
             values.stepValuesPercent[step] =
                 parameters.getRawParameterValue (ParameterIds::stepValue (stepIndex, step));
+        for (int step = 1; step < maximumSteps; ++step)
+            values.isTied[step] = parameters.getRawParameterValue (ParameterIds::stepTie (stepIndex, step));
     }
     for (auto& readout : stepModulatorValueReadouts)
         readout.store (0.0f);
@@ -163,6 +165,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout MidiForgeProcessor::createPa
     addNoteRandomAndPolarityParameters (layout);
     addSecondPageSlotParameters (layout);
     addStepModulatorParameters (layout);
+    addStepTieParameters (layout);
     return layout;
 }
 
@@ -412,6 +415,22 @@ void MidiForgeProcessor::addStepModulatorParameters (juce::AudioProcessorValueTr
     }
 }
 
+void MidiForgeProcessor::addStepTieParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout)
+{
+    constexpr int version = ParameterIds::stepTieParameterVersion;
+    for (int stepIndex = 0; stepIndex < numStepModulators; ++stepIndex)
+    {
+        const juce::String name = "Steps " + juce::String (stepIndex + 1);
+        auto group = std::make_unique<juce::AudioProcessorParameterGroup> ("stepties" + juce::String (stepIndex + 1),
+                                                                           name + " Ties", " | ");
+        for (int step = 1; step < maximumSteps; ++step)
+            group->addChild (std::make_unique<juce::AudioParameterBool> (
+                juce::ParameterID { ParameterIds::stepTie (stepIndex, step), version },
+                name + " Tie " + juce::String (step + 1), false));
+        layout.add (std::move (group));
+    }
+}
+
 //==============================================================================
 // Audio thread
 
@@ -597,6 +616,8 @@ StepModulatorSettings MidiForgeProcessor::getStepModulatorSettings (int stepModu
     settings.restartsOnFirstKey = values.restartsOnKey->load() >= 0.5f;
     for (int step = 0; step < maximumSteps; ++step)
         settings.stepValues[step] = juce::jlimit (-1.0f, 1.0f, values.stepValuesPercent[step]->load() / 100.0f);
+    for (int step = 1; step < maximumSteps; ++step)
+        settings.isTied[step] = values.isTied[step]->load() >= 0.5f;
     return settings;
 }
 
@@ -954,6 +975,8 @@ void MidiForgeProcessor::resetModulationToDefaults()
                         ParameterIds::stepGlide (stepIndex), ParameterIds::stepRestartOnKey (stepIndex) });
         for (int step = 0; step < maximumSteps; ++step)
             ids.add (ParameterIds::stepValue (stepIndex, step));
+        for (int step = 1; step < maximumSteps; ++step)
+            ids.add (ParameterIds::stepTie (stepIndex, step));
     }
 
     for (const auto& id : ids)
@@ -1016,6 +1039,8 @@ void MidiForgeProcessor::applyPresetModulation (const FactoryPreset& preset)
         setPlainParameterValue (ParameterIds::stepRestartOnKey (stepIndex), settings.restartsOnFirstKey ? 1.0f : 0.0f);
         for (int step = 0; step < maximumSteps; ++step)
             setPlainParameterValue (ParameterIds::stepValue (stepIndex, step), settings.stepValues[step] * 100.0f);
+        for (int step = 1; step < maximumSteps; ++step)
+            setPlainParameterValue (ParameterIds::stepTie (stepIndex, step), settings.isTied[step] ? 1.0f : 0.0f);
     }
 }
 

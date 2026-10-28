@@ -14,7 +14,7 @@ When a feature is implemented, remove it here and describe it in [MANUAL.md](MAN
 
 Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 
-1. Step modulator ties (0.16)
+1. ~~Step modulator ties (0.16)~~ built
 2. Groove (0.17), with a shared "position in the bar" helper
 3. Strum + Ghost Notes (0.18)
 4. Beat-aware thinning + Diatonic Harmonizer (0.19), with a shared scale helper
@@ -27,12 +27,6 @@ Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 (nothing at the moment)
 
 ## Ideas
-
-### Step modulator: ties
-
-Let a step last two or more steps' worth ("tie" it to the previous one), so one step modulator can play
-uneven rhythms like long-short-short within one sequence. Agreed as a later addition to the step modulators
-(0.14.0).
 
 ### Groove
 

@@ -43,6 +43,17 @@ StepModulatorSettings steps (int divisionIndex, std::initializer_list<float> val
         settings.stepValues[step++] = value / 100.0f;
     return settings;
 }
+
+/** The same with some steps (1-based numbers) tied to the step before. */
+StepModulatorSettings stepsWithTies (int divisionIndex, std::initializer_list<float> valuesPercent,
+                                     std::initializer_list<int> tiedStepNumbers)
+{
+    auto settings = steps (divisionIndex, valuesPercent);
+    for (int stepNumber : tiedStepNumbers)
+        if (stepNumber >= 2 && stepNumber <= maximumSteps)
+            settings.isTied[stepNumber - 1] = true;
+    return settings;
+}
 } // namespace
 
 const std::vector<FactoryPreset>& getFactoryPresets()
@@ -162,7 +173,9 @@ const std::vector<FactoryPreset>& getFactoryPresets()
             { steps2, 1, velocityOutMaximum, 25.0f },          // accents in a 7-step cycle against the bar
             { steps3, 2, slotSwitchParameterIndex, 100.0f } }, // the echo only in every 4th bar
           {},
-          { { 0, steps (sixteenthStep, { 60, -20, 20, -40, 80, -20, 0, -60, 60, -20, 30, -30, 90, -10, -50, 100 }) },
+          { { 0,
+              stepsWithTies (sixteenthStep, { 60, -20, 20, -40, 80, -20, 0, -60, 60, -20, 30, -30, 90, -10, -50, 100 },
+                             { 2, 6, 10 }) }, // long-short-short: steps 2, 6 and 10 are tied
             { 1, steps (sixteenthStep, { 100, -40, 20, -80, 50, 0, -30 }) },
             { 2, steps (barStep, { -100, -100, -100, 100 }) } } },
     };

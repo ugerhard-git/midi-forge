@@ -61,18 +61,23 @@ float StepModulator::valueAtStepPosition (const StepModulatorSettings& settings,
 {
     const int numSteps = clampedNumberOfSteps (settings);
     const double stepNumber = std::floor (stepPosition);
-    const double withinStep = stepPosition - stepNumber; // 0..1
     const auto step = (int) ((((int64_t) stepNumber % numSteps) + numSteps) % numSteps);
-    const float value = std::clamp (settings.stepValues[step], -1.0f, 1.0f);
+
+    // A tied step plays on the value of the first step of its group; the group counts as one long step.
+    const int groupStart = settings.groupStartOf (step);
+    const int groupEnd = settings.groupEndOf (step, numSteps);
+    const double withinGroup =
+        (stepPosition - (stepNumber - (double) (step - groupStart))) / (double) (groupEnd - groupStart); // 0..1
+    const float value = std::clamp (settings.stepValues[groupStart], -1.0f, 1.0f);
 
     const double glide = std::clamp (settings.glide, 0.0, 1.0);
     const double glideStart = 1.0 - glide;
-    if (glide <= 0.0 || withinStep < glideStart)
+    if (glide <= 0.0 || withinGroup < glideStart)
         return value;
 
-    // Slide to the next step's value with an S-shaped curve during the last `glide` part of the step.
-    const float nextValue = std::clamp (settings.stepValues[(step + 1) % numSteps], -1.0f, 1.0f);
-    const double progress = (withinStep - glideStart) / glide;
+    // Slide to the next group's value with an S-shaped curve during the last `glide` part of the group.
+    const float nextValue = std::clamp (settings.stepValues[groupEnd % numSteps], -1.0f, 1.0f);
+    const double progress = (withinGroup - glideStart) / glide;
     const double smoothed = progress * progress * (3.0 - 2.0 * progress);
     return value + (nextValue - value) * (float) smoothed;
 }

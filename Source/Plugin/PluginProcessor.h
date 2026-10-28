@@ -225,6 +225,8 @@ private:
     void addSecondPageSlotParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
     /** Added in 0.14.0, after all older parameters: the step modulators. */
     void addStepModulatorParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
+    /** Added in 0.16.0, after all older parameters: the step ties. */
+    void addStepTieParameters (juce::AudioProcessorValueTreeState::ParameterLayout& layout);
     std::unique_ptr<juce::AudioParameterFloat> createModuleParameter (int slotIndex, int parameterIndex, int version);
     /**
      * The parameter state plus the shown knob pages and the knob layout version, as saved in projects and
@@ -305,6 +307,7 @@ private:
         std::atomic<float>* glidePercent = nullptr;
         std::atomic<float>* restartsOnKey = nullptr;
         std::atomic<float>* stepValuesPercent[maximumSteps] {};
+        std::atomic<float>* isTied[maximumSteps] {}; ///< index 0 unused (step 1 cannot be tied)
     };
     std::array<StepModulatorParameterValues, numStepModulators> stepModulatorParameterValues;
     EngineSettings engineSettings;

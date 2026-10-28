@@ -7,7 +7,8 @@
  * Per LFO n (1..4):    ln_wave, ln_sync, ln_rate, ln_div, ln_phase, ln_width, ln_restart
  * Per route n (1..8):  rn_source, rn_target, rn_amount, rn_polarity
  * Per Note Random n (1..4): nn_window, nn_trigger, nn_steps
- * Per step modulator n (1..4, added in 0.14.0): qn_steps, qn_rate, qn_glide, qn_restart, qn_v1 .. qn_v16
+ * Per step modulator n (1..4, added in 0.14.0): qn_steps, qn_rate, qn_glide, qn_restart, qn_v1 .. qn_v16;
+ *                      added in 0.16.0: qn_t2 .. qn_t16 (ties)
  */
 #pragma once
 
@@ -126,11 +127,18 @@ inline juce::String stepValue (int stepModulatorIndex, int stepIndex)
     return makeId ("q", stepModulatorIndex, ("v" + juce::String (stepIndex + 1)).toRawUTF8());
 }
 
+/** Whether a step (stepIndex 1..15) is tied to the one before it, e.g. "q1_t3". */
+inline juce::String stepTie (int stepModulatorIndex, int stepIndex)
+{
+    return makeId ("q", stepModulatorIndex, ("t" + juce::String (stepIndex + 1)).toRawUTF8());
+}
+
 /** Version hints for the hosts' parameter caching (see juce::ParameterID). */
 inline constexpr int slotParameterVersion = 1;          ///< Version 0.1.0: slot parameters
 inline constexpr int modulationParameterVersion = 2;    ///< Version 0.2.0: LFOs and routes
 inline constexpr int noteRandomParameterVersion = 3;    ///< Version 0.6.0: route polarity, Note Random
 inline constexpr int secondPageParameterVersion = 4;    ///< Version 0.7.0: slot parameters E-H
 inline constexpr int stepModulatorParameterVersion = 5; ///< Version 0.14.0: step modulators
+inline constexpr int stepTieParameterVersion = 6;       ///< Version 0.16.0: step ties
 
 } // namespace midiforge::ParameterIds

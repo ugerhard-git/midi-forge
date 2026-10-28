@@ -28,6 +28,27 @@ struct StepModulatorSettings
     int divisionIndex = defaultStepDivisionIndex; ///< Length of one step, index into stepDivisions
     double glide = 0.0;                           ///< 0..1: share of each step spent sliding to the next value
     bool restartsOnFirstKey = false;              ///< Start again at step 1 with the first key of a phrase
+    /**
+     * True: the step continues the step before it (it is "tied"), so that one lasts longer and keeps its value.
+     * Step 1 (index 0) cannot be tied. Added in 0.16.0.
+     */
+    bool isTied[maximumSteps] {};
+
+    /** @return The first step of the tied group a step belongs to (the step itself if it is not tied). */
+    int groupStartOf (int step) const noexcept
+    {
+        while (step > 0 && isTied[step])
+            --step;
+        return step;
+    }
+    /** @return The step after the tied group a step belongs to (numSteps if the group runs to the end). */
+    int groupEndOf (int step, int numberOfSteps) const noexcept
+    {
+        int next = step + 1;
+        while (next < numberOfSteps && isTied[next])
+            ++next;
+        return next;
+    }
 };
 
 /**
@@ -56,8 +77,8 @@ public:
     void advance (const StepModulatorSettings& settings, const BlockContext& context) noexcept;
 
     /**
-     * @return The output for a position in steps: the step's value, and with glide a smooth slide to the
-     *         next step's value during the last part of the step.
+     * @return The output for a position in steps: the value of the step (or of the first step of its tied
+     *         group), and with glide a smooth slide to the next value during the last part of the group.
      */
     static float valueAtStepPosition (const StepModulatorSettings& settings, double stepPosition) noexcept;
 
