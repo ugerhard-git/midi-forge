@@ -10,6 +10,18 @@ When a feature is implemented, remove it here and describe it in [MANUAL.md](MAN
 
 ---
 
+## Roadmap
+
+Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
+
+1. Step modulator ties (0.16)
+2. Groove (0.17), with a shared "position in the bar" helper
+3. Strum + Ghost Notes (0.18)
+4. Beat-aware thinning + Diatonic Harmonizer (0.19), with a shared scale helper
+5. Modulating the modulation (0.20)
+6. Pitch Slide: Fall Off (0.21)
+- Later, separately: Pitch Slide MPE. Parked until the owner wants it: macOS and CLAP builds.
+
 ## Planned
 
 (nothing at the moment)
