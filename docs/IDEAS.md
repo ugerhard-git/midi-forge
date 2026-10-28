@@ -19,7 +19,7 @@ Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 3. ~~Strum + Ghost Notes (0.18)~~ built
 4. ~~Beat Thinning + Diatonic Harmonizer (0.19), time signatures followed everywhere~~ built
 5. ~~Modulating the modulation (0.20)~~ built
-6. Pitch Slide: Fall Off (0.21)
+6. ~~Pitch Slide: Fall Off (0.21)~~ built
 - Later, separately: Pitch Slide MPE. Parked until the owner wants it: macOS and CLAP builds.
 
 ## Planned
@@ -35,8 +35,7 @@ on macOS, and `-DMIDI_FORGE_BUILD_CLAP=ON` brings CLAP back. To return: add the 
 again (ad-hoc `codesign`, `ditto` zip), add the CLAP target and file to the build and collect steps, and put
 the install folders and the macOS quarantine note back into the manual and packaging/INSTALL.txt.
 
-### Pitch Slide: Fall Off on release and MPE
+### Pitch Slide: MPE
 
-Two follow-ups discussed while planning the Pitch Slide (0.10.0): a *Fall Off* mode that starts the slide when
-the key is released (keeping the note sounding for the slide length), and an MPE mode that gives every note
-its own channel so notes of a chord can slide individually.
+Discussed while planning the Pitch Slide (0.10.0): an MPE mode that gives every note its own channel, so
+notes of a chord can slide (and fall off) individually.

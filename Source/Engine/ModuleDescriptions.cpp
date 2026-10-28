@@ -45,7 +45,7 @@ const char* const repeaterDivisionLabels[] = { "1/4D", "1/4",  "1/8D",  "1/4T", 
 const char* const repeaterVelocityLabels[] = { "Last Note", "Aftertouch" };
 const char* const noteSplitOctaveLabels[] = { "This octave", "Every octave" };
 const char* const repeaterAccentLabels[] = { "Off", "Every 2nd", "Every 3rd", "Every 4th", "On Beat" };
-const char* const slideModeLabels[] = { "Slide In", "Slide Out" };
+const char* const slideModeLabels[] = { "Slide In", "Slide Out", "Fall Off", "In + Fall Off" };
 const char* const slideDivisionLabels[] = { "1/64", "1/32T", "1/32", "1/16T", "1/32D", "1/16", "1/8T", "1/16D", "1/8",
                                             "1/4T", "1/8D",  "1/4",  "1/2T",  "1/4D",  "1/2",  "1/2D", "1 Bar" };
 const char* const slideDelayLabels[] = { "Off", "1/64", "1/32T", "1/32", "1/16T", "1/32D", "1/16", "1/8T", "1/16D",
@@ -314,11 +314,12 @@ const ModuleDescription* createModuleTable()
         // Added in 0.10.0 --------------------------------------------------------------------------
         { "Pitch Slide",
           ModuleCategory::Randomizer,
-          "Slides notes in from, or out to, another pitch (pitch bend).",
+          "Slides notes in from, out to, or falls off to another pitch (pitch bend).",
           { integerParameter ("Offset", -24, 24, -2, " st")
                 .withHelp ("Where the slide starts (Slide In) or ends (Slide Out), relative to the note."),
             choiceParameter ("Mode", slideModeLabels, 0)
-                .withHelp ("Slide In: from Offset to the note. Slide Out: from the note to Offset."),
+                .withHelp ("Slide In: from Offset to the note. Slide Out: from the note to Offset. Fall Off: to "
+                           "Offset after you release the key. In + Fall Off: both."),
             choiceParameter ("Length", slideDivisionLabels, 5)
                 .withHelp ("How long the slide takes, synced to the tempo."),
             percentParameter ("Chance", 0, 100, 100).withHelp ("Probability that a note (or chord) slides."),
@@ -328,11 +329,14 @@ const ModuleDescription* createModuleTable()
             integerParameter ("Bend Range", 1, 48, 2, " st")
                 .withHelp ("Set this to your synth's pitch bend range, so the slide hits the right pitch."),
             choiceParameter ("Delay", slideDelayLabels, 0)
-                .withHelp ("When the slide starts after the note begins (Off = right away).") },
+                .withHelp ("When the slide starts after the note begins (Off = right away). Slide In and Slide Out "
+                           "only.") },
           "Slides the pitch with pitch bend messages. Slide In starts the note at Offset and glides to its own "
-          "pitch; Slide Out starts at the note's pitch and glides to Offset. Pitch bend moves the whole channel, "
-          "so a chord slides together (notes within 30 ms count as one chord). Set Bend Range to your synth's "
-          "pitch bend range. Your own pitch bend is added to the slide." },
+          "pitch; Slide Out starts at the note's pitch and glides to Offset. Fall Off keeps the note sounding "
+          "after you release the key and lets it fall to Offset over Length; In + Fall Off also slides it in. "
+          "Pitch bend moves the whole channel, so a chord slides together (notes within 30 ms count as one chord) "
+          "and falls when its last key is released. Set Bend Range to your synth's pitch bend range. Your own "
+          "pitch bend is added to the slide." },
 
         // Added in 0.12.0 --------------------------------------------------------------------------
         { "Note Dispatcher",
@@ -572,6 +576,17 @@ bool containsEveryWord (const std::string& lowerCaseHaystack, const std::string&
     return true;
 }
 } // namespace
+
+bool isParameterInactive (int moduleType, int parameterIndex, const float* normalisedValues) noexcept
+{
+    if (moduleType != (int) ModuleType::PitchSlide)
+        return false;
+    // Pitch Slide: Delay (G) only applies to Slide In and Slide Out, not to the fall modes (Mode = B).
+    constexpr int modeIndex = 1, delayIndex = 6, firstFallMode = 2;
+    const auto& description = getModuleDescription (moduleType);
+    return parameterIndex == delayIndex &&
+           normalisedToInteger (description.parameters[modeIndex], normalisedValues[modeIndex]) >= firstFallMode;
+}
 
 SearchRelevance getSearchRelevance (const ModuleDescription& description, const std::string& searchText)
 {

@@ -1,7 +1,7 @@
 /**
  * @file PitchSlideTests.cpp
- * @brief The Pitch Slide module: slide in and out, delay, curve, chance, chords, the player's own bend,
- *        the bend range, and leaving the synth in tune when the slot changes.
+ * @brief The Pitch Slide module: slide in and out, fall off on release, delay, curve, chance, chords, the
+ *        player's own bend, the bend range, and leaving the synth in tune when the slot changes.
  */
 #include "../TestFramework.h"
 #include "ChainTestRig.h"
@@ -15,7 +15,7 @@ namespace
 /** Choice indices (see ModuleDescriptions.cpp). */
 namespace SlideMode
 {
-constexpr float slideIn = 0, slideOut = 1;
+constexpr float slideIn = 0, slideOut = 1, fallOff = 2, inAndFallOff = 3;
 }
 namespace SlideLength
 {
@@ -252,4 +252,119 @@ TEST_CASE ("pitch slide: switching the slot off or panic in the middle of a slid
     EXPECT (bendsOf (panicked).back().value == centre);
     panicked.processSeconds (0.5);
     EXPECT (bendsOf (panicked).back().value == centre); // the slide does not continue after the panic
+}
+
+namespace
+{
+/** @return The absolute times of the note-offs (and velocity-0 note-ons) of a note. */
+std::vector<int> noteOffTimesOf (const ChainTestRig& rig, int noteNumber)
+{
+    std::vector<int> times;
+    for (const auto& event : rig.everyOutputEvent)
+        if (event.isNoteOff() && event.noteNumber() == noteNumber)
+            times.push_back (event.samplePosition);
+    return times;
+}
+
+/** Runs blocks until the given absolute time is inside the next block, then plays the events there. */
+void playAt (ChainTestRig& rig, int time, MidiEventList events)
+{
+    while (rig.samplesElapsed + testBlockSize <= time)
+        rig.processBlock();
+    for (auto& event : events)
+        event.samplePosition = time - (int) rig.samplesElapsed;
+    rig.processBlock (events);
+}
+} // namespace
+
+TEST_CASE ("pitch slide: fall off keeps the note after release and lets it fall to Offset")
+{
+    ChainTestRig rig;
+    setUpPitchSlide (rig, -2, SlideMode::fallOff, SlideLength::sixteenth);
+    playAt (rig, 0, { noteOnAt (0, 60) });
+    const int release = 20000;
+    playAt (rig, release, { noteOffAt (0, 60) });
+    rig.processSeconds (0.5);
+
+    EXPECT (noteOffTimesOf (rig, 60) == (std::vector<int> { release + sixteenthAt120Bpm }));
+    const auto bends = bendsOf (rig);
+    EXPECT (! bends.empty());
+    if (! bends.empty())
+    {
+        EXPECT (bends.front().time >= release);                    // nothing bends while the key is held
+        EXPECT (bends.back().value == centre);                     // back in tune afterwards
+        EXPECT (bends[bends.size() - 2].value == 0);               // arrived at -2 st (the bend range)
+        EXPECT (bends.back().time == release + sixteenthAt120Bpm); // right after the note-off
+    }
+    EXPECT (rig.notesStillSounding().empty());
+}
+
+TEST_CASE ("pitch slide: a released chord falls together; a key released alone ends a moment later")
+{
+    ChainTestRig rig;
+    setUpPitchSlide (rig, -12, SlideMode::fallOff, SlideLength::sixteenth, 100, 0, 12);
+    playAt (rig, 0, { noteOnAt (0, 48), noteOnAt (0, 60), noteOnAt (0, 64) });
+    playAt (rig, 10000, { noteOffAt (0, 48) }); // bass let go early: ends 30 ms later, no fall
+    playAt (rig, 30000, { noteOffAt (0, 60) });
+    playAt (rig, 30480, { noteOffAt (0, 64) }); // 10 ms later: the chord falls as one
+    rig.processSeconds (0.5);
+
+    EXPECT (noteOffTimesOf (rig, 48) == (std::vector<int> { 10000 + 1440 }));
+    EXPECT (noteOffTimesOf (rig, 60) == (std::vector<int> { 30480 + sixteenthAt120Bpm }));
+    EXPECT (noteOffTimesOf (rig, 64) == (std::vector<int> { 30480 + sixteenthAt120Bpm }));
+    EXPECT (bendsOf (rig).front().time >= 30480);
+    EXPECT (rig.notesStillSounding().empty());
+}
+
+TEST_CASE ("pitch slide: a new note cuts a fall short and starts in tune")
+{
+    ChainTestRig rig;
+    setUpPitchSlide (rig, -2, SlideMode::fallOff, SlideLength::quarter);
+    playAt (rig, 0, { noteOnAt (0, 60) });
+    playAt (rig, 10000, { noteOffAt (0, 60) });
+    playAt (rig, 16000, { noteOnAt (0, 62) }); // during the fall (a quarter note = 24000 samples)
+    playAt (rig, 30000, { noteOffAt (0, 62) });
+    rig.processSeconds (1.0);
+
+    EXPECT (noteOffTimesOf (rig, 60) == (std::vector<int> { 16000 }));
+    // The bend is back at the centre when the new note starts.
+    int bendAtNewNote = -1;
+    for (const auto& event : rig.everyOutputEvent)
+    {
+        if (event.isPitchBend() && event.samplePosition <= 16000)
+            bendAtNewNote = event.pitchBendValue();
+    }
+    EXPECT (bendAtNewNote == centre);
+    EXPECT (noteOffTimesOf (rig, 62) == (std::vector<int> { 30000 + 24000 }));
+    EXPECT (bendsOf (rig).back().value == centre);
+    EXPECT (rig.notesStillSounding().empty());
+}
+
+TEST_CASE ("pitch slide: in + fall off slides in and falls off; Chance 0 leaves notes alone")
+{
+    ChainTestRig rig;
+    setUpPitchSlide (rig, -2, SlideMode::inAndFallOff, SlideLength::sixteenth);
+    playAt (rig, 0, { noteOnAt (0, 60) });
+    playAt (rig, 20000, { noteOffAt (0, 60) });
+    rig.processSeconds (0.5);
+    const auto bends = bendsOf (rig);
+    EXPECT (! bends.empty() && bends.front().time == 0 && bends.front().value == 0); // starts at -2 st
+    EXPECT (noteOffTimesOf (rig, 60) == (std::vector<int> { 20000 + sixteenthAt120Bpm }));
+    EXPECT (bendsOf (rig).back().value == centre);
+
+    ChainTestRig never;
+    setUpPitchSlide (never, -2, SlideMode::fallOff, SlideLength::sixteenth, 0);
+    playAt (never, 0, { noteOnAt (0, 60) });
+    playAt (never, 20000, { noteOffAt (0, 60) });
+    never.processSeconds (0.5);
+    EXPECT (noteOffTimesOf (never, 60) == (std::vector<int> { 20000 }));
+    EXPECT (bendsOf (never).empty());
+
+    // The Delay knob only applies to Slide In and Slide Out, so the editor dims it in the fall modes.
+    const auto& description = getModuleDescription (ModuleType::PitchSlide);
+    float values[numParametersPerSlot] {};
+    values[1] = plainValueToNormalised (description.parameters[1], SlideMode::fallOff);
+    EXPECT (isParameterInactive ((int) ModuleType::PitchSlide, 6, values));
+    values[1] = plainValueToNormalised (description.parameters[1], SlideMode::slideOut);
+    EXPECT (! isParameterInactive ((int) ModuleType::PitchSlide, 6, values));
 }

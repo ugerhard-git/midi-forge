@@ -159,6 +159,13 @@ const ModuleDescription& getModuleDescription (int typeIndex) noexcept;
 /** @return The display name of a category, e.g. "Filters". */
 const char* getCategoryName (ModuleCategory category) noexcept;
 
+/**
+ * @return True if a knob has no effect right now because of another knob of the same module (the editor
+ *         dims it), e.g. Pitch Slide's Delay in the Fall Off modes.
+ * @param normalisedValues The module's numParametersPerSlot values (0..1).
+ */
+bool isParameterInactive (int moduleType, int parameterIndex, const float* normalisedValues) noexcept;
+
 /** How well a module matches the search text of the module browser; higher is better. */
 enum class SearchRelevance
 {

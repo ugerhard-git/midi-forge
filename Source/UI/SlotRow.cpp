@@ -8,6 +8,8 @@
 #include "Plugin/ParameterIds.h"
 #include "Theme.h"
 
+#include <cmath>
+
 namespace midiforge
 {
 
@@ -301,12 +303,19 @@ void SlotRow::showModule (int moduleType, int page)
 void SlotRow::updateValueTexts()
 {
     const auto& description = getModuleDescription (displayedModuleType);
+    float ownValues[numParametersPerSlot] {};
+    for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
+        ownValues[parameterIndex] = processor.getParameterValue (slotIndex, parameterIndex);
     for (int knobIndex = 0; knobIndex < numParametersPerPage; ++knobIndex)
     {
         const int parameterIndex = parameterIndexOfKnob (knobIndex);
         const auto& parameter = description.parameters[parameterIndex];
         if (! parameter.isUsed())
             continue;
+        // Knobs that do nothing with the current settings of the module are dimmed.
+        const float knobAlpha = isParameterInactive (displayedModuleType, parameterIndex, ownValues) ? 0.35f : 1.0f;
+        if (std::abs (parameterKnobs[knobIndex].getAlpha() - knobAlpha) > 0.01f)
+            parameterKnobs[knobIndex].setAlpha (knobAlpha);
         // A modulated knob shows the value the module uses right now (in yellow), except while the user
         // points at or turns it: then it shows the user's own setting.
         auto& parameterKnob = parameterKnobs[knobIndex];

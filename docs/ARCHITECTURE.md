@@ -172,6 +172,11 @@ on all channels. The stress test also checks that no channel is left bent.
   bend messages per channel (about one per millisecond while a slide moves, only when the value changes).
   It remembers the player's bend and adds the slide to it; when a channel's last held key ends, it sends the
   player's bend again. Notes within 30 ms of a slide's first note share its slide (one Chance roll).
+  The fall modes (0.21.0) hold note-offs back (`releaseTimeOfKey`): when a channel's last key is released, a
+  fall from the current slide position to Offset starts and every held-back note ends at its end
+  (`endFall()`); keys released while others are held end 30 ms later unless the chord follows
+  (`endDueReleasedNotes()`); a note-on cuts a fall short. `isParameterInactive()` (ModuleDescriptions) tells
+  the editor to dim Delay in these modes.
 
 New module types are appended to `ModuleType` (their numbers are stored in projects); the module browser
 groups modules by category, so a new Generator still appears under *Generators*.

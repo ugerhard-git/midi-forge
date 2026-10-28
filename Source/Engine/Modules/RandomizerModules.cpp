@@ -173,6 +173,10 @@ private:
 /**
  * Slides the pitch of notes with pitch bend: Slide In starts a note at Offset and glides to its own pitch,
  * Slide Out glides from the note's pitch to Offset. Notes themselves pass through untouched and on time.
+ * Fall Off (and In + Fall Off, which also slides in) glides from the note's pitch to Offset after the last key
+ * of a channel is released: the note-offs are held back until the fall has arrived. Keys released while others
+ * are still held end chordWindowMilliseconds later, unless the rest of the chord is released in that time
+ * (then they fall too). A new note on the channel cuts a fall short. The sustain pedal is not considered.
  *
  * Pitch bend acts on a whole channel, so everything is kept per channel: notes starting within
  * chordWindowMilliseconds of a slide's first note share its slide (one Chance decision per chord). A later
@@ -190,6 +194,8 @@ public:
     {
         channels.fill (ChannelState {});
         isKeyHeld.fill (false);
+        releaseTimeOfKey.fill (notReleased);
+        releaseVelocityOfKey.fill (0);
     }
 
     void process (const MidiEventList& input, MidiEventList& output, const BlockContext& context,
@@ -219,8 +225,11 @@ private:
     enum SlideMode
     {
         slideIn,
-        slideOut
+        slideOut,
+        fallOff,          ///< added in 0.21.0
+        slideInAndFallOff ///< added in 0.21.0
     };
+    static constexpr int64_t notReleased = -1;
 
     static constexpr double chordWindowMilliseconds = 30.0;
     static constexpr double updatesPerSecond = 1000.0;
@@ -238,6 +247,8 @@ private:
         float fromSemitones = 0.0f, toSemitones = 0.0f;
         float curveExponent = 1.0f;
         int64_t moveStartTime = 0, moveEndTime = 0, nextUpdateTime = 0;
+        int numReleasedKeys = 0; ///< Keys released whose note-off is held back (falling or waiting)
+        bool isFalling = false;  ///< A fall is under way; its notes end at moveEndTime
     };
 
     void handleEvent (const MidiEvent& event, int64_t eventTime, int bendRange, const BlockContext& context,
@@ -248,6 +259,12 @@ private:
 
         if (event.isNoteOn())
         {
+            // A new note cuts a fall short; a key played again ends its held-back note first.
+            if (channel.isFalling)
+                endFall (channelIndex, event.samplePosition, output);
+            else if (releaseTimeOfKey[channelNoteIndex (channelIndex, event.noteNumber())] != notReleased)
+                endReleasedKey (channelIndex, event.noteNumber(), event.samplePosition, output);
+
             const auto chordWindow = (int64_t) (chordWindowMilliseconds / 1000.0 * context.sampleRate);
             const bool isPartOfCurrentChord = eventTime - channel.lastSlideStartTime <= chordWindow;
             if (! isPartOfCurrentChord)
@@ -271,8 +288,28 @@ private:
 
         if (event.isNoteOff())
         {
+            const size_t key = channelNoteIndex (channelIndex, event.noteNumber());
+            if (isFallMode (parameterValues) && isKeyHeld[key])
+            {
+                // Hold the note-off back: the key may fall (now or with the rest of its chord).
+                isKeyHeld[key] = false;
+                --channel.numHeldKeys;
+                releaseTimeOfKey[key] = eventTime;
+                releaseVelocityOfKey[key] =
+                    (uint8_t) (event.messageType() == MidiStatus::noteOff ? event.velocity() : 0);
+                ++channel.numReleasedKeys;
+                if (channel.numHeldKeys == 0)
+                {
+                    if (decidesToSlide (parameterValues))
+                        startFall (channel, eventTime, context, parameterValues);
+                    else
+                        endFall (channelIndex, event.samplePosition, output); // no fall: end everything now
+                }
+                return;
+            }
+
             output.push_back (event);
-            auto& isHeld = isKeyHeld[channelNoteIndex (channelIndex, event.noteNumber())];
+            auto& isHeld = isKeyHeld[key];
             if (isHeld)
                 --channel.numHeldKeys;
             isHeld = false;
@@ -296,6 +333,54 @@ private:
         output.push_back (event);
     }
 
+    /** @return True in the modes that fall off when the keys are released. */
+    bool isFallMode (const float* parameterValues) const noexcept
+    {
+        const int mode = integerParameter (parameterValues, slideMode);
+        return mode == fallOff || mode == slideInAndFallOff;
+    }
+
+    /** Starts the fall of the channel's released notes: from the current slide position to Offset. */
+    void startFall (ChannelState& channel, int64_t eventTime, const BlockContext& context, const float* parameterValues)
+    {
+        const int lengthIndex = std::clamp (integerParameter (parameterValues, slideLength), 0, numSlideDivisions - 1);
+        channel.fromSemitones = slideSemitonesAt (channel, eventTime); // after a slide in that is still moving
+        channel.toSemitones = (float) integerParameter (parameterValues, offsetInSemitones);
+        channel.curveExponent = (float) std::pow (2.0, 2.0 * integerParameter (parameterValues, curveAmount) / 100.0);
+        channel.moveStartTime = eventTime;
+        channel.moveEndTime =
+            eventTime + std::max<int64_t> (1, std::llround (divisionLengthInBeats (slideDivisions[lengthIndex],
+                                                                                   context.timeSignature) *
+                                                            context.samplesPerBeat()));
+        channel.nextUpdateTime = eventTime;
+        channel.hasSlide = channel.isMoving = channel.isFalling = true;
+    }
+
+    /** Sends the held-back note-off of one released key. */
+    void endReleasedKey (int channelIndex, int noteNumber, int samplePosition, MidiEventList& output)
+    {
+        const size_t key = channelNoteIndex (channelIndex, noteNumber);
+        output.push_back (MidiEvent::noteOff (samplePosition, channelIndex, noteNumber, releaseVelocityOfKey[key]));
+        releaseTimeOfKey[key] = notReleased;
+        --channels[(size_t) channelIndex].numReleasedKeys;
+    }
+
+    /** Ends every held-back note of a channel (the fall arrived, was cut short or did not happen). */
+    void endFall (int channelIndex, int samplePosition, MidiEventList& output)
+    {
+        auto& channel = channels[(size_t) channelIndex];
+        for (int noteNumber = 0; noteNumber < numMidiNotes && channel.numReleasedKeys > 0; ++noteNumber)
+            if (releaseTimeOfKey[channelNoteIndex (channelIndex, noteNumber)] != notReleased)
+                endReleasedKey (channelIndex, noteNumber, samplePosition, output);
+        channel.isFalling = false;
+        if (channel.numHeldKeys == 0 && channel.hasSlide)
+        {
+            // Back to the player's own bend, so the next note starts in tune.
+            channel.hasSlide = channel.isMoving = false;
+            sendBend (channelIndex, channel, channel.playerBend, samplePosition, output);
+        }
+    }
+
     bool decidesToSlide (const float* parameterValues)
     {
         const int chance = integerParameter (parameterValues, chancePercent);
@@ -308,12 +393,20 @@ private:
                      const float* parameterValues)
     {
         const auto offset = (float) integerParameter (parameterValues, offsetInSemitones);
-        const bool isSlideIn = integerParameter (parameterValues, slideMode) == slideIn;
+        const int mode = integerParameter (parameterValues, slideMode);
+        if (mode == fallOff)
+        {
+            channel.hasSlide = channel.isMoving = false; // nothing happens until the keys are released
+            return;
+        }
+        const bool isSlideIn = mode == slideIn || mode == slideInAndFallOff;
         const double samplesPerBeat = context.samplesPerBeat();
         const int lengthIndex = std::clamp (integerParameter (parameterValues, slideLength), 0, numSlideDivisions - 1);
         const int delayIndex = std::clamp (integerParameter (parameterValues, slideDelay), 0, numSlideDivisions);
-        const double delayInBeats =
-            delayIndex == 0 ? 0.0 : divisionLengthInBeats (slideDivisions[delayIndex - 1], context.timeSignature);
+        const bool usesDelay = mode == slideIn || mode == slideOut; // the fall modes slide in right away
+        const double delayInBeats = delayIndex == 0 || ! usesDelay
+                                        ? 0.0
+                                        : divisionLengthInBeats (slideDivisions[delayIndex - 1], context.timeSignature);
 
         channel.hasSlide = channel.isMoving = true;
         channel.fromSemitones = isSlideIn ? offset : 0.0f;
@@ -374,11 +467,40 @@ private:
                 else
                     channel.nextUpdateTime = std::min (channel.nextUpdateTime + updateInterval, channel.moveEndTime);
             }
+            endDueReleasedNotes (channelIndex, time, context, output);
+        }
+    }
+
+    /**
+     * Sends the held-back note-offs that are due before an absolute time: all of them once a fall has
+     * arrived, and keys released while others were still held once the chord window has passed.
+     */
+    void endDueReleasedNotes (int channelIndex, int64_t time, const BlockContext& context, MidiEventList& output)
+    {
+        auto& channel = channels[(size_t) channelIndex];
+        if (channel.numReleasedKeys == 0)
+            return;
+        const auto positionOf = [&context] (int64_t dueTime)
+        { return (int) std::max<int64_t> (0, dueTime - context.blockStartSample); };
+        if (channel.isFalling)
+        {
+            if (channel.moveEndTime < time)
+                endFall (channelIndex, positionOf (channel.moveEndTime), output);
+            return;
+        }
+        const auto chordWindow = (int64_t) (chordWindowMilliseconds / 1000.0 * context.sampleRate);
+        for (int noteNumber = 0; noteNumber < numMidiNotes && channel.numReleasedKeys > 0; ++noteNumber)
+        {
+            const int64_t releaseTime = releaseTimeOfKey[channelNoteIndex (channelIndex, noteNumber)];
+            if (releaseTime != notReleased && releaseTime + chordWindow < time)
+                endReleasedKey (channelIndex, noteNumber, positionOf (releaseTime + chordWindow), output);
         }
     }
 
     std::array<ChannelState, numMidiChannels> channels {};
     std::array<bool, numChannelNoteCombinations> isKeyHeld {};
+    std::array<int64_t, numChannelNoteCombinations> releaseTimeOfKey {}; ///< notReleased, or when it was released
+    std::array<uint8_t, numChannelNoteCombinations> releaseVelocityOfKey {};
 };
 
 /**

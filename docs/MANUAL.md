@@ -478,10 +478,14 @@ varies a riff.
 | Reset *(page 2)* | button | Back to the original melody |
 
 **Pitch Slide** – slides notes in from another pitch, or out to another pitch, using **pitch bend**. The notes
-themselves play unchanged and on time.
+themselves play unchanged and on time (the fall modes hold the note a little longer, see below).
 
 - *Slide In:* the note starts at *Offset* and glides to its own pitch (a "scoop").
 - *Slide Out:* the note starts at its own pitch and glides to *Offset* (a "fall" or "rise").
+- *Fall Off:* nothing happens while you hold the key. When you **release** it, the note keeps sounding and
+  falls (or rises) to *Offset* over *Length*, then it ends.
+- *In + Fall Off:* both: the note scoops in from *Offset* when you press the key and falls off to *Offset*
+  when you release it.
 - Pitch bend moves the whole MIDI channel, so **a chord slides together**: notes starting within 30 ms
   count as one chord and get one slide (and one *Chance* decision). A note you add later starts a new slide,
   and the notes you are holding bend along. When the last note ends, the pitch returns to normal.
@@ -489,20 +493,27 @@ themselves play unchanged and on time.
   12 or 24). Only then does a slide of, say, 7 semitones land exactly on the fifth. Slides larger than the
   bend range stop at its end.
 - Your own pitch bend wheel still works: it is added to the slide.
+- **Falls and chords:** pitch bend moves the whole channel, so a channel falls **when its last key is
+  released**, and everything still sounding falls together. A chord you let go of (within 30 ms) falls as
+  one; a key released while others are still held ends normally (30 ms later).
+- A **new note** during a fall cuts it short: the falling note ends, and the new note starts in tune.
+- *Chance* decides every fall on its own (with *In + Fall Off*: once for the scoop, once for the fall).
+- The sustain pedal is not taken into account: the fall starts when you release the key.
 
 The Pitch Slide has seven knobs on two pages (A–D, E–G):
 
 | Knob | Range | Meaning |
 |------|-------|---------|
 | Offset | −24 … +24 st | Where the slide starts (Slide In) or ends (Slide Out), relative to the note (default −2) |
-| Mode | Slide In / Slide Out | See above |
+| Mode | Slide In / Slide Out / Fall Off / In + Fall Off | See above |
 | Length | 1/64 … 1 Bar (incl. triplets T and dotted D) | How long the slide takes, synced to the tempo (default 1/16) |
 | Chance | 0 … 100 % | Probability that a note (or chord) slides (default 100 %) |
 | Curve *(page 2)* | −100 … +100 | 0: even slide. Negative: fast start, slow end. Positive: slow start, fast end |
 | Bend Range *(page 2)* | 1 … 48 st | Your synth's pitch bend range (default 2) |
-| Delay *(page 2)* | Off, 1/64 … 1 Bar | When the slide starts after the note begins. With Slide In the note waits at Offset until then |
+| Delay *(page 2)* | Off, 1/64 … 1 Bar | When the slide starts after the note begins. With Slide In the note waits at Offset until then. Slide In and Slide Out only (dimmed in the fall modes) |
 
-Tip: Slide Out with a Delay of 1/8 and a negative Offset makes notes fall off after being held for a moment.
+Tips: *Fall Off* with Offset −12 and Length 1/4 gives the classic brass or guitar fall at the end of a phrase.
+Slide Out with a Delay of 1/8 makes notes bend away while they are still held.
 
 ## Modulation (LFOs, Random, Steps)
 
