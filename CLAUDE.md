@@ -21,6 +21,9 @@ Read first: [CONTRIBUTING.md](CONTRIBUTING.md) (all ground rules apply to you), 
 9. Record new ground rules from the owner in this file and/or CONTRIBUTING.md.
 10. Features that are discussed but postponed go into [docs/IDEAS.md](docs/IDEAS.md) (agreed designs as
     *Planned*, open ideas as *Idea*), so nothing gets forgotten. Remove an entry once it is built.
+11. The plug-in makes **no assumptions about the time signature** (no hard-coded 4/4 bars or beats). When a
+    planned feature depends on the meter, say so clearly to the owner and offer options for handling it, so
+    he can decide.
 
 ## Checklist for every change
 

@@ -38,6 +38,9 @@ These rules apply to every change, by people and by AI assistants alike. AI-spec
 10. **New features are discussed first.** When the owner asks about a possible feature, discuss and plan
     it, then wait for an explicit go before writing code or building. Discussed features that are not
     built yet are recorded in [docs/IDEAS.md](docs/IDEAS.md).
+11. **No assumptions about the time signature.** Bar lengths, beats and accents come from the host's time
+    signature and bar start, never from a hard-coded 4/4. When a planned feature depends on the meter, the
+    plan says so explicitly and lists options for handling it, so the owner can decide.
 
 ## Building
 
