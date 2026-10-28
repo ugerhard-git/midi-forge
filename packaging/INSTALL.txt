@@ -11,3 +11,10 @@ Using it
 --------
   Reaper: put MIDI Forge on a track's FX chain *before* the instrument.
   Bitwig: put MIDI Forge in the Note FX section of an instrument track (or before the instrument).
+
+Licence and source code
+-----------------------
+  MIDI Forge is free software under the GNU Affero General Public License, version 3 (see LICENSE.txt).
+  It comes with ABSOLUTELY NO WARRANTY. The complete source code is at
+  https://github.com/ugerhard-git/midi-forge
+  MIDI Forge is built with JUCE (https://juce.com), used under the AGPLv3.

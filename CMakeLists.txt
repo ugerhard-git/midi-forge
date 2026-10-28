@@ -122,7 +122,9 @@ if(MIDI_FORGE_BUILD_PLUGIN)
     include(FetchContent)
     set(FETCHCONTENT_QUIET OFF)
 
-    # JUCE 9.0.4 (the tag points at commit 3fb5cbc0340758596dac39f7c8de47d562b4896e)
+    # JUCE 9.0.4. The tag is fetched shallowly (fast), then the checked-out commit is compared with the
+    # expected one, so a moved tag can never slip a different JUCE into the build.
+    set(MIDI_FORGE_JUCE_COMMIT 3fb5cbc0340758596dac39f7c8de47d562b4896e)
     FetchContent_Declare(JUCE
         GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
         GIT_TAG 9.0.4
@@ -130,6 +132,18 @@ if(MIDI_FORGE_BUILD_PLUGIN)
         EXCLUDE_FROM_ALL)
 
     FetchContent_MakeAvailable(JUCE)
+
+    find_package(Git REQUIRED)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+        WORKING_DIRECTORY "${juce_SOURCE_DIR}"
+        OUTPUT_VARIABLE fetchedJuceCommit
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE juceCommitCheckResult)
+    if(NOT juceCommitCheckResult EQUAL 0 OR NOT fetchedJuceCommit STREQUAL MIDI_FORGE_JUCE_COMMIT)
+        message(FATAL_ERROR "JUCE 9.0.4 should be commit ${MIDI_FORGE_JUCE_COMMIT}, but the fetched sources are "
+                            "'${fetchedJuceCommit}'. Delete the dependency cache and check the JUCE tag.")
+    endif()
 
     if(MIDI_FORGE_BUILD_CLAP)
         # CLAP support for JUCE plug-ins, pinned to a commit

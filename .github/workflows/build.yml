@@ -132,6 +132,7 @@ jobs:
           mkdir -p dist
           cp -R "build/MidiForge_artefacts/Release/VST3/MIDI Forge.vst3" dist/
           cp packaging/INSTALL.txt dist/
+          cp LICENSE dist/LICENSE.txt
 
       # GitHub always delivers an artifact as a zip, so the folder is uploaded as it is (zipping it here
       # would give a zip inside a zip). The release job makes the release zip itself.

@@ -35,3 +35,9 @@ The plug-in is built entirely by GitHub Actions – nothing needs to be built lo
 - [SECURITY.md](SECURITY.md) – reporting vulnerabilities
 
 Built with [JUCE](https://juce.com).
+
+## Licence
+
+MIDI Forge is free software: you can redistribute it and/or modify it under the terms of the
+[GNU Affero General Public License, version 3](LICENSE). It comes with no warranty. JUCE is used under
+its AGPLv3 licence.

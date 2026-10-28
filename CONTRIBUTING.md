@@ -26,7 +26,7 @@ These rules apply to every change, by people and by AI assistants alike. AI-spec
    clang-tidy (`.clang-tidy`) and compiler warnings as errors. CI rejects changes that fail them.
 7. **Security.** Treat everything from outside as untrusted: project state from the host, parameter
    text typed by users, MIDI from any source. Validate and clamp, never trust sizes or indices.
-   Keep dependencies pinned (exact JUCE tag, commit SHAs for other repositories and for GitHub Actions)
+   Keep dependencies pinned (exact JUCE tag plus its commit in `MIDI_FORGE_JUCE_COMMIT`, commit SHAs for other repositories and for GitHub Actions)
    and workflow permissions minimal. Never commit secrets.
 8. **Performance.** Code on the audio thread (`processBlock`, `ModuleChain::process`, every
    `MidiModule::process`) must be real-time safe: no memory allocation, no locks, no file or network
@@ -85,3 +85,4 @@ tag `vx.y.z`. CI builds and publishes the release.
 - One topic per pull request, with a description of what changed and why.
 - CI must be green.
 - Code, docs, manual and tests change together.
+- Contributions are licensed under the [GNU AGPLv3](LICENSE), like the rest of MIDI Forge.
