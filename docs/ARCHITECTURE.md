@@ -341,7 +341,13 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md#building) for commands. The workflow
    uploaded as a folder (GitHub zips artifacts itself, so the download is a single zip). macOS and CLAP
    builds are switched off for now (see docs/IDEAS.md); CMake still knows both (universal binary on macOS,
    `MIDI_FORGE_BUILD_CLAP`).
-3. **Release** (tags `v*` only): zips each artifact folder, takes the text
+3. **CodeQL (C++)**: security analysis (`security-extended` queries) of MIDI Forge's own code; results
+   appear under the repository's *Security → Code scanning*. CodeQL analyses every file compiled while it
+   watches the build, and its path filters do not apply to C++, so the job first builds everything without
+   CodeQL, then deletes only our own object files (`Source/`, `Tests/`) and rebuilds them under CodeQL. JUCE
+   thus stays out of the results. (Code scanning's *default setup* must stay off: it conflicts with this
+   workflow.)
+4. **Release** (tags `v*` only, after all of the above): zips each artifact folder, takes the text
    from the version's section of `CHANGELOG.md` (no section: the job fails) and creates the GitHub release –
    a pre-release for versions below 1.0 or tags with a suffix. If a release for the tag exists already, it
    only uploads the zips (`--clobber`).

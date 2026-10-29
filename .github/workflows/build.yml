@@ -149,10 +149,62 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  codeql:
+    name: CodeQL (C++)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      security-events: write # upload the results to the repository's code scanning alerts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install JUCE dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q ninja-build libasound2-dev libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxext-dev libxi-dev libxcomposite-dev \
+            libxrender-dev libgl1-mesa-dev
+
+      - name: Cache dependency sources
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .deps
+          key: deps-${{ runner.os }}-${{ hashFiles('CMakeLists.txt') }}
+
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMIDI_FORGE_BUILD_PLUGIN_TESTS=ON \
+            -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps"
+
+      # CodeQL analyses every file that is compiled while it watches the build, and its path filters do not
+      # apply to C++. So everything is built once *before* CodeQL starts, then only MIDI Forge's own object
+      # files (Source/, Tests/) are deleted: the build under CodeQL compiles just our code, and JUCE stays out
+      # of the results.
+      - name: Build everything (JUCE included) without CodeQL
+        run: |
+          cmake --build build --target midi_forge_engine_tests midi_forge_plugin_tests MidiForge_VST3
+          find build -path '*/CMakeFiles/*' \( -path '*.dir/Source/*' -o -path '*.dir/Tests/*' \) -name '*.o' -print -delete
+
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: c-cpp
+          build-mode: manual
+          queries: security-extended
+
+      - name: Build MIDI Forge's own code under CodeQL
+        run: cmake --build build --target midi_forge_engine_tests midi_forge_plugin_tests MidiForge_VST3
+
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          category: /language:c-cpp
+
   release:
     name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build, plugin-tests]
+    needs: [build, plugin-tests, codeql]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
