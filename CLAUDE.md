@@ -24,6 +24,7 @@ Read first: [CONTRIBUTING.md](CONTRIBUTING.md) (all ground rules apply to you), 
 11. The plug-in makes **no assumptions about the time signature** (no hard-coded 4/4 bars or beats). When a
     planned feature depends on the meter, say so clearly to the owner and offer options for handling it, so
     he can decide.
+12. When you open a pull request, give the owner its link directly in your reply.
 
 ## Checklist for every change
 
