@@ -4,6 +4,13 @@ What changed in each release of MIDI Forge. The release workflow publishes the s
 text of its GitHub release, so every section starts with `## [version]` and is written for users.
 Versions below 1.0 are betas: they are published as pre-releases.
 
+## [0.22.1] – Diatonic Harmonizer is a Generator
+
+- The **Diatonic Harmonizer** now belongs to the *Generators* (orange), next to Chord: it adds notes to the
+  ones you play. Until now it was listed under *Transforms* (green). Projects and presets keep their
+  Harmonizer with all its settings; only its colour and its place in the module browser change.
+- The user manual gives every module its own section, with an overview table of all modules at the top.
+
 ## [0.22.0] – first public beta
 
 MIDI Forge is a modular MIDI effect for your DAW: eight slots, each holding one module, process the MIDI on

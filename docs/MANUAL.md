@@ -144,10 +144,10 @@ All 24 modules at a glance (click a name to jump to its description):
 |  | [Velocity Curve](#velocity-curve) | Reshapes, compresses or fixes note velocities. |
 |  | [Channel Remap](#channel-remap) | Moves events from one channel to another. |
 |  | [Groove](#groove) | Pulls notes onto a groove: swing, laid-back snare, shuffle ... |
-|  | [Diatonic Harmonizer](#diatonic-harmonizer) | Adds one or two harmony notes that stay in key. |
 |  | [Note Dispatcher](#note-dispatcher) | Spreads notes over several channels, one free channel at a time. |
 | Generators | [Arpeggiator](#arpeggiator) | Turns held notes into a tempo-synced pattern. |
 |  | [Chord](#chord) | Builds a chord on every incoming note. |
+|  | [Diatonic Harmonizer](#diatonic-harmonizer) | Adds one or two harmony notes that stay in key. |
 |  | [Note Echo](#note-echo) | Tempo-synced MIDI delay with pitch shift. |
 |  | [Repeater](#repeater) | Retriggers held notes on the tempo grid (ratchets). |
 |  | [Strum](#strum) | Plays chords as strums: the notes one after another. |
@@ -318,30 +318,6 @@ slot on and off (also by modulation) changes the delay.
 
 ---
 
-#### Diatonic Harmonizer
-
-Plays one or two harmony notes along with every single note, taken from a key and
-scale, so a "third above" is a major or a minor third as the key demands (unlike the fixed intervals of
-*Chord*). In C major, C gets an E, D gets an F, B gets a D.
-
-- Intervals count notes of the **scale**: *3rd Up* is two scale notes up, *5th Down* four scale notes down.
-  In scales with fewer than seven notes (pentatonic, blues, whole tone) the intervals are wider. *Oct Up* and
-  *Oct Down* are always 12 semitones.
-- Played notes that are not in the scale still get harmony notes from the scale.
-- **Chords pass untouched:** notes starting within 30 ms of each other. A plug-in cannot look ahead, so the
-  first note of a chord starts with its harmony notes, which end the moment the second note arrives.
-- Harmony notes outside the MIDI range are left out.
-
-| Knob | Range | Meaning |
-|------|-------|---------|
-| Voice 1 | Oct Down, 7th Down … 2nd Down, Off, 2nd Up … 7th Up, Oct Up | The first harmony note (default 3rd Up) |
-| Voice 2 | as Voice 1 | A second harmony note (default Off) |
-| Root | C … B | Key of the scale |
-| Scale | Major, Minor … Whole Tone (as in Scale Quantize) | The scale the harmony notes are taken from (default Major) |
-| Velocity *(page 2)* | 10 … 100 % | Velocity of the harmony notes as a share of the played note's (default 80 %) |
-
----
-
 #### Note Dispatcher
 
 Spreads notes over several MIDI channels, picking a **free** channel for every note
@@ -402,6 +378,30 @@ Plays a chord on every note.
 | Voicing | Close / Open / Bass −1 Oct | *Open* raises the second-lowest note an octave; *Bass −1 Oct* adds the played note an octave lower |
 | Added Vel | 0 … 100 % | Velocity of the added notes relative to the played note |
 
+
+---
+
+#### Diatonic Harmonizer
+
+Plays one or two harmony notes along with every single note, taken from a key and
+scale, so a "third above" is a major or a minor third as the key demands (unlike the fixed intervals of
+*Chord*). In C major, C gets an E, D gets an F, B gets a D.
+
+- Intervals count notes of the **scale**: *3rd Up* is two scale notes up, *5th Down* four scale notes down.
+  In scales with fewer than seven notes (pentatonic, blues, whole tone) the intervals are wider. *Oct Up* and
+  *Oct Down* are always 12 semitones.
+- Played notes that are not in the scale still get harmony notes from the scale.
+- **Chords pass untouched:** notes starting within 30 ms of each other. A plug-in cannot look ahead, so the
+  first note of a chord starts with its harmony notes, which end the moment the second note arrives.
+- Harmony notes outside the MIDI range are left out.
+
+| Knob | Range | Meaning |
+|------|-------|---------|
+| Voice 1 | Oct Down, 7th Down … 2nd Down, Off, 2nd Up … 7th Up, Oct Up | The first harmony note (default 3rd Up) |
+| Voice 2 | as Voice 1 | A second harmony note (default Off) |
+| Root | C … B | Key of the scale |
+| Scale | Major, Minor … Whole Tone (as in Scale Quantize) | The scale the harmony notes are taken from (default Major) |
+| Velocity *(page 2)* | 10 … 100 % | Velocity of the harmony notes as a share of the played note's (default 80 %) |
 ---
 
 #### Note Echo

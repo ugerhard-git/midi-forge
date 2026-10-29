@@ -123,6 +123,9 @@ TEST_CASE ("beat thinning: a chord is kept or dropped as a whole")
 
 TEST_CASE ("diatonic harmonizer: a third above stays in key, with the harmony's velocity share")
 {
+    // It adds notes, so it is a Generator (orange), like Chord (it was a Transform until 0.22.0).
+    EXPECT (getModuleDescription (ModuleType::DiatonicHarmonizer).category == ModuleCategory::Generator);
+
     ChainTestRig rig;
     rig.loadModule (0, ModuleType::DiatonicHarmonizer, { Voice::thirdUp, Voice::off, 0, 0, 50 }); // C major
     const std::vector<std::pair<int, int>> expected = {
