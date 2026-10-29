@@ -18,6 +18,9 @@ These rules apply to every change, by people and by AI assistants alike. AI-spec
    installation) updates [docs/MANUAL.md](docs/MANUAL.md) in the same commit. If the editor looks
    different, update `docs/images/editor.png` and `docs/images/modulation.png` from the CI artifact
    `editor-screenshots`.
+   In the manual's *Modules* section every module has its own `####` heading (sub-headings inside it use
+   `#####`), modules are separated by a `---` line, and each module has a row in the overview table at
+   the top of the section (its summary is the module's one-line description from the code).
 5. **Tests.** Write tests whenever possible or sensible, and keep them up to date with the code:
    - engine behaviour → `Tests/Engine/` (fast, no JUCE),
    - plug-in layer (parameters, presets, state, editor) → `Tests/Plugin/`,
