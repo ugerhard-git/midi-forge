@@ -130,9 +130,40 @@ last. The Arpeggiator and the Repeater can run their steps steadily or start the
 The knobs of a slot are called **A … H** in your DAW's automation lists (most modules use A … D; page 2 is
 E … H); what they mean depends on the module loaded in the slot.
 
+All 24 modules at a glance (click a name to jump to its description):
+
+| Group | Module | What it does |
+|-------|--------|--------------|
+| Filters | [Note Range](#note-range) | Passes or blocks notes inside a key range. |
+|  | [Velocity Range](#velocity-range) | Passes or blocks notes inside a velocity range. |
+|  | [Channel Filter](#channel-filter) | Keeps only one MIDI channel, or removes it. |
+|  | [Event Blocker](#event-blocker) | Blocks whole classes of MIDI events. |
+|  | [Note Split](#note-split) | Selected notes continue down the chain; all others go straight out. |
+| Transforms | [Transpose](#transpose) | Shifts notes by semitones and octaves. |
+|  | [Scale Quantize](#scale-quantize) | Forces notes into a key and scale. |
+|  | [Velocity Curve](#velocity-curve) | Reshapes, compresses or fixes note velocities. |
+|  | [Channel Remap](#channel-remap) | Moves events from one channel to another. |
+|  | [Groove](#groove) | Pulls notes onto a groove: swing, laid-back snare, shuffle ... |
+|  | [Diatonic Harmonizer](#diatonic-harmonizer) | Adds one or two harmony notes that stay in key. |
+|  | [Note Dispatcher](#note-dispatcher) | Spreads notes over several channels, one free channel at a time. |
+| Generators | [Arpeggiator](#arpeggiator) | Turns held notes into a tempo-synced pattern. |
+|  | [Chord](#chord) | Builds a chord on every incoming note. |
+|  | [Note Echo](#note-echo) | Tempo-synced MIDI delay with pitch shift. |
+|  | [Repeater](#repeater) | Retriggers held notes on the tempo grid (ratchets). |
+|  | [Strum](#strum) | Plays chords as strums: the notes one after another. |
+|  | [Ghost Notes](#ghost-notes) | Adds quiet extra hits around notes, mainly for drums. |
+| Randomizers | [Humanize](#humanize) | Adds random timing delay and velocity variation. |
+|  | [Probability](#probability) | Lets each note through with a given chance. |
+|  | [Random Pitch](#random-pitch) | Randomly shifts some of the notes. |
+|  | [Beat Thinning](#beat-thinning) | Drops notes by their place in the bar: off-beats go first. |
+|  | [Mutate](#mutate) | Lets a melody drift: notes slowly move to neighbouring scale notes. |
+|  | [Pitch Slide](#pitch-slide) | Slides notes in from, out to, or falls off to another pitch (pitch bend). |
+
 ### Filters (blue)
 
-**Note Range** – passes or blocks notes inside a key range.
+#### Note Range
+
+Passes or blocks notes inside a key range.
 
 | Knob | Range | Meaning |
 |------|-------|---------|
@@ -140,7 +171,11 @@ E … H); what they mean depends on the module loaded in the slot.
 | High | C-2 … G8 | Highest key of the range (Low and High may be swapped) |
 | Mode | Pass inside / Block inside | Keep only notes in the range, or remove them |
 
-**Velocity Range** – passes or blocks notes by how hard they were played.
+---
+
+#### Velocity Range
+
+Passes or blocks notes by how hard they were played.
 
 | Knob | Range | Meaning |
 |------|-------|---------|
@@ -148,14 +183,22 @@ E … H); what they mean depends on the module loaded in the slot.
 | Max  | 1 … 127 | Highest velocity of the range |
 | Mode | Pass inside / Block inside | Keep or remove notes in the range |
 
-**Channel Filter** – keeps or removes one MIDI channel. Applies to every channel message (notes, CC, pitch bend …).
+---
+
+#### Channel Filter
+
+Keeps or removes one MIDI channel. Applies to every channel message (notes, CC, pitch bend …).
 
 | Knob | Range | Meaning |
 |------|-------|---------|
 | Channel | 1 … 16 | The channel |
 | Mode | Only this / All except | Keep only this channel, or remove it |
 
-**Event Blocker** – blocks whole kinds of MIDI events.
+---
+
+#### Event Blocker
+
+Blocks whole kinds of MIDI events.
 
 | Knob | Range | Meaning |
 |------|-------|---------|
@@ -164,7 +207,11 @@ E … H); what they mean depends on the module loaded in the slot.
 | Pitch Bend | Pass / Block | Pitch bend |
 | AT / Prog | Pass / Block | Channel aftertouch, poly aftertouch and program changes |
 
-**Note Split** – splits the chain. Notes in the selected range continue to the slots *below* the Note
+---
+
+#### Note Split
+
+Splits the chain. Notes in the selected range continue to the slots *below* the Note
 Split; all other notes **skip the rest of the chain** and go straight to your DAW, exactly as they arrived
 at the Note Split. Slots *above* it still act on every note, so you usually put it in slot 1.
 
@@ -185,14 +232,20 @@ while kick and snare play exactly as recorded (preset *Hi-Hat Ratchet (Drums)*).
 
 ### Transforms (green)
 
-**Transpose** – shifts notes. Notes pushed outside the MIDI range are dropped.
+#### Transpose
+
+Shifts notes. Notes pushed outside the MIDI range are dropped.
 
 | Knob | Range | Meaning |
 |------|-------|---------|
 | Semitones | −24 … +24 st | Shift in semitones |
 | Octave | −4 … +4 oct | Additional shift in octaves |
 
-**Scale Quantize** – moves every note into a key and scale.
+---
+
+#### Scale Quantize
+
+Moves every note into a key and scale.
 
 | Knob | Range | Meaning |
 |------|-------|---------|
@@ -202,7 +255,11 @@ while kick and snare play exactly as recorded (preset *Hi-Hat Ratchet (Drums)*).
 
 If two keys land on the same scale note, it keeps sounding until both keys are released.
 
-**Velocity Curve** – reshapes how hard notes are played.
+---
+
+#### Velocity Curve
+
+Reshapes how hard notes are played.
 
 | Knob | Range | Meaning |
 |------|-------|---------|
@@ -211,14 +268,22 @@ If two keys land on the same scale note, it keeps sounding until both keys are r
 | Out Max | 1 … 127 | Velocity of the hardest possible note |
 | Fixed | Off, 1 … 127 | If not Off, every note gets exactly this velocity (Curve, Out Min and Out Max are ignored) |
 
-**Channel Remap** – moves events to another channel. Applies to all channel messages.
+---
+
+#### Channel Remap
+
+Moves events to another channel. Applies to all channel messages.
 
 | Knob | Range | Meaning |
 |------|-------|---------|
 | From | All, 1 … 16 | Which channel to move (All = every channel) |
 | To | 1 … 16 | Target channel |
 
-**Groove** – pulls notes onto a groove, so programmed parts get a pocket instead of sitting rigidly on the
+---
+
+#### Groove
+
+Pulls notes onto a groove, so programmed parts get a pocket instead of sitting rigidly on the
 grid. The grooves repeat every bar, whatever the time signature. Each note moves towards the groove position
 of its nearest grid step (*Amount* decides how far: 100 %
 puts it exactly there, which also tidies up sloppy timing), and the groove's accents change its velocity.
@@ -251,7 +316,11 @@ Without Early, grooves can only move notes later (which is all Swing, Shuffle an
 late-played notes cannot be pulled back onto the beat. Keep a Groove with Early switched on: switching the
 slot on and off (also by modulation) changes the delay.
 
-**Diatonic Harmonizer** – plays one or two harmony notes along with every single note, taken from a key and
+---
+
+#### Diatonic Harmonizer
+
+Plays one or two harmony notes along with every single note, taken from a key and
 scale, so a "third above" is a major or a minor third as the key demands (unlike the fixed intervals of
 *Chord*). In C major, C gets an E, D gets an F, B gets a D.
 
@@ -271,7 +340,11 @@ scale, so a "third above" is a major or a minor third as the key demands (unlike
 | Scale | Major, Minor … Whole Tone (as in Scale Quantize) | The scale the harmony notes are taken from (default Major) |
 | Velocity *(page 2)* | 10 … 100 % | Velocity of the harmony notes as a share of the played note's (default 80 %) |
 
-**Note Dispatcher** – spreads notes over several MIDI channels, picking a **free** channel for every note
+---
+
+#### Note Dispatcher
+
+Spreads notes over several MIDI channels, picking a **free** channel for every note
 (or every chord). Use it to play several mono synths as one polyphonic instrument, or to alternate between
 sounds on different channels. A channel is free when none of the notes sent to it are still held.
 
@@ -300,7 +373,9 @@ sits on its own channel.
 
 ### Generators (orange)
 
-**Arpeggiator** – plays the keys you hold one after another. While your DAW's transport runs, the steps
+#### Arpeggiator
+
+Plays the keys you hold one after another. While your DAW's transport runs, the steps
 lock to the bar grid; when it is stopped, the arpeggiator runs on its own clock (at the project tempo)
 and starts the moment you press the first key. The keys you hold are not passed on – only the arpeggio.
 
@@ -314,7 +389,11 @@ and starts the moment you press the first key. The keys you hold are not passed 
 
 Up to 32 keys are tracked at once.
 
-**Chord** – plays a chord on every note.
+---
+
+#### Chord
+
+Plays a chord on every note.
 
 | Knob | Range | Meaning |
 |------|-------|---------|
@@ -323,7 +402,11 @@ Up to 32 keys are tracked at once.
 | Voicing | Close / Open / Bass −1 Oct | *Open* raises the second-lowest note an octave; *Bass −1 Oct* adds the played note an octave lower |
 | Added Vel | 0 … 100 % | Velocity of the added notes relative to the played note |
 
-**Note Echo** – a MIDI delay. The original note plays immediately; each echo comes one *Time* later,
+---
+
+#### Note Echo
+
+A MIDI delay. The original note plays immediately; each echo comes one *Time* later,
 quieter, and optionally transposed. Every echo is as long as the original note.
 
 | Knob | Range | Meaning |
@@ -333,7 +416,11 @@ quieter, and optionally transposed. Every echo is as long as the original note.
 | Feedback | 10 … 100 % | Each echo's velocity as a share of the previous one. Echoes stop when they get too quiet |
 | Pitch | −12 … +12 st | Transposition added with every echo (e.g. +7 makes a rising cascade of fifths) |
 
-**Repeater** – ratchets: while you hold keys, every held note is played again and again on the tempo grid.
+---
+
+#### Repeater
+
+Ratchets: while you hold keys, every held note is played again and again on the tempo grid.
 A held chord repeats as a chord. The key you press sounds **immediately**; the repeats then follow on the
 grid. While your DAW plays, the grid is locked to its bars; when it is stopped, the Repeater runs at the
 project tempo, counting from your first key press. Releasing a key stops its repeats. Each repeat lasts
@@ -359,7 +446,7 @@ modulator on *Chance* makes some phrases busy and others sparse.
 Projects and presets from older versions open with *Chance* at 100 % and *Grid* on Steady, so they sound as
 before.
 
-#### Grid: Steady or Bar
+##### Grid: Steady or Bar
 
 The Arpeggiator and the Repeater put their steps on a grid that follows the DAW while it plays.
 
@@ -371,7 +458,11 @@ The Arpeggiator and the Repeater put their steps on a grid that follows the DAW 
 In 4/4 with straight steps (1/8, 1/16 …) both are the same. While the DAW is stopped, the steps run on their
 own clock from the first key, as always.
 
-**Strum** – plays chords as strums: the notes of a chord start one after another instead of together, like a
+---
+
+#### Strum
+
+Plays chords as strums: the notes of a chord start one after another instead of together, like a
 strummed guitar or a rolled piano chord. Single notes pass unchanged. Each note's note-off is delayed as much
 as its note-on, so note lengths stay.
 
@@ -388,7 +479,11 @@ milliseconds. Strum waits *Window* for the rest of the chord and delays **everyt
 Forge tells your DAW, which normally shifts the track to compensate (as with Groove's *Early*). With Window 0
 only exactly simultaneous chords are strummed, without any delay.
 
-**Ghost Notes** – adds quiet, short extra hits around notes, mainly for drums: put a *Note Split* on the
+---
+
+#### Ghost Notes
+
+Adds quiet, short extra hits around notes, mainly for drums: put a *Note Split* on the
 snare in front of it and the snare gets ghost notes while everything else stays as played. The notes
 themselves pass on time and unchanged.
 
@@ -407,7 +502,9 @@ the DAW playing; when it is stopped, only *After* works.
 
 ### Randomizers (purple)
 
-**Humanize** – makes playing less mechanical. Each note is delayed by a random amount and its velocity
+#### Humanize
+
+Makes playing less mechanical. Each note is delayed by a random amount and its velocity
 varied. The note-off is delayed by the same amount, so note lengths stay as played.
 
 | Knob | Range | Meaning |
@@ -415,13 +512,21 @@ varied. The note-off is delayed by the same amount, so note lengths stay as play
 | Timing | 0 … 50 ms | Maximum delay (notes are only ever delayed, never moved earlier) |
 | Velocity | 0 … 64 | Maximum velocity change up or down |
 
-**Probability** – each note plays with the given chance; the rest are skipped.
+---
+
+#### Probability
+
+Each note plays with the given chance; the rest are skipped.
 
 | Knob | Range | Meaning |
 |------|-------|---------|
 | Chance | 0 … 100 % | Probability that a note plays |
 
-**Random Pitch** – randomly transposes some notes. Put a *Scale Quantize* after it to stay in key.
+---
+
+#### Random Pitch
+
+Randomly transposes some notes. Put a *Scale Quantize* after it to stay in key.
 
 | Knob | Range | Meaning |
 |------|-------|---------|
@@ -429,7 +534,11 @@ varied. The note-off is delayed by the same amount, so note lengths stay as play
 | Chance | 0 … 100 % | Share of notes that get shifted |
 | Mode | Any / Octaves / 5ths + Oct | Which intervals are used |
 
-**Beat Thinning** – like *Probability*, but every place in the bar has its own chance, taken from the
+---
+
+#### Beat Thinning
+
+Like *Probability*, but every place in the bar has its own chance, taken from the
 time signature: the **bar start always plays**, the start of a group (beat 3 in 4/4, the second half of a 6/8
 bar) is rarely dropped, other beats more often, and off-beats most. The part gets sparser and varies, but its
 backbone stays. Each note counts at its nearest *Grid* step.
@@ -448,7 +557,11 @@ sixteenths in between never. Lower *Amount* scales all these chances down; at 0 
 | Grid | 1/8, 1/16, 1/32 | The grid notes are placed on to weigh them; its finest steps drop out most (default 1/16) |
 | Grouping | 3 Last (2+2+3), 3 First (3+2+2), 3 Middle (2+3+2) | Where the group of three goes in odd meters |
 
-**Mutate** – lets a looped melody or bassline evolve slowly while staying in key. Every time a note plays,
+---
+
+#### Mutate
+
+Lets a looped melody or bassline evolve slowly while staying in key. Every time a note plays,
 it may move **one more step** to a neighbouring note of the scale (a C in C minor becomes a D or a B♭ …),
 or back towards its original pitch – and Mutate **remembers** where each note has wandered to. Over minutes
 the line drifts away from the original and, with *Return*, keeps finding its way back, like a player who
@@ -478,7 +591,11 @@ varies a riff.
 | Memory *(page 2)* | 4 Bars / 2 Bars / 1 Bar / Per Pitch | What the changes are remembered by, see above (default 4 Bars) |
 | Reset *(page 2)* | button | Back to the original melody |
 
-**Pitch Slide** – slides notes in from another pitch, or out to another pitch, using **pitch bend**. The notes
+---
+
+#### Pitch Slide
+
+Slides notes in from another pitch, or out to another pitch, using **pitch bend**. The notes
 themselves play unchanged and on time (the fall modes hold the note a little longer, see below).
 
 - *Slide In:* the note starts at *Offset* and glides to its own pitch (a "scoop").
@@ -739,7 +856,7 @@ Automating **Slot n Module** works, but keep in mind that A … H keep their val
 
 If a note ever hangs (for example because the instrument missed a message), press **Panic**. It releases
 every note MIDI Forge has sent, sends *All Notes Off* on all 16 channels and resets the pitch bend
-(useful if a [Pitch Slide](#randomizers-purple) left a synth out of tune).
+(useful if a [Pitch Slide](#pitch-slide) left a synth out of tune).
 
 ## Troubleshooting
 
