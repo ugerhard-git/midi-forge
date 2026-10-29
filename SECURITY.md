@@ -15,6 +15,8 @@ in the build and release pipeline that could let someone tamper with the publish
 
 - Plug-in state from host projects is validated before use; parameter values are clamped.
 - The engine is tested under address and undefined-behaviour sanitizers in CI.
+- Every pull request and every push to `main` is analysed by CodeQL (security-extended queries, MIDI
+  Forge's own code; JUCE is left out of the analysis).
 - Dependencies are pinned: JUCE by its release tag, and the build fails unless the fetched commit is the
   expected one; other repositories and GitHub Actions by commit SHA.
 - Workflows run with read-only permissions; only the release job can write.
