@@ -59,7 +59,7 @@ enum class ModuleType : int
     GhostNotes, ///< Generator
     // Added in 0.19.0
     BeatThinning,       ///< Randomizer
-    DiatonicHarmonizer, ///< Transform
+    DiatonicHarmonizer, ///< Generator (a Transform until 0.22.0; the number stays)
 
     Count
 };

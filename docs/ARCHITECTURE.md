@@ -164,10 +164,11 @@ on all channels. The stress test also checks that no channel is left bent.
   `createNoteOns()`. A note's nearest grid step gets an accent level from `BarStructure`; the drop chance is
   Amount × level / finest level of the grid (bar start 0, the finest level 1). Notes within 30 ms of the
   previous note share its decision.
-- **Diatonic Harmonizer** derives from `MidiModule` directly and keeps a `NoteMappingTable` and a
-  `SoundingNoteCounter` itself: a note-on starts the note plus its harmony notes (`moveByScaleSteps()`, octaves
-  ±12). A note-on within 30 ms of the previous one is a chord note: it plays alone and ends the harmony notes
-  of the previous note (entries 1.. of its mapping).
+- **Diatonic Harmonizer** (a Generator since 0.22.1, in GeneratorModules.cpp; a Transform before) derives from
+  `MidiModule` directly and keeps a `NoteMappingTable` and a `SoundingNoteCounter` itself: a note-on starts
+  the note plus its harmony notes (`moveByScaleSteps()`, octaves ±12). A note-on within 30 ms of the previous
+  one is a chord note: it plays alone and ends the harmony notes of the previous note (entries 1.. of its
+  mapping).
 - **Pitch Slide** derives from `MidiModule` directly: notes pass through on time, and the module adds pitch
   bend messages per channel (about one per millisecond while a slide moves, only when the value changes).
   It remembers the player's bend and adds the slide to it; when a channel's last held key ends, it sends the

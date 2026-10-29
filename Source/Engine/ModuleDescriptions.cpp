@@ -442,7 +442,7 @@ const ModuleDescription* createModuleTable()
           "count as a chord and are kept or dropped together. Works while the DAW plays; otherwise every note "
           "passes." },
         { "Diatonic Harmonizer",
-          ModuleCategory::Transform,
+          ModuleCategory::Generator, // a Transform in 0.19.0–0.22.0; it adds notes, like Chord
           "Adds one or two harmony notes that stay in key.",
           { choiceParameter ("Voice 1", harmonyIntervalLabels, 9)
                 .withHelp ("The first harmony note, counted in notes of the scale (3rd Up = two scale notes up)."),

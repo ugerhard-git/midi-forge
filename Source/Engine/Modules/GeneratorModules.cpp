@@ -1,11 +1,13 @@
 /**
  * @file GeneratorModules.cpp
- * @brief Modules that create new notes: Chord, Note Echo, Arpeggiator, Repeater, Strum and Ghost Notes.
+ * @brief Modules that create new notes: Chord, Diatonic Harmonizer, Note Echo, Arpeggiator, Repeater, Strum and
+ *        Ghost Notes.
  */
 #include "GeneratorModules.h"
 
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
 #include <limits>
 
 namespace midiforge
@@ -1204,6 +1206,162 @@ private:
     std::array<bool, numChannelNoteCombinations> isKeyHeld {}; ///< Original notes sounding (not the ghosts)
 };
 
+//==============================================================================
+/**
+ * Adds up to two harmony notes to every single note, taken from a scale (Root, Scale), with a share of its
+ * velocity. Intervals count notes of the scale; octaves are 12 semitones. Notes starting within
+ * chordWindowMilliseconds of the previous note are chord notes and pass alone; because a plug-in cannot look
+ * ahead, the harmony notes of the chord's first note are ended when the second one arrives.
+ */
+class DiatonicHarmonizer final : public MidiModule
+{
+public:
+    DiatonicHarmonizer() : MidiModule (ModuleType::DiatonicHarmonizer) { reset(); }
+
+    void reset() override
+    {
+        mappingTable.clear();
+        soundingNotes.clear();
+        lastNoteOnTime = std::numeric_limits<int64_t>::min() / 2;
+        lastChannel = lastNoteNumber = 0;
+    }
+
+    void process (const MidiEventList& input, MidiEventList& output, const BlockContext& context,
+                  const float* parameterValues) override
+    {
+        for (const auto& event : input)
+        {
+            if (event.isNoteOn())
+                handleNoteOn (event, context, parameterValues, output);
+            else if (event.isNoteOff())
+            {
+                auto& outputNotes = mappingTable.forInputNote (event.channel(), event.noteNumber());
+                if (outputNotes.count == 0)
+                    output.push_back (event); // a note from before this module was there (rule 1)
+                else
+                    releaseNotes (outputNotes, 0, event.samplePosition,
+                                  event.messageType() == MidiStatus::noteOff ? event.velocity() : 0, output);
+            }
+            else if (event.isPolyPressure())
+            {
+                const auto& outputNotes = mappingTable.forInputNote (event.channel(), event.noteNumber());
+                if (outputNotes.count == 0)
+                    output.push_back (event);
+                for (int index = 0; index < outputNotes.count; ++index)
+                {
+                    auto pressure = event;
+                    pressure.data1 = outputNotes.noteNumbers[index];
+                    output.push_back (pressure);
+                }
+            }
+            else
+                output.push_back (event);
+        }
+    }
+
+    /**
+     * @return The harmony note for a Voice knob position, or -1 for Off or when it would leave the MIDI range.
+     * @param intervalIndex Index into the Voice labels: 0 = octave down, 7 = Off, 14 = octave up; in between
+     *                      the number of scale notes below (index < 7) or above (index > 7).
+     */
+    static int harmonyNote (int noteNumber, int intervalIndex, int root, unsigned short semitoneMask) noexcept
+    {
+        const int steps = intervalIndex - offIntervalIndex;
+        if (steps == 0)
+            return -1;
+        int harmony = noteNumber;
+        if (steps == -octaveIntervalSteps || steps == octaveIntervalSteps)
+            harmony = noteNumber + (steps > 0 ? 12 : -12);
+        else
+            harmony = moveByScaleSteps (noteNumber, steps, root, semitoneMask);
+        return (harmony == noteNumber || harmony < 0 || harmony > 127) ? -1 : harmony;
+    }
+
+private:
+    enum Parameter
+    {
+        voice1Interval,
+        voice2Interval,
+        rootPitchClass,
+        scaleIndex,
+        velocityPercent ///< page 2
+    };
+    static constexpr int offIntervalIndex = 7;
+    static constexpr int octaveIntervalSteps = 7;
+    static constexpr double chordWindowMilliseconds = 30.0;
+
+    void handleNoteOn (const MidiEvent& noteOn, const BlockContext& context, const float* parameterValues,
+                       MidiEventList& output)
+    {
+        auto& outputNotes = mappingTable.forInputNote (noteOn.channel(), noteOn.noteNumber());
+        if (outputNotes.count > 0) // played again without a note-off: end what it started
+            releaseNotes (outputNotes, 0, noteOn.samplePosition, 0, output);
+
+        const int64_t eventTime = context.blockStartSample + noteOn.samplePosition;
+        const auto chordWindow = (int64_t) (chordWindowMilliseconds / 1000.0 * context.sampleRate);
+        const bool isChordNote = eventTime - lastNoteOnTime <= chordWindow;
+        if (isChordNote) // the previous note turned out to start a chord: it plays alone, too
+            releaseNotes (mappingTable.forInputNote (lastChannel, lastNoteNumber), 1, noteOn.samplePosition, 0, output);
+        lastNoteOnTime = eventTime;
+        lastChannel = noteOn.channel();
+        lastNoteNumber = noteOn.noteNumber();
+
+        startNote (outputNotes, noteOn.channel(), noteOn.noteNumber(), noteOn.velocity(), noteOn.samplePosition,
+                   output);
+        if (isChordNote)
+            return;
+
+        const int root = std::clamp (integerParameter (parameterValues, rootPitchClass), 0, 11);
+        const auto mask =
+            scales[std::clamp (integerParameter (parameterValues, scaleIndex), 0, numScales - 1)].semitoneMask;
+        const int velocity = std::max (
+            1, (int) std::lround (noteOn.velocity() * integerParameter (parameterValues, velocityPercent) / 100.0));
+        for (const auto voice : { voice1Interval, voice2Interval })
+        {
+            const int harmony =
+                harmonyNote (noteOn.noteNumber(), integerParameter (parameterValues, voice), root, mask);
+            const bool isNew = harmony >= 0 && ! contains (outputNotes, harmony);
+            if (isNew)
+                startNote (outputNotes, noteOn.channel(), harmony, velocity, noteOn.samplePosition, output);
+        }
+    }
+
+    static bool contains (const NoteMappingTable::OutputNotes& outputNotes, int noteNumber) noexcept
+    {
+        for (int index = 0; index < outputNotes.count; ++index)
+            if (outputNotes.noteNumbers[index] == noteNumber)
+                return true;
+        return false;
+    }
+
+    void startNote (NoteMappingTable::OutputNotes& outputNotes, int channel, int noteNumber, int velocity,
+                    int samplePosition, MidiEventList& output)
+    {
+        outputNotes.channels[outputNotes.count] = (uint8_t) channel;
+        outputNotes.noteNumbers[outputNotes.count] = (uint8_t) noteNumber;
+        ++outputNotes.count;
+        soundingNotes.noteStarted (channel, noteNumber);
+        output.push_back (MidiEvent::noteOn (samplePosition, channel, noteNumber, velocity));
+    }
+
+    /** Ends the output notes of an input note from index `first` on (0 = all, 1 = only the harmony notes). */
+    void releaseNotes (NoteMappingTable::OutputNotes& outputNotes, int first, int samplePosition, int releaseVelocity,
+                       MidiEventList& output)
+    {
+        for (int index = first; index < outputNotes.count; ++index)
+            if (soundingNotes.noteEnded (outputNotes.channels[index], outputNotes.noteNumbers[index]))
+                output.push_back (MidiEvent::noteOff (samplePosition, outputNotes.channels[index],
+                                                      outputNotes.noteNumbers[index], releaseVelocity));
+        outputNotes.count = (uint8_t) std::min<int> (outputNotes.count, first);
+    }
+
+    NoteMappingTable mappingTable;
+    SoundingNoteCounter soundingNotes;
+    int64_t lastNoteOnTime = 0;
+    int lastChannel = 0;
+    int lastNoteNumber = 0;
+};
+
 } // namespace
 
 std::unique_ptr<MidiModule> createGeneratorModule (ModuleType type)
@@ -1216,6 +1374,7 @@ std::unique_ptr<MidiModule> createGeneratorModule (ModuleType type)
         case ModuleType::Repeater: return std::make_unique<Repeater>();
         case ModuleType::Strum: return std::make_unique<Strum>();
         case ModuleType::GhostNotes: return std::make_unique<GhostNotes>();
+        case ModuleType::DiatonicHarmonizer: return std::make_unique<DiatonicHarmonizer>();
         default: return nullptr;
     }
 }
