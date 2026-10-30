@@ -19,8 +19,50 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Decides whether anything but documentation changed. Pull requests and pushes to main that only touch
+  # documentation (*.md, docs/, LICENSE) skip all other jobs. Tags (releases) and manual runs always build.
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.check.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check for changes outside the documentation
+        id: check
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          PULL_REQUEST_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          base=""
+          if [ "$EVENT" = "pull_request" ]; then
+            base="$PULL_REQUEST_BASE"
+          elif [ "$EVENT" = "push" ] && [[ "$REF" == refs/heads/* ]]; then
+            base="$PUSH_BEFORE"
+          fi
+          code=true
+          if [ -n "$base" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then
+            changed=$(git diff --name-only "$base" HEAD)
+            echo "Changed files:"; echo "$changed"
+            if [ -n "$changed" ] && ! echo "$changed" | grep -qvE '(\.md$|^docs/|^LICENSE$)'; then
+              code=false
+            fi
+          fi
+          echo "Code or build changed: $code"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   engine-checks:
     name: Format, lint and engine tests
+    # Skipped when only documentation changed (see the "changes" job); skipped jobs count as passed.
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -56,6 +98,9 @@ jobs:
 
   plugin-tests:
     name: Plug-in layer tests and editor screenshots
+    # Skipped when only documentation changed (see the "changes" job); skipped jobs count as passed.
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -96,7 +141,9 @@ jobs:
 
   build:
     name: Plug-in (${{ matrix.name }})
-    needs: engine-checks
+    # Skipped when only documentation changed (see the "changes" job).
+    needs: [changes, engine-checks]
+    if: needs.changes.outputs.code == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     strategy:
@@ -151,6 +198,9 @@ jobs:
 
   codeql:
     name: CodeQL (C++)
+    # Skipped when only documentation changed (see the "changes" job); skipped jobs count as passed.
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:

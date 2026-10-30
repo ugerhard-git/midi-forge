@@ -78,6 +78,9 @@ ctest --test-dir build --output-on-failure
 
 Format everything in place with `clang-format -i $(git ls-files '*.cpp' '*.h')`.
 
+Pull requests and pushes that change only documentation (`*.md`, `docs/`, `LICENSE`) skip the build and
+test jobs on GitHub (they show as skipped, which counts as passed); everything else runs the full build.
+
 ## Releases
 
 1. Bump `project(MidiForge VERSION x.y.z)` in `CMakeLists.txt` and update the manual if needed.

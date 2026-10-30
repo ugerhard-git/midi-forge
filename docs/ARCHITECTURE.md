@@ -335,6 +335,10 @@ Modules use `std::minstd_rand`, and LFOs a hash, both seeded through `setRandomS
 See [CONTRIBUTING.md](../CONTRIBUTING.md#building) for commands. The workflow
 `.github/workflows/build.yml` runs:
 
+0. **What changed** (Linux, seconds): compares the pull request (or the push to `main`) with its base. If
+   only documentation changed – `*.md` files, `docs/` (including the screenshots) or `LICENSE` – every other
+   job is skipped; GitHub counts skipped jobs as passed, so required checks are satisfied. Anything else
+   (code, CMake, the workflow, presets, `packaging/`) runs the full build. Tags and manual runs always build.
 1. **Checks** (Linux): clang-format, clang-tidy, engine tests with warnings as errors, engine tests
    under address/UB sanitizers, plug-in layer tests, and screenshots of both editor pages (artifact
    `editor-screenshots`, the source of `docs/images/editor.png` and `docs/images/modulation.png`).
