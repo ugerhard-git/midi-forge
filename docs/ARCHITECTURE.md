@@ -335,12 +335,28 @@ Modules use `std::minstd_rand`, and LFOs a hash, both seeded through `setRandomS
 See [CONTRIBUTING.md](../CONTRIBUTING.md#building) for commands. The workflow
 `.github/workflows/build.yml` runs:
 
+0. **What changed** (Linux, seconds): lists the files changed since the base – the pull request's base
+   commit, or for a push to `main` the commit before the push – with `git diff --no-renames --name-only`.
+   If every one of them is documentation – a `*.md` file anywhere, anything in `docs/` (including the
+   screenshots) or exactly `LICENSE` – every other job is skipped. Everything else builds: code, CMake, the
+   workflow, presets, `packaging/`, look-alikes such as `LICENSE.txt` or `README.md.bak`, deleted files, and a
+   file moved out of `Source/` into `docs/` (`--no-renames` lists both paths, so the old path counts). The
+   full build also runs when nothing changed, for tags and manual runs, and when the base is missing or
+   unknown (a new branch, a force push, an all-zeros `before`). Event data reaches the script only through
+   environment variables.
+
+   GitHub counts a job skipped by its `if` as passed, so it satisfies a required status check – but only
+   under the job's own name. That is why every job has a fixed name (no `${{ }}` expressions, no matrix);
+   these are the names to require in the `main` ruleset: *What changed*, *Format, lint and engine tests*,
+   *Plug-in layer tests and editor screenshots*, *Plug-in (Windows)* and *CodeQL (C++)*.
 1. **Checks** (Linux): clang-format, clang-tidy, engine tests with warnings as errors, engine tests
    under address/UB sanitizers, plug-in layer tests, and screenshots of both editor pages (artifact
    `editor-screenshots`, the source of `docs/images/editor.png` and `docs/images/modulation.png`).
-2. **Plug-in build** (Windows): the VST3, INSTALL.txt and LICENSE.txt as artifact `MIDI-Forge-Windows`,
-   uploaded as a folder (GitHub zips artifacts itself, so the download is a single zip). macOS and CLAP
-   builds are switched off for now (see docs/IDEAS.md); CMake still knows both (universal binary on macOS,
+2. **Plug-in (Windows)**: one job without a matrix, so its name is fixed. It builds the VST3 and uploads it
+   with INSTALL.txt and LICENSE.txt as artifact `MIDI-Forge-Windows`, as a folder (GitHub zips artifacts
+   itself, so the download is a single zip); the release job downloads the artifact by exactly this name.
+   macOS and CLAP builds are switched off for now (see docs/IDEAS.md): a macOS build would come back as a
+   second job with its own fixed name. CMake still knows both (universal binary on macOS,
    `MIDI_FORGE_BUILD_CLAP`).
 3. **CodeQL (C++)**: security analysis (`security-extended` queries) of MIDI Forge's own code; results
    appear under the repository's *Security → Code scanning*. CodeQL analyses every file compiled while it

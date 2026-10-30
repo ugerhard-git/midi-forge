@@ -19,8 +19,54 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Decides whether anything but documentation changed. Pull requests and pushes to main that only touch
+  # documentation (*.md, docs/, LICENSE) skip all other jobs. Tags (releases) and manual runs always build.
+  changes:
+    name: What changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.check.outputs.code }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # Event data is passed through env variables, never written into the script itself.
+      - name: Check for changes outside the documentation
+        id: check
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          PULL_REQUEST_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          base=""
+          if [ "$EVENT" = "pull_request" ]; then
+            base="$PULL_REQUEST_BASE"
+          elif [ "$EVENT" = "push" ] && [[ "$REF" == refs/heads/* ]]; then
+            base="$PUSH_BEFORE"
+          fi
+          # Build unless there is a known base and every changed file is documentation (an empty diff builds).
+          code=true
+          if [ -n "$base" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then
+            # --no-renames: a file moved from Source/ into docs/ then lists both paths, so it counts as code.
+            changed=$(git diff --no-renames --name-only "$base" HEAD)
+            echo "Changed files:"
+            echo "$changed"
+            if [ -n "$changed" ] && ! echo "$changed" | grep -qvE '(\.md$|^docs/|^LICENSE$)'; then
+              code=false
+            fi
+          fi
+          echo "Code or build changed: $code"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   engine-checks:
     name: Format, lint and engine tests
+    # Skipped when only documentation changed (see the "changes" job); skipped jobs count as passed.
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -56,6 +102,9 @@ jobs:
 
   plugin-tests:
     name: Plug-in layer tests and editor screenshots
+    # Skipped when only documentation changed (see the "changes" job); skipped jobs count as passed.
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -94,19 +143,17 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  # Windows only for now, so the job has a fixed name and no matrix: a required check named
+  # "Plug-in (Windows)" is then also satisfied when the job is skipped. A macOS job (universal binary, ad-hoc
+  # codesign, ditto zip) can be added back later as a second job; it is described in docs/IDEAS.md, and CMake
+  # still builds a universal binary on macOS.
   build:
-    name: Plug-in (${{ matrix.name }})
-    needs: engine-checks
-    runs-on: ${{ matrix.os }}
+    name: Plug-in (Windows)
+    # Skipped when only documentation changed (see the "changes" job); skipped jobs count as passed.
+    needs: [changes, engine-checks]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: windows-latest
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Windows only for now. The macOS job (universal binary, ad-hoc codesign, ditto zip) is described in
-          # docs/IDEAS.md; CMake still builds a universal binary on macOS.
-          - name: Windows
-            os: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -144,13 +191,16 @@ jobs:
       # would give a zip inside a zip). The release job makes the release zip itself.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: MIDI-Forge-${{ matrix.name }}
+          name: MIDI-Forge-Windows # the release job downloads it by this name
           path: dist/
           if-no-files-found: error
           retention-days: 30
 
   codeql:
     name: CodeQL (C++)
+    # Skipped when only documentation changed (see the "changes" job); skipped jobs count as passed.
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:

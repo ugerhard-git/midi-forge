@@ -78,6 +78,13 @@ ctest --test-dir build --output-on-failure
 
 Format everything in place with `clang-format -i $(git ls-files '*.cpp' '*.h')`.
 
+Pull requests and pushes to `main` that change only documentation (`*.md` files, `docs/`, `LICENSE`) skip
+the build and test jobs on GitHub: they show as skipped, which counts as passed for required checks. Any
+other change – including a deleted file, a file moved into `docs/`, or `LICENSE.txt` – runs the full build,
+and so do tags and manual runs. When you add or rename a CI job, give it a fixed name (no matrix, no
+`${{ }}` in `name:`) and tell the owner, because the `main` ruleset requires checks by name
+(see [ARCHITECTURE.md](docs/ARCHITECTURE.md#build-and-ci)).
+
 ## Releases
 
 1. Bump `project(MidiForge VERSION x.y.z)` in `CMakeLists.txt` and update the manual if needed.

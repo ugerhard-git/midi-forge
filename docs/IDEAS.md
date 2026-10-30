@@ -74,7 +74,9 @@ shorter and the hits softer, by the same factor each time.
 
 Added and removed again in 0.22.0: GitHub's macOS runners were not available (jobs cancelled after 15 minutes
 in the queue, "capacity constraints"), and the owner did not want the release to wait. To bring it back,
-add to the `build` job's matrix `- name: macOS` / `os: macos-latest`, and after "Collect plug-ins":
+add a second job next to `build`, with the fixed name `Plug-in (macOS)` (no matrix, so a skipped job
+still satisfies a required check of that name), `runs-on: macos-latest`, the same steps, and after
+"Collect plug-ins":
 ad-hoc sign and check (`codesign --force --deep --sign -`, `codesign --verify --deep`, `lipo -info`), then
 zip with `ditto -c -k --sequesterRsrc` in the job and upload that zip as the artifact (and add a download
 step for `MIDI-Forge-macOS` in the release job) (a GitHub artifact
