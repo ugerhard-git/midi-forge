@@ -33,6 +33,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
+      # Event data is passed through env variables, never written into the script itself.
       - name: Check for changes outside the documentation
         id: check
         env:
@@ -47,10 +48,13 @@ jobs:
           elif [ "$EVENT" = "push" ] && [[ "$REF" == refs/heads/* ]]; then
             base="$PUSH_BEFORE"
           fi
+          # Build unless there is a known base and every changed file is documentation (an empty diff builds).
           code=true
           if [ -n "$base" ] && git cat-file -e "$base^{commit}" 2>/dev/null; then
-            changed=$(git diff --name-only "$base" HEAD)
-            echo "Changed files:"; echo "$changed"
+            # --no-renames: a file moved from Source/ into docs/ then lists both paths, so it counts as code.
+            changed=$(git diff --no-renames --name-only "$base" HEAD)
+            echo "Changed files:"
+            echo "$changed"
             if [ -n "$changed" ] && ! echo "$changed" | grep -qvE '(\.md$|^docs/|^LICENSE$)'; then
               code=false
             fi
@@ -139,21 +143,17 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  # Windows only for now, so the job has a fixed name and no matrix: a required check named
+  # "Plug-in (Windows)" is then also satisfied when the job is skipped. A macOS job (universal binary, ad-hoc
+  # codesign, ditto zip) can be added back later as a second job; it is described in docs/IDEAS.md, and CMake
+  # still builds a universal binary on macOS.
   build:
-    name: Plug-in (${{ matrix.name }})
-    # Skipped when only documentation changed (see the "changes" job).
+    name: Plug-in (Windows)
+    # Skipped when only documentation changed (see the "changes" job); skipped jobs count as passed.
     needs: [changes, engine-checks]
     if: needs.changes.outputs.code == 'true'
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Windows only for now. The macOS job (universal binary, ad-hoc codesign, ditto zip) is described in
-          # docs/IDEAS.md; CMake still builds a universal binary on macOS.
-          - name: Windows
-            os: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -191,7 +191,7 @@ jobs:
       # would give a zip inside a zip). The release job makes the release zip itself.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: MIDI-Forge-${{ matrix.name }}
+          name: MIDI-Forge-Windows # the release job downloads it by this name
           path: dist/
           if-no-files-found: error
           retention-days: 30
