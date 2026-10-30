@@ -348,7 +348,8 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md#building) for commands. The workflow
    GitHub counts a job skipped by its `if` as passed, so it satisfies a required status check – but only
    under the job's own name. That is why every job has a fixed name (no `${{ }}` expressions, no matrix);
    these are the names to require in the `main` ruleset: *What changed*, *Format, lint and engine tests*,
-   *Plug-in layer tests and editor screenshots*, *Plug-in (Windows)* and *CodeQL (C++)*.
+   *Plug-in layer tests and editor screenshots*, *Plug-in (Windows)*, *CodeQL (C++)* and, from the second
+   workflow below, *Workflow security audit*.
 1. **Checks** (Linux): clang-format, clang-tidy, engine tests with warnings as errors, engine tests
    under address/UB sanitizers, plug-in layer tests, and screenshots of both editor pages (artifact
    `editor-screenshots`, the source of `docs/images/editor.png` and `docs/images/modulation.png`).
@@ -376,8 +377,19 @@ host parameters and state; it brings `juce_audio_processors_headless`, `juce_aud
 MP3, Ogg Vorbis, FLAC, Opus) and `juce_audio_devices` (audio and MIDI drivers), which a MIDI effect never
 uses. Leaving it out means less third-party code compiled, scanned and trusted.
 
-Dependencies (JUCE 9.0.4; clap-juce-extensions only with CLAP switched on) are fetched by CMake at pinned versions; GitHub
-Actions are pinned to commit SHAs and updated by Dependabot.
+The build workflow uses **no `actions/cache`**: it produces the downloads (the artifacts of `main` that the
+README points to, and the release zips), and a poisoned cache would end up in them. Every job fetches JUCE
+fresh instead, which costs about 1–2 minutes per job (the jobs run in parallel).
+
+A second workflow, `.github/workflows/workflow-security.yml`, runs the job **Workflow security audit** on
+every pull request and push to `main` (it is never skipped). It checks all workflows with
+[zizmor](https://docs.zizmor.sh) – unpinned actions, too many permissions, template injection, leaked
+credentials, cache poisoning – and fails on any finding of low severity or above. zizmor is installed in a
+virtual environment from `.github/requirements-ci.txt`, pinned by version and hash (`pip --require-hashes`).
+
+Dependencies (JUCE 9.0.4; clap-juce-extensions only with CLAP switched on) are fetched by CMake at pinned
+versions; GitHub Actions are pinned to commit SHAs, and the CI tools in `.github/requirements-ci.txt` by
+version and hash. Dependabot proposes updates to both every week.
 
 ## Licensing note
 
