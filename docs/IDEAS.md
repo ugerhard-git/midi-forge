@@ -25,7 +25,48 @@ Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 
 ## Planned
 
-(nothing at the moment)
+### Note Echo: Pre-Delay
+
+Agreed with the owner on 30 Oct 2026. A pause before the echoes start.
+
+- **E "Pre-Delay"** (page 2), default *Off*. With *Tempo*: Off, 1/64 … 1 Bar (incl. T and D; the list of
+  Pitch Slide's Delay; a bar is a real bar of the time signature). With *ms*: Off, 1 … 1000 ms.
+- **F "Pre-Delay Sync"**: *Tempo* / *ms*, default *Tempo*.
+- The whole echo series moves later: the first echo comes after Pre-Delay + Time, the following ones every
+  Time after that. The original note still plays immediately.
+- Both knobs can be modulated; like Time, the value is read when a note starts and applies to its echoes.
+- Echoes keep their length (they end as long after the original note-off as they started after the note-on);
+  no latency.
+- Both knobs `addedInLayout (4)`, `currentKnobLayoutVersion` 4, so older projects get *Off* / *Tempo*.
+
+### Bounce (new Generator)
+
+Agreed with the owner on 30 Oct 2026. A delay whose repeats follow a ball bouncing on the floor: the gaps get
+shorter and the hits softer, by the same factor each time.
+
+- **Physics:** the played note is the first impact and plays immediately. A ball dropped from height h hits
+  the floor at speed v = √(2gh); each bounce keeps the share e of its speed (the material's coefficient of
+  restitution). Gap k = 2 · v · e^k / g, i.e. every gap is e times the previous one. Each bounce's velocity is
+  the played velocity × e^k. Example: 1 m, e = 0.8 → gaps of about 0.72, 0.58, 0.46, 0.37 s …, about 3.6 s in
+  all.
+- **Knobs (page 1):**
+  - *Height*: 5 cm … 5 m (used with Height Sync *Height*, dimmed otherwise).
+  - *Material*: Super Ball, Rubber, Basketball, Tennis Ball, Wood, Glass, Metal, Clay; each sets a value of e,
+    tuned by ear.
+  - *Bounciness*: fine adjustment of the material's e (about ±20 points, e kept within 5 … 95 %).
+  - *Bounces*: Auto, 1 … 32. *Auto* stops when the next gap would be shorter than about 20 ms or the velocity
+    would drop below 1; a number stops after that many bounces at the latest.
+- **Knobs (page 2):**
+  - *Height Sync*: *Height* (real metres, independent of the tempo) / *Tempo* (the first gap is a note value,
+    the rest follow the physics).
+  - *First Gap*: 1/32 … 1 Bar (used with *Tempo*, dimmed otherwise; a bar is a real bar of the time signature).
+    Only the first gap follows the beat; the bounces then speed up freely, as a ball does.
+  - *Pitch per Bounce*: −12 … +12 st, added with every bounce (like Note Echo's Pitch).
+  - *Gravity*: Earth, Moon, Mars, Jupiter … scales the timing with Height Sync *Height* (dimmed with *Tempo*).
+- **Notes:** each bounce note lasts a share of the gap to the next bounce, so same-pitch bounces never
+  overlap and every note-on has its note-off; a chord bounces together; values are read when a note starts
+  (also when modulated); the number of pending events stays within the scheduler's limit.
+- Uses `isParameterInactive()` to dim Height / Gravity or First Gap depending on Height Sync.
 
 ## Ideas
 
