@@ -85,6 +85,11 @@ and so do tags and manual runs. When you add or rename a CI job, give it a fixed
 `${{ }}` in `name:`) and tell the owner, because the `main` ruleset requires checks by name
 (see [ARCHITECTURE.md](docs/ARCHITECTURE.md#build-and-ci)).
 
+Every change to `.github/workflows/` must pass the *Workflow security audit* (zizmor). To run it locally:
+`pip install --require-hashes --no-deps -r .github/requirements-ci.txt` in a virtual environment, then
+`zizmor --offline --min-severity low .github/workflows`. Don't add `actions/cache` to the build workflow:
+its outputs are the downloads, and a poisoned cache would end up in them.
+
 ## Releases
 
 1. Bump `project(MidiForge VERSION x.y.z)` in `CMakeLists.txt` and update the manual if needed.

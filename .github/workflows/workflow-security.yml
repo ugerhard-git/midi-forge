@@ -1,0 +1,43 @@
+# Audits this repository's GitHub Actions workflows for security problems (unpinned actions, too many
+# permissions, template injection, leaked credentials, cache poisoning, dangerous triggers, ...) with zizmor.
+# See docs/ARCHITECTURE.md#build-and-ci.
+#
+# The job name "Workflow security audit" is a required status check on main: keep it fixed.
+# This workflow always runs in full (no "What changed" skip), because it only reads the workflows.
+name: Workflow security
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# No permissions unless a job asks for them explicitly.
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  zizmor:
+    name: Workflow security audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read # to check out the workflows
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # In its own virtual environment, installed only if every file matches a hash in requirements-ci.txt.
+      - name: Install zizmor (hash-pinned)
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ci-tools"
+          "$RUNNER_TEMP/ci-tools/bin/pip" install --require-hashes --no-deps -r .github/requirements-ci.txt
+
+      # --offline: no GitHub API calls, so no token is needed. Any finding of low severity or above fails.
+      - name: Audit workflows
+        run: '"$RUNNER_TEMP/ci-tools/bin/zizmor" --offline --format plain --min-severity low .github/workflows'

@@ -7,3 +7,11 @@ updates:
       interval: weekly
     commit-message:
       prefix: "ci"
+
+  # CI-only Python tools (zizmor), pinned by version and hash in .github/requirements-ci.txt.
+  - package-ecosystem: pip
+    directory: /.github
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "ci"
