@@ -56,8 +56,14 @@ public:
     int getModuleType (int slotIndex) const noexcept;
     /** @return Whether a slot is switched on. Safe from any thread. */
     bool isSlotEnabled (int slotIndex) const noexcept;
-    /** @return The normalised value (0..1) of parameter A..D of a slot. Safe from any thread. */
+    /** @return The normalised value (0..1) of parameter A..H of a slot. Safe from any thread. */
     float getParameterValue (int slotIndex, int parameterIndex) const noexcept;
+    /**
+     * @return The description of a slot's knob as it applies right now, with the slot's other knobs taken into
+     *         account (Note Echo's Pre-Delay is a note value or ms). Safe from any thread.
+     * @see getEffectiveParameterDescription
+     */
+    const ParameterDescription& getKnobDescription (int slotIndex, int parameterIndex) const noexcept;
 
     /** Loads a module into a slot and resets its four parameters to that module's defaults. */
     void loadModule (int slotIndex, int moduleType);

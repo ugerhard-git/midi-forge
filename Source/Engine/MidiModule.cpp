@@ -142,12 +142,13 @@ void SchedulingModule::reset()
     soundingNotes.clear();
 }
 
-void SchedulingModule::scheduleEvent (int64_t sampleTime, const MidiEvent& event)
+bool SchedulingModule::scheduleEvent (int64_t sampleTime, const MidiEvent& event)
 {
     if (event.isNoteOn() && scheduledEvents.size() >= maxScheduledEvents)
-        return; // queue full: skip this extra note rather than allocating on the audio thread
+        return false; // queue full: skip this extra note rather than allocating on the audio thread
 
     scheduledEvents.push_back ({ sampleTime, nextSequenceNumber++, event });
+    return true;
 }
 
 void SchedulingModule::sendEvent (const MidiEvent& event, MidiEventList& output)

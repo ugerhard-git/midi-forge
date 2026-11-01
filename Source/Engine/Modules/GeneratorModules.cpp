@@ -1,7 +1,7 @@
 /**
  * @file GeneratorModules.cpp
- * @brief Modules that create new notes: Chord, Diatonic Harmonizer, Note Echo, Arpeggiator, Repeater, Strum and
- *        Ghost Notes.
+ * @brief Modules that create new notes: Chord, Diatonic Harmonizer, Note Echo, Arpeggiator, Repeater, Strum,
+ *        Ghost Notes and Bounce.
  */
 #include "GeneratorModules.h"
 
@@ -147,7 +147,14 @@ private:
         delayTime,
         numRepeats,
         feedback,
-        pitchStep
+        pitchStep,
+        preDelay,    ///< page 2 (added in 0.23.0); a note value or ms, see preDelaySync
+        preDelaySync ///< page 2 (added in 0.23.0)
+    };
+    enum PreDelaySync
+    {
+        preDelayInNoteValues,
+        preDelayInMilliseconds
     };
     static constexpr int maxRepeats = 16;
 
@@ -158,8 +165,26 @@ private:
         int numEchoes = 0;
         uint8_t channel = 0;
         int64_t delayInSamples = 1;
+        int64_t preDelayInSamples = 0; ///< The pause before the first echo
         uint8_t noteNumbers[maxRepeats] {};
     };
+
+    /**
+     * @return The Pre-Delay in samples, read when a note starts: Off, a note value (Off, 1/64 ... 1 Bar, a bar
+     *         following the time signature) or 1 ... 1000 ms, depending on Pre-Delay Sync.
+     */
+    int64_t preDelayInSamples (const BlockContext& context, const float* parameterValues) const noexcept
+    {
+        const auto& preDelayDescription =
+            getEffectiveParameterDescription ((int) ModuleType::NoteEcho, preDelay, parameterValues);
+        const int setting = normalisedToInteger (preDelayDescription, parameterValues[preDelay]);
+        if (setting <= 0)
+            return 0;
+        if (integerParameter (parameterValues, preDelaySync) == preDelayInMilliseconds)
+            return std::llround (setting * context.sampleRate / 1000.0);
+        const auto& division = slideDivisions[std::clamp (setting - 1, 0, numSlideDivisions - 1)];
+        return std::llround (divisionLengthInBeats (division, context.timeSignature) * context.samplesPerBeat());
+    }
 
     void startEchoes (const MidiEvent& noteOn, int64_t noteOnTime, const BlockContext& context, MidiEventList& output,
                       const float* parameterValues)
@@ -180,6 +205,7 @@ private:
         echoes.channel = (uint8_t) noteOn.channel();
         echoes.delayInSamples = std::max<int64_t> (
             1, std::llround (divisionLengthInBeats (division, context.timeSignature) * context.samplesPerBeat()));
+        echoes.preDelayInSamples = preDelayInSamples (context, parameterValues);
 
         const int repeats = std::min (integerParameter (parameterValues, numRepeats), maxRepeats);
         const float velocityFactor = (float) integerParameter (parameterValues, feedback) / 100.0f;
@@ -193,8 +219,10 @@ private:
             if (echoVelocity < 1.0f || echoNote < 0 || echoNote > 127)
                 break;
 
-            scheduleEvent (noteOnTime + echoNumber * echoes.delayInSamples,
-                           MidiEvent::noteOn (0, noteOn.channel(), echoNote, (int) std::lround (echoVelocity)));
+            // The whole series moves later by Pre-Delay; an echo the full queue refuses ends the series.
+            if (! scheduleEvent (noteOnTime + echoes.preDelayInSamples + echoNumber * echoes.delayInSamples,
+                                 MidiEvent::noteOn (0, noteOn.channel(), echoNote, (int) std::lround (echoVelocity))))
+                break;
             echoes.noteNumbers[echoes.numEchoes++] = (uint8_t) echoNote;
         }
     }
@@ -207,11 +235,14 @@ private:
             scheduleEchoNoteOffs (echoes, noteOffTime);
     }
 
-    /** Each echo ends the same distance after the original note-off as it started after the note-on. */
+    /**
+     * Each echo ends the same distance after the original note-off as it started after the note-on (Pre-Delay
+     * included), so echoes are as long as the original note.
+     */
     void scheduleEchoNoteOffs (EchoSeries& echoes, int64_t originalNoteOffTime)
     {
         for (int index = 0; index < echoes.numEchoes; ++index)
-            scheduleEvent (originalNoteOffTime + (index + 1) * echoes.delayInSamples,
+            scheduleEvent (originalNoteOffTime + echoes.preDelayInSamples + (index + 1) * echoes.delayInSamples,
                            MidiEvent::noteOff (0, echoes.channel, echoes.noteNumbers[index]));
         echoes.isActive = false;
     }
@@ -1362,6 +1393,160 @@ private:
     int lastNoteNumber = 0;
 };
 
+//==============================================================================
+/**
+ * A delay whose repeats follow a ball bouncing on the floor. The played note is the first impact; every
+ * following gap and every velocity is the previous one times the coefficient of restitution e (the share of
+ * its speed the ball keeps). Dropped from height h, the ball hits the floor at v = sqrt (2 g h); the gap to
+ * bounce k is 2 v e^k / g. With Height Sync on Tempo, the first gap is a note value instead.
+ */
+class Bounce final : public SchedulingModule
+{
+public:
+    Bounce() : SchedulingModule (ModuleType::Bounce) {}
+
+    void reset() override
+    {
+        SchedulingModule::reset();
+        isHeldAtInput.fill (false);
+    }
+
+    void process (const MidiEventList& input, MidiEventList& output, const BlockContext& context,
+                  const float* parameterValues) override
+    {
+        for (const auto& event : input)
+        {
+            const int64_t eventTime = context.blockStartSample + event.samplePosition;
+            sendScheduledEventsUpTo (eventTime, context, output);
+            if (event.isNoteOn())
+            {
+                // The played note is the first impact and plays right away.
+                endHeldInputNote (event.channel(), event.noteNumber(), event.samplePosition, output);
+                isHeldAtInput[channelNoteIndex (event.channel(), event.noteNumber())] = true;
+                sendEvent (event, output);
+                scheduleBounces (event, eventTime, context, parameterValues);
+            }
+            else if (event.isNoteOff())
+            {
+                // Releasing the key ends the played note; the bounces carry on. An unknown note-off (a note that
+                // started before this module) passes unchanged.
+                if (! endHeldInputNote (event.channel(), event.noteNumber(), event.samplePosition, output))
+                    output.push_back (event);
+            }
+            else
+            {
+                sendEvent (event, output);
+            }
+        }
+        sendScheduledEventsInBlock (context, output);
+    }
+
+private:
+    enum Parameter
+    {
+        height,
+        material,
+        bounciness,
+        maxBounces,
+        heightSync, ///< page 2
+        firstGap,
+        pitchPerBounce,
+        gravity
+    };
+    enum HeightSync
+    {
+        syncToHeight,
+        syncToTempo
+    };
+
+    /** With Bounces on Auto, the ball still stops after this many bounces (keeps the queue small). */
+    static constexpr int maxAutoBounces = 64;
+    /** Auto (and every bounce count) stops before a gap shorter than this. */
+    static constexpr double shortestGapInSeconds = 0.020;
+    /** A bounce note lasts this share of the gap to the next bounce, so bounces never overlap. */
+    static constexpr double noteLengthShareOfGap = 0.5;
+    static constexpr double lowestRestitution = 0.05, highestRestitution = 0.95;
+
+    /**
+     * Ends a played note that is still held at the input. A note-on for a held note (on, on, off: modules in
+     * front may send that) first ends the previous one, so every played note-on is matched by one note-off.
+     * @return True if the note was held (and is now ended).
+     */
+    bool endHeldInputNote (int channel, int noteNumber, int samplePosition, MidiEventList& output)
+    {
+        auto& isHeld = isHeldAtInput[channelNoteIndex (channel, noteNumber)];
+        if (! isHeld)
+            return false;
+        isHeld = false;
+        sendEvent (MidiEvent::noteOff (samplePosition, channel, noteNumber), output);
+        return true;
+    }
+
+    /** @return The share of its speed the ball keeps per bounce: the material's, adjusted by Bounciness. */
+    double restitution (const float* parameterValues) const noexcept
+    {
+        const auto& ballMaterial =
+            bounceMaterials[std::clamp (integerParameter (parameterValues, material), 0, numBounceMaterials - 1)];
+        return std::clamp (ballMaterial.restitution + integerParameter (parameterValues, bounciness) / 100.0,
+                           lowestRestitution, highestRestitution);
+    }
+
+    /** @return The gap between the played note and the first bounce, in samples. */
+    double firstGapInSamples (double shareOfSpeedKept, const BlockContext& context,
+                              const float* parameterValues) const noexcept
+    {
+        if (integerParameter (parameterValues, heightSync) == syncToTempo)
+        {
+            const auto& division =
+                echoDivisions[std::clamp (integerParameter (parameterValues, firstGap), 0, numEchoDivisions - 1)];
+            return divisionLengthInBeats (division, context.timeSignature) * context.samplesPerBeat();
+        }
+        const double dropHeight =
+            bounceHeights[std::clamp (integerParameter (parameterValues, height), 0, numBounceHeights - 1)].metres;
+        const double gravityOfPlace =
+            bounceGravities[std::clamp (integerParameter (parameterValues, gravity), 0, numBounceGravities - 1)]
+                .metresPerSecondSquared;
+        const double impactSpeed = std::sqrt (2.0 * gravityOfPlace * dropHeight);
+        return 2.0 * impactSpeed * shareOfSpeedKept / gravityOfPlace * context.sampleRate;
+    }
+
+    /** Schedules all bounces of a played note. Values are read now; later knob changes don't affect them. */
+    void scheduleBounces (const MidiEvent& noteOn, int64_t noteOnTime, const BlockContext& context,
+                          const float* parameterValues)
+    {
+        const double shareOfSpeedKept = restitution (parameterValues);
+        const int bounceLimit = integerParameter (parameterValues, maxBounces);
+        const int numBouncesAtMost = bounceLimit > 0 ? bounceLimit : maxAutoBounces;
+        const int semitonesPerBounce = integerParameter (parameterValues, pitchPerBounce);
+        const double shortestGapInSamples = shortestGapInSeconds * context.sampleRate;
+
+        double gapInSamples = firstGapInSamples (shareOfSpeedKept, context, parameterValues);
+        double bounceVelocity = noteOn.velocity();
+        double bounceTime = (double) noteOnTime;
+        for (int bounceNumber = 1; bounceNumber <= numBouncesAtMost; ++bounceNumber)
+        {
+            if (bounceNumber > 1)
+                gapInSamples *= shareOfSpeedKept;
+            bounceVelocity *= shareOfSpeedKept;
+            const int bounceNote = noteOn.noteNumber() + bounceNumber * semitonesPerBounce;
+            if (gapInSamples < shortestGapInSamples || bounceVelocity < 1.0 || bounceNote < 0 || bounceNote > 127)
+                break;
+
+            bounceTime += gapInSamples;
+            const auto noteOnSample = (int64_t) std::llround (bounceTime);
+            const auto noteLength = std::max<int64_t> (
+                1, std::llround (gapInSamples * shareOfSpeedKept * noteLengthShareOfGap)); // next gap's share
+            const int velocity = std::clamp ((int) std::lround (bounceVelocity), 1, 127);
+            if (! scheduleEvent (noteOnSample, MidiEvent::noteOn (0, noteOn.channel(), bounceNote, velocity)))
+                break; // queue full: the ball stops early, and no note-off without its note-on
+            scheduleEvent (noteOnSample + noteLength, MidiEvent::noteOff (0, noteOn.channel(), bounceNote));
+        }
+    }
+
+    /** Which played notes (channel × note) are held at the input right now. */
+    std::array<bool, numChannelNoteCombinations> isHeldAtInput {};
+};
+
 } // namespace
 
 std::unique_ptr<MidiModule> createGeneratorModule (ModuleType type)
@@ -1375,6 +1560,7 @@ std::unique_ptr<MidiModule> createGeneratorModule (ModuleType type)
         case ModuleType::Strum: return std::make_unique<Strum>();
         case ModuleType::GhostNotes: return std::make_unique<GhostNotes>();
         case ModuleType::DiatonicHarmonizer: return std::make_unique<DiatonicHarmonizer>();
+        case ModuleType::Bounce: return std::make_unique<Bounce>();
         default: return nullptr;
     }
 }

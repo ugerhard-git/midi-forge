@@ -66,6 +66,14 @@ const char* const harmonyIntervalLabels[] = { "Oct Down", "7th Down", "6th Down"
                                               "4th Up",   "5th Up",   "6th Up",   "7th Up",   "Oct Up" };
 const char* const echoDivisionLabels[] = { "1/32", "1/16T", "1/16", "1/16D", "1/8T", "1/8",
                                            "1/8D", "1/4T",  "1/4",  "1/4D",  "1/2",  "1 Bar" };
+const char* const preDelaySyncLabels[] = { "Tempo", "ms" };
+const char* const bounceHeightLabels[] = { "5 cm",  "6 cm",  "8 cm",  "10 cm", "12 cm", "15 cm", "20 cm",
+                                           "25 cm", "30 cm", "40 cm", "50 cm", "60 cm", "80 cm", "1 m",
+                                           "1.2 m", "1.5 m", "2 m",   "2.5 m", "3 m",   "4 m",   "5 m" };
+const char* const bounceMaterialLabels[] = { "Super Ball", "Rubber", "Basketball", "Tennis Ball",
+                                             "Wood",       "Glass",  "Metal",      "Clay" };
+const char* const bounceSyncLabels[] = { "Height", "Tempo" };
+const char* const bounceGravityLabels[] = { "Earth", "Moon", "Mars", "Jupiter", "Pluto", "Sun" };
 const char* const arpeggiatorDivisionLabels[] = { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
 const char* const scaleLabels[] = { "Major",       "Minor",   "Dorian",      "Phrygian",   "Lydian",
                                     "Mixolydian",  "Locrian", "Harm. Minor", "Mel. Minor", "Major Pent.",
@@ -112,6 +120,22 @@ template <size_t NumLabels>
 ParameterDescription choiceParameter (const char* name, const char* const (&labels)[NumLabels], int defaultIndex)
 {
     return { name, ParameterKind::Choice, 0, (float) (NumLabels - 1), (float) defaultIndex, labels, "", nullptr };
+}
+
+/** Help text of Note Echo's Pre-Delay; the same for both of its units. */
+constexpr const char* preDelayHelp =
+    "A pause before the first echo; the note itself plays right away. A note value or ms, set by Pre-Delay Sync.";
+
+/** Note Echo's Pre-Delay with Pre-Delay Sync on *Tempo* (the module table's entry): Off, 1/64 ... 1 Bar. */
+ParameterDescription preDelayInNoteValues()
+{
+    return choiceParameter ("Pre-Delay", slideDelayLabels, 0).withHelp (preDelayHelp).addedInLayout (4);
+}
+
+/** Note Echo's Pre-Delay with Pre-Delay Sync on *ms*: Off, 1 ... 1000 ms. */
+ParameterDescription preDelayInMilliseconds()
+{
+    return integerParameter ("Pre-Delay", 0, 1000, 0, " ms", "Off").withHelp (preDelayHelp).addedInLayout (4);
 }
 
 /** The module table, indexed by ModuleType. Keep the help texts in step with docs/MANUAL.md. */
@@ -236,10 +260,15 @@ const ModuleDescription* createModuleTable()
             integerParameter ("Repeats", 1, 16, 3).withHelp ("Maximum number of echoes."),
             percentParameter ("Feedback", 10, 100, 70)
                 .withHelp ("Each echo's velocity as a share of the previous one."),
-            integerParameter ("Pitch", -12, 12, 0, " st").withHelp ("Transposition added with every echo.") },
+            integerParameter ("Pitch", -12, 12, 0, " st").withHelp ("Transposition added with every echo."),
+            // Page 2 (added in 0.23.0)
+            preDelayInNoteValues(),
+            choiceParameter ("Pre-Delay Sync", preDelaySyncLabels, 0)
+                .withHelp ("Pre-Delay as a note value (Tempo, a bar follows the time signature) or in ms.")
+                .addedInLayout (4) },
           "A MIDI delay: the note plays immediately, then each echo follows one Time later, quieter and "
-          "optionally transposed. Every echo is as long as the original note; echoes stop when they get too "
-          "quiet." },
+          "optionally transposed. Pre-Delay adds a pause before the first echo, so the whole series starts "
+          "later. Every echo is as long as the original note; echoes stop when they get too quiet." },
 
         // Randomizers --------------------------------------------------------------------------------
         { "Humanize",
@@ -457,6 +486,36 @@ const ModuleDescription* createModuleTable()
           "scales with fewer than seven notes they are wider. Octaves are always 12 semitones. Chords (notes "
           "within 30 ms) pass untouched: a plug-in cannot look ahead, so when a note turns out to start a chord, "
           "its harmony notes are ended." },
+
+        // Added in 0.23.0 --------------------------------------------------------------------------
+        { "Bounce",
+          ModuleCategory::Generator,
+          "Repeats notes like a bouncing ball: ever faster and softer.",
+          { choiceParameter ("Height", bounceHeightLabels, 13)
+                .withHelp ("The height the ball is dropped from: higher means longer gaps (Height Sync Height)."),
+            choiceParameter ("Material", bounceMaterialLabels, 1)
+                .withHelp ("What the ball is made of: how much of its speed it keeps (Super Ball most, Clay least)."),
+            integerParameter ("Bounciness", -20, 20, 0)
+                .withHelp (
+                    "Fine-tunes the material: adds up to 20 points to the share of speed kept, or removes them."),
+            integerParameter ("Bounces", 0, 32, 0, "", "Auto")
+                .withHelp ("The most bounces. Auto: until they get too fast (20 ms) or too soft (at most 64)."),
+            // Page 2
+            choiceParameter ("Height Sync", bounceSyncLabels, 0)
+                .withHelp ("Height: real physics, independent of the tempo. Tempo: the first gap is a note value."),
+            choiceParameter ("First Gap", echoDivisionLabels, 8)
+                .withHelp ("The gap before the first bounce (Height Sync Tempo); a bar follows the time signature."),
+            integerParameter ("Pitch per Bounce", -12, 12, 0, " st")
+                .withHelp ("Transposition added with every bounce."),
+            choiceParameter ("Gravity", bounceGravityLabels, 0)
+                .withHelp ("Where the ball falls: weaker gravity bounces slower (Height Sync Height).") },
+          "A delay whose repeats follow a ball bouncing on the floor. The note you play is the first impact; "
+          "every bounce comes after a shorter gap and softer than the one before, both by the same factor: the "
+          "share of its speed the ball keeps, set by Material and Bounciness. With Height Sync Height, the drop "
+          "height and the gravity set the gaps (1 m on Earth, Rubber: about 0.72, 0.58, 0.46 s ...). With Tempo, "
+          "the first gap is a note value and the bounces then speed up freely, as a ball does. Each bounce is "
+          "half as long as the gap to the next one; a chord bounces together. Releasing the key does not stop "
+          "the ball." },
     };
     return table;
 }
@@ -519,6 +578,27 @@ const ChordShape chordShapes[] = {
 };
 const int numChordShapes = (int) std::size (chordShapes);
 
+const BounceHeight bounceHeights[] = {
+    { "5 cm", 0.05 },  { "6 cm", 0.06 },  { "8 cm", 0.08 },  { "10 cm", 0.10 }, { "12 cm", 0.12 }, { "15 cm", 0.15 },
+    { "20 cm", 0.20 }, { "25 cm", 0.25 }, { "30 cm", 0.30 }, { "40 cm", 0.40 }, { "50 cm", 0.50 }, { "60 cm", 0.60 },
+    { "80 cm", 0.80 }, { "1 m", 1.0 },    { "1.2 m", 1.2 },  { "1.5 m", 1.5 },  { "2 m", 2.0 },    { "2.5 m", 2.5 },
+    { "3 m", 3.0 },    { "4 m", 4.0 },    { "5 m", 5.0 },
+};
+const int numBounceHeights = (int) std::size (bounceHeights);
+
+// Coefficients of restitution, roughly as measured and then tuned by ear (the knob's order is stored, the
+// values may change).
+const BounceMaterial bounceMaterials[] = {
+    { "Super Ball", 0.90 }, { "Rubber", 0.80 }, { "Basketball", 0.75 }, { "Tennis Ball", 0.70 },
+    { "Wood", 0.55 },       { "Glass", 0.65 },  { "Metal", 0.60 },      { "Clay", 0.30 },
+};
+const int numBounceMaterials = (int) std::size (bounceMaterials);
+
+const BounceGravity bounceGravities[] = {
+    { "Earth", 9.81 }, { "Moon", 1.62 }, { "Mars", 3.71 }, { "Jupiter", 24.79 }, { "Pluto", 0.62 }, { "Sun", 274.0 },
+};
+const int numBounceGravities = (int) std::size (bounceGravities);
+
 static_assert (std::size (echoDivisionLabels) == std::size (echoDivisions), "echo labels and table differ");
 static_assert (std::size (arpeggiatorDivisionLabels) == std::size (arpeggiatorDivisions), "arp labels differ");
 static_assert (std::size (repeaterDivisionLabels) == std::size (repeaterDivisions), "repeater labels differ");
@@ -526,6 +606,9 @@ static_assert (std::size (slideDivisionLabels) == std::size (slideDivisions), "s
 static_assert (std::size (slideDelayLabels) == std::size (slideDivisions) + 1, "slide delay labels differ");
 static_assert (std::size (scaleLabels) == std::size (scales), "scale labels and table differ");
 static_assert (std::size (chordLabels) == std::size (chordShapes), "chord labels and table differ");
+static_assert (std::size (bounceHeightLabels) == std::size (bounceHeights), "bounce height labels differ");
+static_assert (std::size (bounceMaterialLabels) == std::size (bounceMaterials), "bounce material labels differ");
+static_assert (std::size (bounceGravityLabels) == std::size (bounceGravities), "bounce gravity labels differ");
 
 //==============================================================================
 
@@ -579,13 +662,44 @@ bool containsEveryWord (const std::string& lowerCaseHaystack, const std::string&
 
 bool isParameterInactive (int moduleType, int parameterIndex, const float* normalisedValues) noexcept
 {
-    if (moduleType != (int) ModuleType::PitchSlide)
-        return false;
-    // Pitch Slide: Delay (G) only applies to Slide In and Slide Out, not to the fall modes (Mode = B).
-    constexpr int modeIndex = 1, delayIndex = 6, firstFallMode = 2;
     const auto& description = getModuleDescription (moduleType);
-    return parameterIndex == delayIndex &&
-           normalisedToInteger (description.parameters[modeIndex], normalisedValues[modeIndex]) >= firstFallMode;
+    if (moduleType == (int) ModuleType::PitchSlide)
+    {
+        // Pitch Slide: Delay (G) only applies to Slide In and Slide Out, not to the fall modes (Mode = B).
+        constexpr int modeIndex = 1, delayIndex = 6, firstFallMode = 2;
+        return parameterIndex == delayIndex &&
+               normalisedToInteger (description.parameters[modeIndex], normalisedValues[modeIndex]) >= firstFallMode;
+    }
+    if (moduleType == (int) ModuleType::Bounce)
+    {
+        // Bounce: Height (A) and Gravity (H) set the timing with Height Sync (E) on Height, First Gap (F) on Tempo.
+        constexpr int heightIndex = 0, syncIndex = 4, firstGapIndex = 5, gravityIndex = 7, tempoSync = 1;
+        const bool followsTempo =
+            normalisedToInteger (description.parameters[syncIndex], normalisedValues[syncIndex]) == tempoSync;
+        if (parameterIndex == heightIndex || parameterIndex == gravityIndex)
+            return followsTempo;
+        return parameterIndex == firstGapIndex && ! followsTempo;
+    }
+    return false;
+}
+
+const ParameterDescription& getEffectiveParameterDescription (int moduleType, int parameterIndex,
+                                                              const float* normalisedValues) noexcept
+{
+    const auto& description = getModuleDescription (moduleType);
+    const int safeIndex = std::clamp (parameterIndex, 0, numParametersPerSlot - 1);
+    if (moduleType == (int) ModuleType::NoteEcho)
+    {
+        // Note Echo: Pre-Delay (E) counts milliseconds when Pre-Delay Sync (F) is on "ms".
+        constexpr int preDelayIndex = 4, syncIndex = 5, millisecondsSync = 1;
+        if (safeIndex == preDelayIndex &&
+            normalisedToInteger (description.parameters[syncIndex], normalisedValues[syncIndex]) == millisecondsSync)
+        {
+            static const ParameterDescription inMilliseconds = preDelayInMilliseconds();
+            return inMilliseconds;
+        }
+    }
+    return description.parameters[safeIndex];
 }
 
 SearchRelevance getSearchRelevance (const ModuleDescription& description, const std::string& searchText)

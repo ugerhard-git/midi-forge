@@ -109,8 +109,8 @@ MIDI Forge takes care that no note gets stuck, even when you change modules whil
 
 MIDI Forge follows your DAW's **time signature** – 4/4, 3/4, 6/8, 7/8, 5/4, and changes in the middle of a
 song. Everything that thinks in bars uses the real bar: Groove's backbeats, Ghost Notes' *Before*, Mutate's
-memory, Beat Thinning's strong and weak places, and every "Bar" length (*1 Bar* echoes, slides and steps, LFO
-rates of 1 to 8 bars, which stay aligned to the bar start). If the DAW reports no time signature, 4/4 is used.
+memory, Beat Thinning's strong and weak places, and every "Bar" length (*1 Bar* echoes, Note Echo's Pre-Delay,
+Bounce's First Gap, slides and steps, LFO rates of 1 to 8 bars, which stay aligned to the bar start). If the DAW reports no time signature, 4/4 is used.
 
 How a bar is felt: its counts (quarter notes in x/4, eighth notes in x/8) are grouped in twos and threes.
 
@@ -130,7 +130,7 @@ last. The Arpeggiator and the Repeater can run their steps steadily or start the
 The knobs of a slot are called **A … H** in your DAW's automation lists (most modules use A … D; page 2 is
 E … H); what they mean depends on the module loaded in the slot.
 
-All 24 modules at a glance (click a name to jump to its description):
+All 25 modules at a glance (click a name to jump to its description):
 
 | Group | Module | What it does |
 |-------|--------|--------------|
@@ -152,6 +152,7 @@ All 24 modules at a glance (click a name to jump to its description):
 |  | [Repeater](#repeater) | Retriggers held notes on the tempo grid (ratchets). |
 |  | [Strum](#strum) | Plays chords as strums: the notes one after another. |
 |  | [Ghost Notes](#ghost-notes) | Adds quiet extra hits around notes, mainly for drums. |
+|  | [Bounce](#bounce) | Repeats notes like a bouncing ball: ever faster and softer. |
 | Randomizers | [Humanize](#humanize) | Adds random timing delay and velocity variation. |
 |  | [Probability](#probability) | Lets each note through with a given chance. |
 |  | [Random Pitch](#random-pitch) | Randomly shifts some of the notes. |
@@ -409,12 +410,25 @@ scale, so a "third above" is a major or a minor third as the key demands (unlike
 A MIDI delay. The original note plays immediately; each echo comes one *Time* later,
 quieter, and optionally transposed. Every echo is as long as the original note.
 
+**Pre-Delay** (page 2) adds a pause before the echoes: the note itself still plays right away, the first echo
+comes after Pre-Delay + Time, and the following ones every Time after that. With *Pre-Delay Sync* on *Tempo*
+the pause is a note value (a bar is a real bar of the time signature), with *ms* a fixed time. Switching
+between the two keeps the knob's position, so a Pre-Delay of 1/4 turns into about 700 ms; set it again after
+switching.
+
+Like Time, Pre-Delay is read when a note starts: turning the knob (or modulating it) changes the next notes'
+echoes, not the ones already on their way.
+
 | Knob | Range | Meaning |
 |------|-------|---------|
 | Time | 1/32 … 1 Bar (incl. triplets T and dotted D) | Distance between echoes, synced to the tempo |
 | Repeats | 1 … 16 | Maximum number of echoes |
 | Feedback | 10 … 100 % | Each echo's velocity as a share of the previous one. Echoes stop when they get too quiet |
 | Pitch | −12 … +12 st | Transposition added with every echo (e.g. +7 makes a rising cascade of fifths) |
+| Pre-Delay *(page 2)* | Off, 1/64 … 1 Bar (incl. T and D) with *Tempo*; Off, 1 … 1000 ms with *ms* | A pause before the first echo (default Off) |
+| Pre-Delay Sync *(page 2)* | Tempo / ms | Whether Pre-Delay is a note value or a time in milliseconds (default Tempo) |
+
+Projects and presets from before 0.23.0 load with Pre-Delay Off, so their echoes sound as before.
 
 ---
 
@@ -499,6 +513,63 @@ Ghost notes are short (a 1/64 note) and have the same pitch as their note. **Bef
 before a note it has not received yet, so Ghost Notes remembers where notes fell in the previous bar and plays
 the ghosts just before the same places in the current bar (a bar as long as the time signature says) – ideal for loops and steady grooves. This needs
 the DAW playing; when it is stopped, only *After* works.
+
+---
+
+#### Bounce
+
+A delay whose repeats follow a ball bouncing on the floor. The note you play is the first impact and sounds
+right away. Then the ball bounces again and again: every gap is shorter and every bounce softer than the one
+before, both by the same factor – the share of its speed the ball keeps (its *coefficient of restitution*,
+set by Material and Bounciness).
+
+- **Height Sync *Height*:** real physics. The drop height and the gravity set the gaps, independent of the
+  tempo. Example: a rubber ball (80 %) dropped from 1 m on Earth bounces after about 0.72, 0.58, 0.46,
+  0.37 s …, in all about 3.6 s.
+- **Height Sync *Tempo*:** the first gap is a note value (*First Gap*; a bar is a real bar of the time
+  signature). Only the first bounce follows the beat; the following ones speed up freely, as a ball does.
+- **Velocity:** each bounce is the played velocity times the share of speed kept, once more per bounce
+  (80 %: 100, 80, 64, 51 …).
+- **The end:** with *Bounces* on *Auto* the ball stops before a gap would be shorter than 20 ms or a bounce
+  quieter than velocity 1, and after 64 bounces at the latest. A number stops after that many bounces (or
+  earlier, for the same reasons).
+- Each bounce note lasts half the gap to the next bounce, so the bounces never overlap. Releasing the key
+  ends the note you played but not the ball. A chord bounces together.
+- Like everything that is played later, the settings are read when a note starts: turning or modulating a
+  knob changes the next notes' bounces, not the ones already on their way.
+
+| Knob | Range | Meaning |
+|------|-------|---------|
+| Height | 5 cm … 5 m | The drop height: higher means longer gaps (default 1 m). Dimmed with Height Sync *Tempo* |
+| Material | Super Ball, Rubber, Basketball, Tennis Ball, Wood, Glass, Metal, Clay | How much of its speed the ball keeps, see below (default Rubber) |
+| Bounciness | −20 … +20 | Adds points to the material's share of speed kept, or removes them (kept between 5 and 95 %) |
+| Bounces | Auto, 1 … 32 | The most bounces (default Auto) |
+| Height Sync *(page 2)* | Height / Tempo | Real physics, or a first gap as a note value (default Height) |
+| First Gap *(page 2)* | 1/32 … 1 Bar (incl. T and D) | The gap before the first bounce (default 1/4). Dimmed with Height Sync *Height* |
+| Pitch per Bounce *(page 2)* | −12 … +12 st | Transposition added with every bounce; the ball stops when a note would leave the MIDI range |
+| Gravity *(page 2)* | Earth, Moon, Mars, Jupiter, Pluto, Sun | Weaker gravity bounces slower and longer (default Earth). Dimmed with Height Sync *Tempo* |
+
+| Material | Share of speed kept |
+|----------|---------------------|
+| Super Ball | 90 % |
+| Rubber | 80 % |
+| Basketball | 75 % |
+| Tennis Ball | 70 % |
+| Glass | 65 % |
+| Metal | 60 % |
+| Wood | 55 % |
+| Clay | 30 % |
+
+| Gravity | m/s² | 1 m, Rubber: first gap |
+|---------|------|------------------------|
+| Earth | 9.81 | 0.72 s |
+| Moon | 1.62 | 1.78 s |
+| Mars | 3.71 | 1.17 s |
+| Jupiter | 24.79 | 0.45 s |
+| Pluto | 0.62 | 2.87 s |
+| Sun | 274 | 0.14 s |
+
+Slow, bouncy settings last long: a super ball from 5 m on Pluto bounces for well over a minute.
 
 ### Randomizers (purple)
 

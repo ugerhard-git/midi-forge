@@ -39,6 +39,12 @@ public:
     void attachTo (juce::AudioProcessorValueTreeState& parameters, const juce::String& parameterId,
                    const ParameterDescription& description);
 
+    /**
+     * Lets the knob step through the values of a description (or turn smoothly for continuous ones). Called
+     * again when a knob changes its unit with another knob (Note Echo's Pre-Delay: note values or ms).
+     */
+    void showStepsOf (const ParameterDescription& description);
+
     juce::Slider knob;
     juce::Label nameLabel;
     juce::Label valueLabel;
@@ -54,6 +60,7 @@ private:
     bool isTriggerDown = false;
     bool showsModulation = false;
     float modulatedValue = 0.0f;
+    const ParameterDescription* descriptionOfSteps = nullptr; ///< The description the knob's steps follow
 };
 
 /**
