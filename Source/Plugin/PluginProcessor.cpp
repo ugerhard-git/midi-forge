@@ -232,15 +232,13 @@ std::unique_ptr<juce::AudioParameterFloat> MidiForgeProcessor::createModuleParam
                           .withStringFromValueFunction (
                               [this, slotIndex, parameterIndex] (float normalisedValue, int)
                               {
-                                  const auto& description =
-                                      getModuleDescription (getModuleType (slotIndex)).parameters[parameterIndex];
+                                  const auto& description = getKnobDescription (slotIndex, parameterIndex);
                                   return juce::String (formatParameterValue (description, normalisedValue));
                               })
                           .withValueFromStringFunction (
                               [this, slotIndex, parameterIndex] (const juce::String& text)
                               {
-                                  const auto& description =
-                                      getModuleDescription (getModuleType (slotIndex)).parameters[parameterIndex];
+                                  const auto& description = getKnobDescription (slotIndex, parameterIndex);
                                   return parseParameterText (description, text.trim().toStdString(),
                                                              getParameterValue (slotIndex, parameterIndex));
                               });
@@ -859,6 +857,14 @@ bool MidiForgeProcessor::isSlotEnabled (int slotIndex) const noexcept
 float MidiForgeProcessor::getParameterValue (int slotIndex, int parameterIndex) const noexcept
 {
     return slotParameterValues[(size_t) slotIndex].values[parameterIndex]->load();
+}
+
+const ParameterDescription& MidiForgeProcessor::getKnobDescription (int slotIndex, int parameterIndex) const noexcept
+{
+    float values[numParametersPerSlot];
+    for (int index = 0; index < numParametersPerSlot; ++index)
+        values[index] = getParameterValue (slotIndex, index);
+    return getEffectiveParameterDescription (getModuleType (slotIndex), parameterIndex, values);
 }
 
 void MidiForgeProcessor::setParameterAsGesture (const juce::String& parameterId, float normalisedValue)

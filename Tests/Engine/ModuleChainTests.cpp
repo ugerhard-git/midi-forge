@@ -93,7 +93,12 @@ TEST_CASE ("chain: randomized stress test leaves no stuck notes and no pitch ben
 
     constexpr int numRuns = 300;
     constexpr int numBlocksPlayed = 400;
-    constexpr double longestTailSeconds = 70.0; // 16 echoes of one bar at 60 bpm = 64 s
+    // Every run plays at least the shortest tail (time for falls and slides to finish), then goes on while notes
+    // still sound, up to the longest possible tail: a Bounce with a first gap of one bar of 13/2 at 60 bpm
+    // (26 s) and 64 bounces keeping 95 % of their speed lasts about 500 s; 16 one-bar echoes there about 440 s.
+    constexpr double shortestTailSeconds = 70.0;
+    constexpr double longestTailSeconds = 600.0;
+    constexpr double tailCheckIntervalSeconds = 10.0;
 
     for (int run = 0; run < numRuns; ++run)
     {
@@ -230,7 +235,10 @@ TEST_CASE ("chain: randomized stress test leaves no stuck notes and no pitch ben
         for (const auto& [channel, note] : heldKeys)
             releaseAllKeys.push_back (noteOffAt (0, note, channel));
         rig.processBlock (releaseAllKeys);
-        rig.processSeconds (longestTailSeconds);
+        rig.processSeconds (shortestTailSeconds);
+        for (double tail = shortestTailSeconds; tail < longestTailSeconds && ! rig.notesStillSounding().empty();
+             tail += tailCheckIntervalSeconds)
+            rig.processSeconds (tailCheckIntervalSeconds);
 
         const auto stuck = rig.notesStillSounding();
         if (! stuck.empty())

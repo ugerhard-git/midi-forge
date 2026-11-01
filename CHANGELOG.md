@@ -4,6 +4,19 @@ What changed in each release of MIDI Forge. The release workflow publishes the s
 text of its GitHub release, so every section starts with `## [version]` and is written for users.
 Versions below 1.0 are betas: they are published as pre-releases.
 
+## [0.23.0] – Bounce, and a Pre-Delay for Note Echo
+
+- **New module: Bounce** (a Generator). A delay whose repeats follow a ball bouncing on the floor: the note
+  you play is the first impact, then every bounce comes sooner and softer than the one before. Pick the drop
+  height (5 cm … 5 m), the ball's material (Super Ball … Clay) and the gravity (Earth, Moon, Mars, Jupiter,
+  Pluto, Sun) – or let the first gap follow the tempo and the rest speed up freely. Bounces can climb in pitch,
+  and you can limit how many there are.
+- **Note Echo: Pre-Delay.** A pause before the first echo, as a note value (1/64 … 1 Bar) or in milliseconds
+  (1 … 1000 ms), on page 2. The note itself still plays right away. Projects and presets from older versions
+  load with Pre-Delay off, so they sound as before.
+- Fixed: with very many notes echoing at once (thousands of pending echoes), Note Echo could end another note
+  of the same pitch too early.
+
 ## [0.22.1] – Diatonic Harmonizer is a Generator
 
 - The **Diatonic Harmonizer** now belongs to the *Generators* (orange), next to Chord: it adds notes to the

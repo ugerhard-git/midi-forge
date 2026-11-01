@@ -70,10 +70,8 @@ void ParameterKnob::attachTo (juce::AudioProcessorValueTreeState& parameters, co
     parameterAttachment =
         std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (parameters, parameterId, knob);
 
-    // The host parameter is 0..1; for stepped parameters the knob snaps to the steps.
-    const bool hasSteps = description.isUsed() && description.kind != ParameterKind::Continuous;
-    const int numSteps = hasSteps ? getNumberOfSteps (description) : 0;
-    knob.setRange (0.0, 1.0, numSteps > 1 ? 1.0 / (numSteps - 1) : 0.0);
+    descriptionOfSteps = nullptr; // the attachment has just reset the knob's range
+    showStepsOf (description);
 
     // Trigger parameters are a button: on while held down.
     attachedParameter = parameters.getParameter (parameterId);
@@ -84,6 +82,17 @@ void ParameterKnob::attachTo (juce::AudioProcessorValueTreeState& parameters, co
     triggerButton.setVisible (isTrigger);
     for (auto* component : std::initializer_list<juce::Component*> { &knob, &nameLabel, &valueLabel })
         component->setVisible (! isTrigger);
+}
+
+void ParameterKnob::showStepsOf (const ParameterDescription& description)
+{
+    if (&description == descriptionOfSteps)
+        return;
+    descriptionOfSteps = &description;
+    // The host parameter is 0..1; for stepped parameters the knob snaps to the steps.
+    const bool hasSteps = description.isUsed() && description.kind != ParameterKind::Continuous;
+    const int numSteps = hasSteps ? getNumberOfSteps (description) : 0;
+    knob.setRange (0.0, 1.0, numSteps > 1 ? 1.0 / (numSteps - 1) : 0.0);
 }
 
 void ParameterKnob::setModulation (bool isModulated, float modulatedValue01)
@@ -288,7 +297,7 @@ void SlotRow::showModule (int moduleType, int page)
         const int parameterIndex = parameterIndexOfKnob (knobIndex);
         const auto& parameter = description.parameters[parameterIndex];
         parameterKnob.attachTo (processor.parameters, ParameterIds::moduleParameter (slotIndex, parameterIndex),
-                                parameter);
+                                processor.getKnobDescription (slotIndex, parameterIndex));
         parameterKnob.setVisible (parameter.isUsed());
         parameterKnob.nameLabel.setText (parameter.name, juce::dontSendNotification);
         parameterKnob.knob.setTooltip (parameter.helpText);
@@ -309,16 +318,18 @@ void SlotRow::updateValueTexts()
     for (int knobIndex = 0; knobIndex < numParametersPerPage; ++knobIndex)
     {
         const int parameterIndex = parameterIndexOfKnob (knobIndex);
-        const auto& parameter = description.parameters[parameterIndex];
-        if (! parameter.isUsed())
+        if (! description.parameters[parameterIndex].isUsed())
             continue;
+        // The knob's unit may follow another knob of the module (Note Echo's Pre-Delay: note values or ms).
+        const auto& parameter = processor.getKnobDescription (slotIndex, parameterIndex);
+        auto& parameterKnob = parameterKnobs[knobIndex];
+        parameterKnob.showStepsOf (parameter);
         // Knobs that do nothing with the current settings of the module are dimmed.
         const float knobAlpha = isParameterInactive (displayedModuleType, parameterIndex, ownValues) ? 0.35f : 1.0f;
         if (std::abs (parameterKnobs[knobIndex].getAlpha() - knobAlpha) > 0.01f)
             parameterKnobs[knobIndex].setAlpha (knobAlpha);
         // A modulated knob shows the value the module uses right now (in yellow), except while the user
         // points at or turns it: then it shows the user's own setting.
-        auto& parameterKnob = parameterKnobs[knobIndex];
         const bool showsLiveValue = displayedAsEnabled && processor.isEngineRunning() &&
                                     processor.isParameterModulated (slotIndex, parameterIndex) &&
                                     ! parameterKnob.isMouseOverOrDragging (true);

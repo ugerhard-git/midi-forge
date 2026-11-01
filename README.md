@@ -7,9 +7,10 @@ and randomizers – in front of any instrument.
 
 - **Format:** VST3 · **System:** Windows (a macOS build is planned)
 - **Made for:** Reaper and Bitwig Studio (any host that supports MIDI-effect plug-ins should work)
-- **24 modules:** Note Range, Velocity Range, Channel Filter, Event Blocker, Note Split, Transpose, Scale Quantize,
+- **25 modules:** Note Range, Velocity Range, Channel Filter, Event Blocker, Note Split, Transpose, Scale Quantize,
   Velocity Curve, Channel Remap, Note Dispatcher, Groove, Arpeggiator, Chord, Diatonic Harmonizer, Note Echo,
-  Repeater (ratchets), Strum, Ghost Notes, Humanize, Probability, Beat Thinning, Random Pitch, Pitch Slide, Mutate
+  Repeater (ratchets), Strum, Ghost Notes, Bounce, Humanize, Probability, Beat Thinning, Random Pitch, Pitch Slide,
+  Mutate
 - **Follows the DAW's time signature** (4/4, 3/4, 6/8, 7/8 …) wherever bars matter
 - **4 LFOs, 4 Random modulators, 4 step modulators and 12 modulation routes** move any module setting, switch
   slots on and off, or move the modulation itself (route amounts, LFO rate/phase/width, step rate/glide): LFOs tempo-synced or free with 7 waveforms; Random modulators pick a new value per played

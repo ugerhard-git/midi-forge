@@ -1134,6 +1134,86 @@ TEST_CASE ("pitch slide: the host shows its knobs, and its pitch bends reach the
 }
 
 //==============================================================================
+// Note Echo Pre-Delay and Bounce (0.23.0)
+
+TEST_CASE ("note echo pre-delay: host text and knob steps follow Pre-Delay Sync; old projects get Off and Tempo")
+{
+    MidiForgeProcessor processor;
+    processor.loadModule (0, (int) ModuleType::NoteEcho);
+    EXPECT (hostTextOf (processor, 0, 4) == "Off");
+    EXPECT (hostTextOf (processor, 0, 5) == "Tempo");
+
+    auto* preDelay = processor.parameters.getParameter (ParameterIds::moduleParameter (0, 4));
+    auto* preDelaySync = processor.parameters.getParameter (ParameterIds::moduleParameter (0, 5));
+    preDelay->setValueNotifyingHost (12.0f / 17.0f); // Off, 1/64 ... 1 Bar: the 13th entry
+    EXPECT (hostTextOf (processor, 0, 4) == "1/4");
+
+    ParameterKnob preDelayKnob;
+    preDelayKnob.attachTo (processor.parameters, ParameterIds::moduleParameter (0, 4),
+                           processor.getKnobDescription (0, 4));
+    EXPECT (std::abs (preDelayKnob.knob.getInterval() - 1.0 / 17.0) < 1.0e-9);
+
+    // On "ms" the same knob counts milliseconds, on the host and in the editor.
+    preDelaySync->setValueNotifyingHost (1.0f);
+    EXPECT (hostTextOf (processor, 0, 4) == "706 ms");
+    EXPECT (std::abs (preDelay->getValueForText ("250 ms") - 0.25f) < 1.0e-6f);
+    preDelayKnob.showStepsOf (processor.getKnobDescription (0, 4));
+    EXPECT (std::abs (preDelayKnob.knob.getInterval() - 1.0 / 1000.0) < 1.0e-12);
+
+    // A project from 0.22 knows no Pre-Delay: whatever its E and F hold, they load as Off and Tempo.
+    juce::XmlElement oldState ("MidiForge");
+    oldState.setAttribute ("knobLayout", 3);
+    const auto addParameter = [&oldState] (const juce::String& id, double value)
+    {
+        auto* parameter = oldState.createNewChildElement ("PARAM");
+        parameter->setAttribute ("id", id);
+        parameter->setAttribute ("value", value);
+    };
+    addParameter ("s1_type", (double) ModuleType::NoteEcho);
+    addParameter ("s1_e", 0.7);
+    addParameter ("s1_f", 1.0);
+    juce::MemoryBlock oldProject;
+    juce::AudioProcessor::copyXmlToBinary (oldState, oldProject);
+    MidiForgeProcessor reloaded;
+    reloaded.setStateInformation (oldProject.getData(), (int) oldProject.getSize());
+    EXPECT (reloaded.getModuleType (0) == (int) ModuleType::NoteEcho);
+    EXPECT (hostTextOf (reloaded, 0, 4) == "Off");
+    EXPECT (hostTextOf (reloaded, 0, 5) == "Tempo");
+}
+
+TEST_CASE ("bounce: the host shows its knobs, and the bounces reach the plug-in's output")
+{
+    MidiForgeProcessor processor;
+    processor.loadModule (0, (int) ModuleType::Bounce);
+    EXPECT (hostTextOf (processor, 0, 0) == "1 m");
+    EXPECT (hostTextOf (processor, 0, 1) == "Rubber");
+    EXPECT (hostTextOf (processor, 0, 2) == "0");
+    EXPECT (hostTextOf (processor, 0, 3) == "Auto");
+    EXPECT (hostTextOf (processor, 0, 4) == "Height");
+    EXPECT (hostTextOf (processor, 0, 5) == "1/4");
+    EXPECT (hostTextOf (processor, 0, 6) == "0 st");
+    EXPECT (hostTextOf (processor, 0, 7) == "Earth");
+
+    // Height Sync on Tempo, First Gap 1/32: the first bounce follows the played note 1/32 later (6000 samples
+    // at 120 bpm), the others sooner and sooner.
+    processor.parameters.getParameter (ParameterIds::moduleParameter (0, 4))->setValueNotifyingHost (1.0f);
+    processor.parameters.getParameter (ParameterIds::moduleParameter (0, 5))->setValueNotifyingHost (0.0f);
+    processor.prepareToPlay (testSampleRate, testBlockSize);
+    juce::MidiBuffer input;
+    input.addEvent (juce::MidiMessage::noteOn (1, 60, (juce::uint8) 100), 0);
+    auto messages = toMessages (processBlock (processor, input));
+    int numNoteOns = 0;
+    for (int block = 0; block < 200; ++block)
+    {
+        for (const auto& message : messages)
+            if (message.isNoteOn())
+                ++numNoteOns;
+        messages = toMessages (processBlock (processor, juce::MidiBuffer()));
+    }
+    EXPECT (numNoteOns > 1); // the played note and its bounces
+}
+
+//==============================================================================
 // Removing modules
 
 namespace

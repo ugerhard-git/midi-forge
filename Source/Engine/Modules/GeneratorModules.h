@@ -1,6 +1,7 @@
 /**
  * @file GeneratorModules.h
- * @brief Factory for the generator modules (Arpeggiator, Chord, Note Echo, Repeater, Strum, Ghost Notes).
+ * @brief Factory for the generator modules (Arpeggiator, Chord, Note Echo, Repeater, Strum, Ghost Notes,
+ *        Diatonic Harmonizer, Bounce).
  */
 #pragma once
 

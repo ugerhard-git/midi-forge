@@ -134,7 +134,9 @@ on all channels. The stress test also checks that no channel is left bent.
 - **`NoteMappingModule`** – decides everything at note-on time. Subclasses implement `createNoteOns()`
   and optionally `transformOtherEvent()`. Used by filters, transforms, Chord, Probability, Random Pitch.
 - **`SchedulingModule`** – sends events in the future using a queue of absolute sample times
-  (`BlockContext::blockStartSample`). Used by Arpeggiator, Repeater, Note Echo and Humanize.
+  (`BlockContext::blockStartSample`). Used by Arpeggiator, Repeater, Note Echo, Bounce and Humanize.
+  `scheduleEvent()` refuses note-ons when the queue holds 4096 events and says so (returns false); modules then
+  schedule no note-off for that note and stop the series (Note Echo, Bounce), so the queue never allocates.
 - **Groove** is a `SchedulingModule` (like Humanize): each note-on is delayed by Early plus the groove shift
   of its nearest grid step (clamped at 0), its note-off by the same amount. Grid steps count from the bar
   start (`BlockContext::barPositionAtBeat()`); Laid-back Snare asks `BarStructure::isBackbeat()`. The Early time is reported as latency (see
@@ -164,6 +166,18 @@ on all channels. The stress test also checks that no channel is left bent.
   `createNoteOns()`. A note's nearest grid step gets an accent level from `BarStructure`; the drop chance is
   Amount × level / finest level of the grid (bar start 0, the finest level 1). Notes within 30 ms of the
   previous note share its decision.
+- **Note Echo** (a `SchedulingModule`) schedules each held key's echoes at note-on and their note-offs at the
+  key's note-off, each as far after it as the echo started after the note-on, so echoes keep the note's length.
+  Pre-Delay (0.23.0, knobs E and F) moves the whole series later; it is read at note-on and stored with the
+  series (`EchoSeries::preDelayInSamples`), so the note-offs use the same pause.
+- **Bounce** (a `SchedulingModule`, 0.23.0) schedules all bounces of a played note at its note-on: the gap to
+  bounce k is the first gap × e^(k−1), the velocity the played velocity × e^k, where e is the material's
+  coefficient of restitution plus Bounciness (5 … 95 %). The first gap is 2 · √(2 g h) · e / g (Height Sync
+  *Height*) or a note value (*Tempo*, `divisionLengthInBeats()`). The series stops before a gap below 20 ms, a
+  velocity below 1, a note outside 0 … 127, after Bounces (Auto: 64) or when the queue is full. Each bounce
+  note lasts half the next gap, so same-pitch bounces never overlap; its note-off is scheduled with it. The
+  played note passes on time and ends with its key; a key repeated before its note-off (on, on, off from
+  upstream) ends its earlier note first, so the one note-off upstream sends balances the count.
 - **Diatonic Harmonizer** (a Generator since 0.22.1, in GeneratorModules.cpp; a Transform before) derives from
   `MidiModule` directly and keeps a `NoteMappingTable` and a `SoundingNoteCounter` itself: a note-on starts
   the note plus its harmony notes (`moveByScaleSteps()`, octaves ±12). A note-on within 30 ms of the previous
@@ -179,13 +193,22 @@ on all channels. The stress test also checks that no channel is left bent.
   (`endDueReleasedNotes()`); a note-on cuts a fall short. `isParameterInactive()` (ModuleDescriptions) tells
   the editor to dim Delay in these modes.
 
+**Knobs that depend on other knobs** (both in ModuleDescriptions): `isParameterInactive()` says when a knob has
+no effect with the module's other settings, and the editor dims it (Pitch Slide's Delay in the fall modes;
+Bounce's Height and Gravity with Height Sync *Tempo*, First Gap with *Height*). `getEffectiveParameterDescription()`
+returns the description that applies to a knob right now: usually the module table's entry, but Note Echo's
+Pre-Delay counts milliseconds (Integer 0 … 1000, "Off") instead of note values when Pre-Delay Sync is on *ms*.
+The module reads the knob with it, `MidiForgeProcessor::getKnobDescription()` uses it for the host's value
+text and text entry, and the editor for the value label and the knob's steps (`ParameterKnob::showStepsOf()`,
+checked on every refresh). The normalised host value stays the same when the unit changes.
+
 New module types are appended to `ModuleType` (their numbers are stored in projects); the module browser
 groups modules by category, so a new Generator still appears under *Generators*.
 
 ### Knobs added to existing modules
 
 A module may gain knobs in a later version (Repeater: E and F in 0.7.0, G in 0.9.0, H in 0.19.1; Arpeggiator:
-E in 0.19.1). Old projects and presets
+E in 0.19.1; Note Echo: E and F in 0.23.0, knob layout 4). Old projects and presets
 hold 0 for such a knob (its value while unused), which can be a bad setting (Chance 0 %). So every
 `ParameterDescription` names the knob layout version that added it (`addedInKnobLayout`), states store
 `knobLayout` (= `currentKnobLayoutVersion`), and after loading a project or user preset
@@ -231,7 +254,7 @@ strip in the footer for 8 seconds. Removal history is not saved in projects.
   delays odd steps, accents are chosen by step number) and re-synchronises after transport jumps or a
   switch between host and own clock, so steps are never replayed or fired in a burst. Gate lengths are capped one sample short of the step so
   a note always ends before the next starts.
-- Note Echo computes its delay from the tempo at note-on.
+- Note Echo computes its delay and Pre-Delay, and Bounce its gaps, from the tempo at note-on.
 - **Time signature:** `readBlockContext()` copies the host's time signature (`TimeSignature::fromHost()`, 4/4
   when missing or nonsensical) and the start of the current bar (`getPpqPositionOfLastBarStart()`) into the
   `BlockContext`. `barPositionAtBeat()` turns a position into bar number, position in the bar and bar length

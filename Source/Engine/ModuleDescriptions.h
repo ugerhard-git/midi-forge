@@ -60,6 +60,8 @@ enum class ModuleType : int
     // Added in 0.19.0
     BeatThinning,       ///< Randomizer
     DiatonicHarmonizer, ///< Generator (a Transform until 0.22.0; the number stays)
+    // Added in 0.23.0
+    Bounce, ///< Generator
 
     Count
 };
@@ -75,9 +77,9 @@ constexpr int numParameterPages = numParametersPerSlot / numParametersPerPage;
  * module gained later can be set to their defaults when an older state is loaded (an older state holds
  * 0 for them, which may be a bad value, e.g. a Chance of 0 %).
  * 0 = up to 0.6.0, 1 = 0.7.0 (Repeater page 2: Accent Boost, Length), 2 = 0.9.0 (Repeater: Chance),
- * 3 = 0.19.1 (Arpeggiator and Repeater: Grid).
+ * 3 = 0.19.1 (Arpeggiator and Repeater: Grid), 4 = 0.23.0 (Note Echo: Pre-Delay, Pre-Delay Sync).
  */
-constexpr int currentKnobLayoutVersion = 3;
+constexpr int currentKnobLayoutVersion = 4;
 
 /** How a parameter's normalised value is turned into a plain value and displayed. */
 enum class ParameterKind
@@ -166,6 +168,16 @@ const char* getCategoryName (ModuleCategory category) noexcept;
  */
 bool isParameterInactive (int moduleType, int parameterIndex, const float* normalisedValues) noexcept;
 
+/**
+ * @return The description that applies to a knob right now. Usually this is the module table's entry, but a
+ *         few knobs change their unit with another knob of the same module: Note Echo's Pre-Delay counts note
+ *         values with Pre-Delay Sync on *Tempo* and milliseconds with *ms*. Everything that turns a knob's
+ *         value into a number or a text (the module, the host's value text, the editor) uses this.
+ * @param normalisedValues The module's numParametersPerSlot values (0..1).
+ */
+const ParameterDescription& getEffectiveParameterDescription (int moduleType, int parameterIndex,
+                                                              const float* normalisedValues) noexcept;
+
 /** How well a module matches the search text of the module browser; higher is better. */
 enum class SearchRelevance
 {
@@ -248,7 +260,10 @@ extern const NoteDivision arpeggiatorDivisions[];
 extern const int numArpeggiatorDivisions;
 extern const NoteDivision repeaterDivisions[];
 extern const int numRepeaterDivisions;
-/** Slide lengths of the Pitch Slide, short to long. Its Delay knob uses "Off" followed by the same lengths. */
+/**
+ * Slide lengths of the Pitch Slide, short to long. Its Delay knob and Note Echo's Pre-Delay (with *Tempo*) use
+ * "Off" followed by the same lengths.
+ */
 extern const NoteDivision slideDivisions[];
 extern const int numSlideDivisions;
 
@@ -295,5 +310,32 @@ struct ChordShape
 };
 extern const ChordShape chordShapes[];
 extern const int numChordShapes;
+
+/** A drop height of the Bounce module. */
+struct BounceHeight
+{
+    const char* name;
+    double metres;
+};
+extern const BounceHeight bounceHeights[];
+extern const int numBounceHeights;
+
+/** A ball material of the Bounce module, with its coefficient of restitution (the share of speed it keeps). */
+struct BounceMaterial
+{
+    const char* name;
+    double restitution;
+};
+extern const BounceMaterial bounceMaterials[];
+extern const int numBounceMaterials;
+
+/** A place whose gravity the Bounce module can use. */
+struct BounceGravity
+{
+    const char* name;
+    double metresPerSecondSquared;
+};
+extern const BounceGravity bounceGravities[];
+extern const int numBounceGravities;
 
 } // namespace midiforge

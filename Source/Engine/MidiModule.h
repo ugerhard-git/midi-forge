@@ -93,7 +93,7 @@ public:
      * @param input            Events arriving at this module, sorted by sample position.
      * @param output           Receives this module's events. Does not need to be sorted.
      * @param context          Tempo, transport and timing of the block.
-     * @param parameterValues  The four normalised (0..1) parameter values of the slot, A to D.
+     * @param parameterValues  The slot's numParametersPerSlot normalised (0..1) parameter values, A to H.
      */
     virtual void process (const MidiEventList& input, MidiEventList& output, const BlockContext& context,
                           const float* parameterValues) = 0;
@@ -114,13 +114,13 @@ public:
     const ModuleDescription& getDescription() const noexcept { return description; }
 
 protected:
-    /** Reads parameter A..D (index 0..3) as a whole number in the parameter's plain range. */
+    /** Reads parameter A..H (index 0..7) as a whole number in the parameter's plain range. */
     int integerParameter (const float* parameterValues, int parameterIndex) const noexcept
     {
         return normalisedToInteger (description.parameters[parameterIndex], parameterValues[parameterIndex]);
     }
 
-    /** Reads parameter A..D (index 0..3) as a real number in the parameter's plain range. */
+    /** Reads parameter A..H (index 0..7) as a real number in the parameter's plain range. */
     float continuousParameter (const float* parameterValues, int parameterIndex) const noexcept
     {
         return normalisedToPlainValue (description.parameters[parameterIndex], parameterValues[parameterIndex]);
@@ -218,7 +218,7 @@ private:
 };
 
 /**
- * @brief Base for modules that send events in the future: arpeggiator, echo, humanize.
+ * @brief Base for modules that send events in the future: arpeggiator, echo, bounce, humanize.
  *
  * Future events are kept in a queue with absolute sample times and sent once their block arrives.
  */
@@ -230,8 +230,12 @@ public:
     void reset() override;
 
 protected:
-    /** Queues an event to be sent at an absolute sample time (see BlockContext::blockStartSample). */
-    void scheduleEvent (int64_t sampleTime, const MidiEvent& event);
+    /**
+     * Queues an event to be sent at an absolute sample time (see BlockContext::blockStartSample).
+     * @return False if a note-on was refused because the queue is full (note-offs are always accepted).
+     *         Schedule a note's note-off only when its note-on was accepted.
+     */
+    bool scheduleEvent (int64_t sampleTime, const MidiEvent& event);
 
     /** Sends an event now, keeping track of which notes are sounding. */
     void sendEvent (const MidiEvent& event, MidiEventList& output);
