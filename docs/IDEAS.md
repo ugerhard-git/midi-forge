@@ -20,8 +20,8 @@ Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 4. ~~Beat Thinning + Diatonic Harmonizer (0.19), time signatures followed everywhere~~ built
 5. ~~Modulating the modulation (0.20)~~ built
 6. ~~Pitch Slide: Fall Off (0.21)~~ built
-- Built in 0.22: the forge look of the header. Parked: the macOS build (see below; GitHub had no Mac runners
-  available on release day), Pitch Slide MPE, CLAP build.
+- Built in 0.22: the forge look of the header. Built in 0.24: the macOS build (with Audio Unit) and CLAP.
+  Parked: Pitch Slide MPE.
 
 ## Planned
 
@@ -29,26 +29,12 @@ Agreed order (28 Oct 2026). Each step: design discussion, explicit go, build.
 
 ## Ideas
 
-### macOS build
+### Notarized macOS build
 
-Added and removed again in 0.22.0: GitHub's macOS runners were not available (jobs cancelled after 15 minutes
-in the queue, "capacity constraints"), and the owner did not want the release to wait. To bring it back,
-add a second job next to `build`, with the fixed name `Plug-in (macOS)` (no matrix, so a skipped job
-still satisfies a required check of that name), `runs-on: macos-latest`, the same steps, and after
-"Collect plug-ins":
-ad-hoc sign and check (`codesign --force --deep --sign -`, `codesign --verify --deep`, `lipo -info`), then
-zip with `ditto -c -k --sequesterRsrc` in the job and upload that zip as the artifact (and add a download
-step for `MIDI-Forge-macOS` in the release job) (a GitHub artifact
-loses the bundle's file permissions, which breaks the signature); the release job then takes the zip as it
-is. Put the macOS install folder (`~/Library/Audio/Plug-Ins/VST3/`) and the quarantine note
-(`xattr -dr com.apple.quarantine …`) back into the manual and packaging/INSTALL.txt. Consider an Intel macOS
-runner as a fallback when Apple Silicon runners are scarce (the universal binary builds on either).
-
-### CLAP build
-
-Switched off in 0.9.0. `-DMIDI_FORGE_BUILD_CLAP=ON` brings it back; then add the CLAP target and file to the
-build and collect steps of the workflow (and sign it on macOS), and add its install folders to the manual and
-packaging/INSTALL.txt.
+Since 0.24.0 the macOS plug-ins are signed ad hoc only, so users remove the quarantine flag after
+downloading (`xattr -dr com.apple.quarantine …`). With an Apple Developer account (99 USD a year), CI could
+sign them with a Developer ID certificate and have Apple notarize them: the downloads would then install
+without the Terminal step. Needs the certificate and an app-specific password as repository secrets.
 
 ### Pitch Slide: MPE
 

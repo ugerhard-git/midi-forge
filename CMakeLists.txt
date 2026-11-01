@@ -3,31 +3,30 @@
 # Targets:
 #   midi_forge_engine        the JUCE-free MIDI engine (static library)
 #   midi_forge_engine_tests  engine tests, no JUCE needed           (MIDI_FORGE_BUILD_ENGINE_TESTS)
-#   MidiForge_VST3           the plug-in                             (MIDI_FORGE_BUILD_PLUGIN)
-#   MidiForge_CLAP           the plug-in as CLAP, currently not built (MIDI_FORGE_BUILD_CLAP)
+#   MidiForge_VST3           the plug-in as VST3                     (MIDI_FORGE_BUILD_PLUGIN)
+#   MidiForge_CLAP           the plug-in as CLAP                     (MIDI_FORGE_BUILD_CLAP)
+#   MidiForge_AU             the plug-in as Audio Unit, macOS only   (MIDI_FORGE_BUILD_PLUGIN)
 #   midi_forge_plugin_tests  tests of the JUCE layer and the editor  (MIDI_FORGE_BUILD_PLUGIN_TESTS)
 #
 # See CONTRIBUTING.md for the commands CI runs.
 
 cmake_minimum_required(VERSION 3.28)
 
-project(MidiForge VERSION 0.23.0 LANGUAGES C CXX)
+project(MidiForge VERSION 0.24.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON) # for clang-tidy and IDEs
 
-option(MIDI_FORGE_BUILD_PLUGIN "Build the VST3 plug-in (downloads JUCE)" ON)
-# CLAP is switched off for now (the owner only needs the VST3); turning this on brings it back.
-option(MIDI_FORGE_BUILD_CLAP "Also build the CLAP plug-in (downloads clap-juce-extensions)" OFF)
+option(MIDI_FORGE_BUILD_PLUGIN "Build the plug-in: VST3, and on macOS also the Audio Unit (downloads JUCE)" ON)
+option(MIDI_FORGE_BUILD_CLAP "Also build the CLAP plug-in (downloads clap-juce-extensions)" ON)
 option(MIDI_FORGE_BUILD_ENGINE_TESTS "Build the engine tests" ON)
 option(MIDI_FORGE_BUILD_PLUGIN_TESTS "Build the plug-in layer tests (needs MIDI_FORGE_BUILD_PLUGIN)" OFF)
 option(MIDI_FORGE_WARNINGS_AS_ERRORS "Treat compiler warnings in our own code as errors" OFF)
 option(MIDI_FORGE_SANITIZERS "Build the engine and its tests with address and undefined-behaviour sanitizers" OFF)
 
-# Universal binary on macOS (Apple Silicon and Intel) unless the caller decides otherwise. CI builds Windows only
-# for now; this stays so a Mac build can come back by adding the CI job (see docs/IDEAS.md).
+# Universal binary on macOS (Apple Silicon and Intel) unless the caller decides otherwise.
 if(APPLE AND NOT CMAKE_OSX_ARCHITECTURES)
     set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64" CACHE STRING "" FORCE)
 endif()
@@ -191,6 +190,14 @@ if(MIDI_FORGE_BUILD_PLUGIN)
         JUCE_VST3_CAN_REPLACE_VST2=0
         JUCE_DISPLAY_SPLASH_SCREEN=0)
 
+    # VST3 everywhere; the Audio Unit only exists on macOS. JUCE makes a MIDI effect an AU of type 'aumi'
+    # (MIDI processor, e.g. Logic's MIDI FX slot), with subtype PLUGIN_CODE and manufacturer
+    # PLUGIN_MANUFACTURER_CODE (it must contain an upper-case letter; all lower case is reserved for Apple).
+    set(MIDI_FORGE_PLUGIN_FORMATS VST3)
+    if(APPLE)
+        list(APPEND MIDI_FORGE_PLUGIN_FORMATS AU)
+    endif()
+
     juce_add_plugin(MidiForge
         PRODUCT_NAME "MIDI Forge"
         VERSION ${PROJECT_VERSION}
@@ -198,7 +205,7 @@ if(MIDI_FORGE_BUILD_PLUGIN)
         BUNDLE_ID com.ugerhard.midiforge
         PLUGIN_MANUFACTURER_CODE Ugrh
         PLUGIN_CODE MFrg
-        FORMATS VST3
+        FORMATS ${MIDI_FORGE_PLUGIN_FORMATS}
         IS_SYNTH FALSE
         IS_MIDI_EFFECT TRUE
         NEEDS_MIDI_INPUT TRUE
@@ -222,6 +229,7 @@ if(MIDI_FORGE_BUILD_PLUGIN)
             juce::juce_recommended_lto_flags
             juce::juce_recommended_warning_flags)
 
+    # The CLAP wrapper (target MidiForge_CLAP) around the same plug-in code.
     if(MIDI_FORGE_BUILD_CLAP)
         clap_juce_extensions_plugin(TARGET MidiForge
             CLAP_ID "com.ugerhard.midiforge"

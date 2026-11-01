@@ -57,15 +57,19 @@ cmake -S . -B build -DMIDI_FORGE_BUILD_PLUGIN=OFF -DMIDI_FORGE_WARNINGS_AS_ERROR
 cmake --build build
 ctest --test-dir build --output-on-failure
 
-# Plug-in (VST3) and the plug-in layer tests (add -DMIDI_FORGE_BUILD_CLAP=ON and MidiForge_CLAP for CLAP)
+# Plug-in (VST3, CLAP; on macOS also MidiForge_AU) and the plug-in layer tests
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DMIDI_FORGE_BUILD_PLUGIN_TESTS=ON
-cmake --build build --config Release --target MidiForge_VST3 midi_forge_plugin_tests
+cmake --build build --config Release --target MidiForge_VST3 MidiForge_CLAP midi_forge_plugin_tests
 ```
 
 On Linux the plug-in needs the JUCE dependencies, e.g. on Ubuntu:
 `libasound2-dev libfreetype-dev libfontconfig1-dev libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxext-dev libxi-dev libxcomposite-dev libxrender-dev libgl1-mesa-dev`.
 
-Results land in `build/MidiForge_artefacts/Release/VST3`.
+Results land in `build/MidiForge_artefacts/Release/` (`VST3/`, `CLAP/`, on macOS `AU/`). CLAP is built by
+default (`-DMIDI_FORGE_BUILD_CLAP=OFF` skips the download of clap-juce-extensions). To check a CLAP like CI
+does, build clap-validator 0.4.1 with `cargo install --git https://github.com/free-audio/clap-validator --rev
+152b9823e992d782c5c1fd33bca0295478b919aa --locked` and run `clap-validator validate --exclude
+state-reproducibility "…/MIDI Forge.clap"` (see ARCHITECTURE.md for the excluded tests).
 
 ## Checks to run before pushing
 

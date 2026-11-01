@@ -4,6 +4,20 @@ What changed in each release of MIDI Forge. The release workflow publishes the s
 text of its GitHub release, so every section starts with `## [version]` and is written for users.
 Versions below 1.0 are betas: they are published as pre-releases.
 
+## [0.24.0] – CLAP, and MIDI Forge for macOS
+
+- **CLAP:** MIDI Forge now also comes as a CLAP plug-in, for Windows and macOS. Reaper and Bitwig Studio list
+  it next to the VST3; both work the same.
+- **macOS:** `MIDI-Forge-macOS.zip` holds VST3, CLAP and – new – an **Audio Unit** for Logic Pro's MIDI FX
+  slot. Universal binaries for Apple Silicon and Intel, macOS 11 or newer. **Not tried on a Mac yet:** the
+  build is checked automatically (signature, both processor types, Apple's Audio Unit validator, the CLAP
+  validator), but no one has played it in a DAW on a Mac so far. Please report how it works in the *Issues*.
+  The plug-ins are not notarized by Apple: after copying them, unblock them once in the Terminal as
+  `INSTALL.txt` describes. The macOS zip may appear on this page a little after the Windows one.
+- Fixed: in CLAP hosts, typing a route target that contains "·" (e.g. "Slot 3 · A (unused)") selected *None*.
+- Every download now includes `THIRD-PARTY-NOTICES.txt` with the licences of the third-party code inside the
+  plug-ins (VST3 SDK, CLAP, Apple's Audio Unit SDK).
+
 ## [0.23.0] – Bounce, and a Pre-Delay for Note Echo
 
 - **New module: Bounce** (a Generator). A delay whose repeats follow a ball bouncing on the floor: the note

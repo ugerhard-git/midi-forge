@@ -1,6 +1,7 @@
 # MIDI Forge – User Manual
 
-MIDI Forge is a MIDI effect plug-in (VST3) for Windows. It sits in front of an
+MIDI Forge is a MIDI effect plug-in (VST3 and CLAP for Windows and macOS, Audio Unit for macOS). It sits in
+front of an
 instrument and changes the MIDI on its way there: it can filter notes out, transform them, generate
 new ones and add controlled randomness. You build the effect from up to eight **modules** that you
 stack in **slots**.
@@ -20,17 +21,47 @@ stack in **slots**.
 
 ## Installation
 
-Download `MIDI-Forge-Windows.zip` from the project's **Releases** page on GitHub (or, for test builds,
-from the **Actions** tab → latest successful run → *Artifacts*) and copy `MIDI Forge.vst3` to
-`C:\Program Files\Common Files\VST3\`.
+Download the zip for your system from the project's **Releases** page on GitHub (or, for test builds, from
+the **Actions** tab → latest successful run → *Artifacts*). Each zip holds the plug-in in every format for
+that system; copy the formats your DAW uses (most DAWs need just one), then let the DAW rescan its plug-ins.
 
-Then let your DAW rescan its plug-ins. MIDI Forge is available for Windows only for now; a macOS build is
-planned.
+**Windows** – `MIDI-Forge-Windows.zip`:
+
+| Format | Copy to |
+|--------|---------|
+| `MIDI Forge.vst3` | `C:\Program Files\Common Files\VST3\` |
+| `MIDI Forge.clap` | `C:\Program Files\Common Files\CLAP\` |
+
+**macOS** (Apple Silicon and Intel, macOS 11 or newer) – `MIDI-Forge-macOS.zip`:
+
+| Format | Copy to |
+|--------|---------|
+| `MIDI Forge.vst3` | `~/Library/Audio/Plug-Ins/VST3/` |
+| `MIDI Forge.component` (Audio Unit) | `~/Library/Audio/Plug-Ins/Components/` |
+| `MIDI Forge.clap` | `~/Library/Audio/Plug-Ins/CLAP/` |
+
+`~/Library` is the Library folder in your home folder (in the Finder: *Go → Go to Folder…*, type
+`~/Library/Audio/Plug-Ins`). The macOS plug-ins are not notarized by Apple, so macOS blocks them after a
+download. Unblock them once in the *Terminal*:
+
+```sh
+xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/"MIDI Forge.vst3" \
+    ~/Library/Audio/Plug-Ins/Components/"MIDI Forge.component" ~/Library/Audio/Plug-Ins/CLAP/"MIDI Forge.clap"
+```
+
+(Leave out the formats you did not copy.) The macOS build is checked automatically – signature, both
+processor types, Apple's Audio Unit validator and the CLAP validator – but has not been tried in a DAW on a
+Mac yet. Please report how it works for you in the repository's *Issues*.
 
 ## Where to put it in your DAW
 
 - **Reaper:** add MIDI Forge to a track's FX chain *above* the instrument. MIDI flows top to bottom.
 - **Bitwig Studio:** put MIDI Forge in an instrument's **Note FX** section, or as a device before the instrument.
+- **Logic Pro** (Audio Unit): on a software instrument track, click the **MIDI FX** slot above the instrument
+  and choose *Audio Units → ugerhard → MIDI Forge*.
+
+Reaper and Bitwig list MIDI Forge as VST3 and as CLAP; both work the same, pick one. Projects saved with one
+format load only with that format.
 
 MIDI Forge does not process audio. Ableton Live cannot host MIDI-effect plug-ins.
 
@@ -880,7 +911,9 @@ Factory presets cannot be changed or deleted; save your changes as your own pres
 
 ### Where your presets are stored
 
-Every preset is a small file called `Name.mfpreset` in `Documents\MIDI Forge\Presets\`.
+Every preset is a small file called `Name.mfpreset` in your Documents folder, under `MIDI Forge/Presets`
+(Windows: `Documents\MIDI Forge\Presets\`, macOS: `~/Documents/MIDI Forge/Presets/`). The VST3, CLAP and
+Audio Unit share these presets.
 
 Because they are in one place, your presets are available in every project and every DAW. Back up or
 share them by copying the files. You can also copy files into the folder directly; while the plug-in window

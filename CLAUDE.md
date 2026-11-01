@@ -1,6 +1,7 @@
 # CLAUDE.md – working rules for AI assistants
 
-MIDI Forge is a modular MIDI effect plug-in (VST3, Windows; macOS and CLAP builds are switched off for now) built with JUCE 9 and CMake.
+MIDI Forge is a modular MIDI effect plug-in (VST3 and CLAP for Windows and macOS, Audio Unit for macOS) built with JUCE 9
+and CMake.
 It is built exclusively by GitHub Actions; the owner does not build locally.
 
 Read first: [CONTRIBUTING.md](CONTRIBUTING.md) (all ground rules apply to you), then

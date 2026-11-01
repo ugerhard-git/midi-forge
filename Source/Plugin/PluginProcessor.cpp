@@ -26,6 +26,29 @@ constexpr int tempoSyncIndex = 1;
 constexpr int numRoutesBefore0_20 = 8;
 const juce::String middleDot = juce::String::fromUTF8 (" \xc2\xb7 ");
 
+/**
+ * Repairs text typed in a CLAP host. The CLAP wrapper passes the host's UTF-8 text to JUCE as plain 8-bit
+ * characters, so a "·" (two bytes in UTF-8) arrives as two characters ("Â·") and no name matches. If every
+ * character fits in a byte and the bytes are valid UTF-8 with at least one multi-byte character, they are
+ * decoded again; any other text (from VST3 hosts, typed in the editor) is returned unchanged.
+ */
+juce::String repairTextDecodedBytewise (const juce::String& text)
+{
+    std::string bytes;
+    bool hasNonAsciiByte = false;
+    for (auto character = text.getCharPointer(); ! character.isEmpty();)
+    {
+        const auto codePoint = character.getAndAdvance();
+        if (codePoint > 0xff)
+            return text; // already real Unicode text
+        hasNonAsciiByte = hasNonAsciiByte || codePoint >= 0x80;
+        bytes.push_back ((char) (unsigned char) codePoint);
+    }
+    if (! hasNonAsciiByte || ! juce::CharPointer_UTF8::isValidString (bytes.data(), (int) bytes.size()))
+        return text;
+    return juce::String::fromUTF8 (bytes.data(), (int) bytes.size());
+}
+
 juce::StringArray namesOf (const char* const* names, int count)
 {
     juce::StringArray result;
@@ -228,20 +251,21 @@ std::unique_ptr<juce::AudioParameterFloat> MidiForgeProcessor::createModuleParam
                                                                                       int version)
 {
     // The host shows these values in the units of whichever module is loaded in the slot.
-    auto attributes = juce::AudioParameterFloatAttributes()
-                          .withStringFromValueFunction (
-                              [this, slotIndex, parameterIndex] (float normalisedValue, int)
-                              {
-                                  const auto& description = getKnobDescription (slotIndex, parameterIndex);
-                                  return juce::String (formatParameterValue (description, normalisedValue));
-                              })
-                          .withValueFromStringFunction (
-                              [this, slotIndex, parameterIndex] (const juce::String& text)
-                              {
-                                  const auto& description = getKnobDescription (slotIndex, parameterIndex);
-                                  return parseParameterText (description, text.trim().toStdString(),
-                                                             getParameterValue (slotIndex, parameterIndex));
-                              });
+    auto attributes =
+        juce::AudioParameterFloatAttributes()
+            .withStringFromValueFunction (
+                [this, slotIndex, parameterIndex] (float normalisedValue, int)
+                {
+                    const auto& description = getKnobDescription (slotIndex, parameterIndex);
+                    return juce::String (formatParameterValue (description, normalisedValue));
+                })
+            .withValueFromStringFunction (
+                [this, slotIndex, parameterIndex] (const juce::String& text)
+                {
+                    const auto& description = getKnobDescription (slotIndex, parameterIndex);
+                    return parseParameterText (description, repairTextDecodedBytewise (text).trim().toStdString(),
+                                               getParameterValue (slotIndex, parameterIndex));
+                });
 
     return std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIds::moduleParameter (slotIndex, parameterIndex), version },
@@ -351,8 +375,9 @@ void MidiForgeProcessor::addRouteParameterGroup (juce::AudioProcessorValueTreeSt
             .withStringFromValueFunction ([this] (int targetIndex, int)
                                           { return getModulationTargetName (targetIndex); })
             .withValueFromStringFunction (
-                [this, targetNames] (const juce::String& text)
+                [this, targetNames] (const juce::String& typedText)
                 {
+                    const auto text = repairTextDecodedBytewise (typedText).trim();
                     for (int targetIndex = 0; targetIndex < numModulationTargets; ++targetIndex)
                         if (text == targetNames[targetIndex] || text == getModulationTargetName (targetIndex))
                             return targetIndex;
