@@ -23,8 +23,10 @@ This document explains how the code is organised and why. It is kept true with e
 
 The **engine** (`Source/Engine`) is plain C++17 without JUCE. It can be built and tested on any
 machine in seconds (`midi_forge_engine_tests`). The **plug-in layer** (`Source/Plugin`, `Source/UI`)
-connects it to JUCE, which provides the VST3 wrapper, parameters and the editor. A CLAP wrapper from
-`clap-juce-extensions` can be switched on with `-DMIDI_FORGE_BUILD_CLAP=ON` (off for now).
+connects it to JUCE, which provides the VST3 and Audio Unit wrappers, parameters and the editor. The CLAP
+wrapper comes from `clap-juce-extensions` (`MIDI_FORGE_BUILD_CLAP`, on by default). All formats share one
+`MidiForgeProcessor`; the AU exists on macOS only (`FORMATS` in CMakeLists.txt) and is a MIDI processor
+(type `aumi`, subtype `MFrg`, manufacturer `Ugrh`), as JUCE makes every `IS_MIDI_EFFECT` plug-in.
 
 ## Source layout
 
@@ -372,26 +374,46 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md#building) for commands. The workflow
    under the job's own name. That is why every job has a fixed name (no `${{ }}` expressions, no matrix);
    these are the names to require in the `main` ruleset: *What changed*, *Format, lint and engine tests*,
    *Plug-in layer tests and editor screenshots*, *Plug-in (Windows)*, *CodeQL (C++)* and, from the second
-   workflow below, *Workflow security audit*.
+   workflow below, *Workflow security audit*. *Plug-in (macOS)* is deliberately not required yet: macOS
+   runners were unavailable for hours in October 2026, which would block every pull request. Add it once
+   the macOS runners have proven reliable.
 1. **Checks** (Linux): clang-format, clang-tidy, engine tests with warnings as errors, engine tests
    under address/UB sanitizers, plug-in layer tests, and screenshots of both editor pages (artifact
    `editor-screenshots`, the source of `docs/images/editor.png` and `docs/images/modulation.png`).
-2. **Plug-in (Windows)**: one job without a matrix, so its name is fixed. It builds the VST3 and uploads it
-   with INSTALL.txt and LICENSE.txt as artifact `MIDI-Forge-Windows`, as a folder (GitHub zips artifacts
-   itself, so the download is a single zip); the release job downloads the artifact by exactly this name.
-   macOS and CLAP builds are switched off for now (see docs/IDEAS.md): a macOS build would come back as a
-   second job with its own fixed name. CMake still knows both (universal binary on macOS,
-   `MIDI_FORGE_BUILD_CLAP`).
+2. **Plug-in (Windows)** and **Plug-in (macOS)**: one job per system, without a matrix, so their names are
+   fixed. Both validate the CLAP with clap-validator 0.4.1, built with `cargo install --locked` from its
+   pinned commit and a pinned Rust toolchain (1.97.0), so every Rust dependency is checked against the
+   checksums in its Cargo.lock. The *state-reproducibility* tests are excluded: since 0.4.1 they also demand
+   that a plug-in asks the host to re-read all parameter values after a state load, which clap-juce-extensions
+   does not do. The values themselves load correctly (plug-in tests), and hosts read them with the next block.
+   The other validator tests found one real bug: a CLAP host passes typed text as UTF-8, which the wrapper
+   hands to JUCE one byte per character, so route targets with "·" did not parse. `repairTextDecodedBytewise()`
+   (PluginProcessor.cpp) restores such text in the text-to-value functions.
+   - *Windows* builds the VST3 and the CLAP and uploads them with INSTALL.txt, LICENSE.txt and
+     THIRD-PARTY-NOTICES.txt as artifact `MIDI-Forge-Windows`, as a folder (GitHub zips artifacts itself, so
+     the download is a single zip); the release job downloads the artifact by exactly this name.
+   - *macOS* builds VST3, AU and CLAP as universal binaries (arm64 and x86_64, macOS 11 or newer), signs each
+     bundle ad hoc (no Apple Developer certificate; Apple Silicon loads only signed code), checks the
+     signature and that each binary holds both architectures (`lipo -archs`), runs Apple's `auval -strict` on
+     the AU, and zips the folder with `ditto` (an artifact would lose the bundles' file permissions and break
+     the signatures). The artifact `MIDI-Forge-macOS` holds that zip.
+   - `packaging/write-third-party-notices.sh` writes THIRD-PARTY-NOTICES.txt from the licence files of the
+     fetched sources (VST3 SDK, clap-juce-extensions, CLAP, clap-helpers; on macOS also Apple's Audio Unit
+     SDK), so it always matches what was built.
+   - The plug-in tests and CodeQL configure with `-DMIDI_FORGE_BUILD_CLAP=OFF`: they don't build the CLAP.
 3. **CodeQL (C++)**: security analysis (`security-extended` queries) of MIDI Forge's own code; results
    appear under the repository's *Security → Code scanning*. CodeQL analyses every file compiled while it
    watches the build, and its path filters do not apply to C++, so the job first builds everything without
    CodeQL, then deletes only our own object files (`Source/`, `Tests/`) and rebuilds them under CodeQL. JUCE
    thus stays out of the results. (Code scanning's *default setup* must stay off: it conflicts with this
    workflow.)
-4. **Release** (tags `v*` only, after all of the above): zips each artifact folder, takes the text
-   from the version's section of `CHANGELOG.md` (no section: the job fails) and creates the GitHub release –
-   a pre-release for versions below 1.0 or tags with a suffix. If a release for the tag exists already, it
-   only uploads the zips (`--clobber`).
+4. **Publish release** (tags `v*` only, after the Windows build, the plug-in tests and CodeQL): zips the
+   Windows artifact folder, takes the text from the version's section of `CHANGELOG.md` (no section: the job
+   fails) and creates the GitHub release – a pre-release for versions below 1.0 or tags with a suffix. If a
+   release for the tag exists already, it only uploads the zip (`--clobber`).
+5. **Publish release (macOS zip)** (tags only, after the release and the macOS build): uploads
+   `MIDI-Forge-macOS.zip` to the release. A release thus never waits for a macOS runner; if the macOS build
+   fails, the release has only the Windows zip until the failed jobs are re-run.
 
 **JUCE modules linked** (plug-in and plug-in tests): `juce_audio_processors` – the plug-in wrapper (VST3),
 host parameters and state; it brings `juce_audio_processors_headless`, `juce_audio_basics`, `juce_events`,
@@ -410,16 +432,18 @@ every pull request and push to `main` (it is never skipped). It checks all workf
 credentials, cache poisoning – and fails on any finding of low severity or above. zizmor is installed in a
 virtual environment from `.github/requirements-ci.txt`, pinned by version and hash (`pip --require-hashes`).
 
-Dependencies (JUCE 9.0.4; clap-juce-extensions only with CLAP switched on) are fetched by CMake at pinned
-versions; GitHub Actions are pinned to commit SHAs, and the CI tools in `.github/requirements-ci.txt` by
+Dependencies (JUCE 9.0.4, clap-juce-extensions) are fetched by CMake at pinned versions; clap-validator is
+built from a pinned commit with `--locked`; GitHub Actions are pinned to commit SHAs, and the CI tools in `.github/requirements-ci.txt` by
 version and hash. Dependabot proposes updates to both every week.
 
 ## Licensing note
 
 MIDI Forge is licensed under the **GNU Affero General Public License v3** (`LICENSE`). JUCE 9 is dual
 licensed (AGPLv3 or a commercial JUCE licence); MIDI Forge uses it under the AGPLv3, so the plug-in as a whole
-is AGPLv3. The VST3 SDK that JUCE ships is MIT licensed since VST 3.8. Every release zip contains the licence
-(`LICENSE.txt`) and `INSTALL.txt`, which names the licence, the missing warranty and where the source is. The
+is AGPLv3. The VST3 SDK that JUCE ships is MIT licensed since VST 3.8, clap-juce-extensions, CLAP and
+clap-helpers are MIT licensed, and Apple's Audio Unit SDK (macOS) is under the Apache License 2.0. Every
+release zip contains the licence (`LICENSE.txt`), `INSTALL.txt`, which names the licence, the missing warranty
+and where the source is, and `THIRD-PARTY-NOTICES.txt` with the licence texts of that third-party code. The
 editor shows the same notices under ⋯ → About MIDI Forge (`getAboutText()` in `PresetBar`), as the AGPLv3
 asks of interactive programs.
 Contributions are accepted under the same licence. Dependencies are pinned: JUCE by tag plus a check of the

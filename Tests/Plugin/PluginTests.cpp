@@ -470,6 +470,24 @@ TEST_CASE ("plugin: route targets are shown with the module's parameter names")
     EXPECT (rate->getCurrentValueAsText() == "0.25 Hz");
 }
 
+TEST_CASE ("plugin: route target texts round-trip, also when a CLAP host's UTF-8 arrives byte by byte")
+{
+    MidiForgeProcessor processor; // slot 3 is empty, so its knob A is "unused"
+    auto* target = processor.parameters.getParameter (ParameterIds::routeTarget (9));
+    const float slot3A = target->convertTo0to1 ((float) modulationTargetIndex (2, 0));
+    const auto text = target->getText (slot3A, 0);
+    EXPECT (text == juce::String::fromUTF8 ("Slot 3 \xc2\xb7 A (unused)"));
+    EXPECT (std::abs (target->getValueForText (text) - slot3A) < 1.0e-6f);
+
+    // The CLAP wrapper hands the host's UTF-8 text to JUCE one byte per character ("Slot 3 Â· A ...").
+    juce::String bytewise;
+    for (const char* byte = text.toRawUTF8(); *byte != 0; ++byte)
+        bytewise += juce::String::charToString ((juce::juce_wchar) (juce::uint8) *byte);
+    EXPECT (bytewise != text);
+    EXPECT (std::abs (target->getValueForText (bytewise) - slot3A) < 1.0e-6f);
+    EXPECT (target->getValueForText ("no such target") == 0.0f);
+}
+
 TEST_CASE ("plugin: presets set up their LFOs and routes and clear them again")
 {
     MidiForgeProcessor processor;

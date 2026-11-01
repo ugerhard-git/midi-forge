@@ -125,7 +125,8 @@ jobs:
       - name: Build
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DMIDI_FORGE_BUILD_PLUGIN_TESTS=ON \
-            -DMIDI_FORGE_BUILD_ENGINE_TESTS=OFF -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps"
+            -DMIDI_FORGE_BUILD_ENGINE_TESTS=OFF -DMIDI_FORGE_BUILD_CLAP=OFF \
+            -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps"
           cmake --build build --target midi_forge_plugin_tests
 
       - name: Run tests and render the editor
@@ -140,10 +141,8 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  # Windows only for now, so the job has a fixed name and no matrix: a required check named
-  # "Plug-in (Windows)" is then also satisfied when the job is skipped. A macOS job (universal binary, ad-hoc
-  # codesign, ditto zip) can be added back later as a second job; it is described in docs/IDEAS.md, and CMake
-  # still builds a universal binary on macOS.
+  # One job per system, each with a fixed name (no matrix): a required status check is matched by name, and a
+  # job skipped by its `if` still satisfies it.
   build:
     name: Plug-in (Windows)
     # Skipped when only documentation changed (see the "changes" job); skipped jobs count as passed.
@@ -161,11 +160,11 @@ jobs:
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DMIDI_FORGE_BUILD_ENGINE_TESTS=OFF -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps"
 
       # On failure the compiler errors are also posted as annotations, so they show on the run's summary page.
-      - name: Build
+      - name: Build VST3 and CLAP
         shell: bash
         run: |
           set -o pipefail
-          if ! cmake --build build --config Release --target MidiForge_VST3 --parallel 4 2>&1 | tee build.log; then
+          if ! cmake --build build --config Release --target MidiForge_VST3 MidiForge_CLAP --parallel 4 2>&1 | tee build.log; then
             grep -E "error|fatal" build.log | sort -u | head -n 20 | sed 's/^/::error::/'
             exit 1
           fi
@@ -175,8 +174,22 @@ jobs:
         run: |
           mkdir -p dist
           cp -R "build/MidiForge_artefacts/Release/VST3/MIDI Forge.vst3" dist/
+          cp "build/MidiForge_artefacts/Release/CLAP/MIDI Forge.clap" dist/
           cp packaging/INSTALL.txt dist/
           cp LICENSE dist/LICENSE.txt
+          packaging/write-third-party-notices.sh .deps dist/THIRD-PARTY-NOTICES.txt
+
+      # See "Validate the CLAP" in the macOS job for the version, the pin and the excluded tests.
+      - name: Validate the CLAP
+        shell: bash
+        env:
+          VALIDATOR_COMMIT: 152b9823e992d782c5c1fd33bca0295478b919aa # clap-validator 0.4.1
+        run: |
+          rustup toolchain install 1.97.0 --profile minimal
+          cargo +1.97.0 install --git https://github.com/free-audio/clap-validator --rev "$VALIDATOR_COMMIT" \
+            --locked --root "$RUNNER_TEMP/clap-validator"
+          "$RUNNER_TEMP/clap-validator/bin/clap-validator" validate --only-failed --exclude 'state-reproducibility' \
+            "dist/MIDI Forge.clap"
 
       # GitHub always delivers an artifact as a zip, so the folder is uploaded as it is (zipping it here
       # would give a zip inside a zip). The release job makes the release zip itself.
@@ -184,6 +197,93 @@ jobs:
         with:
           name: MIDI-Forge-Windows # the release job downloads it by this name
           path: dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  # VST3, AU and CLAP as universal binaries (Apple Silicon and Intel). Not a required check for now: macOS
+  # runners were unavailable for hours in October 2026, and a release does not wait for this job (see
+  # "release-macos").
+  build-macos:
+    name: Plug-in (macOS)
+    # Skipped when only documentation changed (see the "changes" job); skipped jobs count as passed.
+    needs: [changes, engine-checks]
+    if: needs.changes.outputs.code == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DMIDI_FORGE_BUILD_ENGINE_TESTS=OFF -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps"
+
+      - name: Build VST3, AU and CLAP
+        run: |
+          set -o pipefail
+          if ! cmake --build build --config Release --target MidiForge_VST3 MidiForge_AU MidiForge_CLAP --parallel 4 2>&1 | tee build.log; then
+            grep -E "error|fatal" build.log | sort -u | head -n 20 | sed 's/^/::error::/'
+            exit 1
+          fi
+
+      # Ad-hoc signing (no Apple Developer certificate): Apple Silicon only loads signed code. Users still
+      # remove the quarantine flag after downloading (see INSTALL.txt). Every bundle must hold both CPUs.
+      - name: Collect, sign and check the plug-ins
+        run: |
+          mkdir -p dist
+          for format in "VST3/MIDI Forge.vst3" "AU/MIDI Forge.component" "CLAP/MIDI Forge.clap"; do
+            cp -R "build/MidiForge_artefacts/Release/$format" dist/
+          done
+          for bundle in dist/*.vst3 dist/*.component dist/*.clap; do
+            codesign --force --deep --sign - "$bundle"
+            codesign --verify --deep --strict --verbose=2 "$bundle"
+            architectures=$(lipo -archs "$bundle/Contents/MacOS/MIDI Forge")
+            echo "$bundle: $architectures"
+            if [[ "$architectures" != *arm64* || "$architectures" != *x86_64* ]]; then
+              echo "::error::$bundle is not a universal binary ($architectures)"
+              exit 1
+            fi
+          done
+          cp packaging/INSTALL.txt dist/
+          cp LICENSE dist/LICENSE.txt
+          packaging/write-third-party-notices.sh .deps dist/THIRD-PARTY-NOTICES.txt --with-audio-unit
+
+      # Apple's Audio Unit validator: the AU is a MIDI processor ('aumi'), subtype MFrg, manufacturer Ugrh.
+      - name: Validate the AU (auval)
+        run: |
+          mkdir -p ~/Library/Audio/Plug-Ins/Components
+          cp -R "dist/MIDI Forge.component" ~/Library/Audio/Plug-Ins/Components/
+          killall -9 AudioComponentRegistrar || true # makes macOS find the new component
+          auval -strict -v aumi MFrg Ugrh | tee auval.log
+          grep -q "AU VALIDATION SUCCEEDED" auval.log
+
+      # clap-validator 0.4.1 (free-audio), built from its pinned commit; --locked checks every Rust dependency
+      # against the checksums in its Cargo.lock. The state-reproducibility tests are left out: since 0.4.1
+      # they also demand that a plug-in asks the host to re-read all values after loading a state, which the
+      # CLAP wrapper (clap-juce-extensions) does not do. The values themselves load correctly (checked by the
+      # plug-in tests); the hosts read them when they process the next block.
+      - name: Validate the CLAP
+        env:
+          VALIDATOR_COMMIT: 152b9823e992d782c5c1fd33bca0295478b919aa # clap-validator 0.4.1
+        run: |
+          rustup toolchain install 1.97.0 --profile minimal
+          cargo +1.97.0 install --git https://github.com/free-audio/clap-validator --rev "$VALIDATOR_COMMIT" \
+            --locked --root "$RUNNER_TEMP/clap-validator"
+          "$RUNNER_TEMP/clap-validator/bin/clap-validator" validate --only-failed --exclude 'state-reproducibility' \
+            "dist/MIDI Forge.clap"
+
+      # A GitHub artifact loses the bundles' file permissions, which breaks their signatures. So the folder is
+      # zipped here with ditto (keeps permissions and signatures), and the release job uploads that zip as it is.
+      - name: Zip the plug-ins
+        run: |
+          mkdir -p package
+          ditto -c -k --sequesterRsrc dist package/MIDI-Forge-macOS.zip
+          unzip -l package/MIDI-Forge-macOS.zip | tail -n 3
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: MIDI-Forge-macOS # release-macos downloads it by this name
+          path: package/MIDI-Forge-macOS.zip
           if-no-files-found: error
           retention-days: 30
 
@@ -212,7 +312,7 @@ jobs:
       - name: Configure
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DMIDI_FORGE_BUILD_PLUGIN_TESTS=ON \
-            -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps"
+            -DMIDI_FORGE_BUILD_CLAP=OFF -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps"
 
       # CodeQL analyses every file that is compiled while it watches the build, and its path filters do not
       # apply to C++. So everything is built once *before* CodeQL starts, then only MIDI Forge's own object
@@ -251,9 +351,9 @@ jobs:
           persist-credentials: false
           path: source
 
-      # Each platform's artifact is downloaded by name into its own folder. (With a pattern, a single matching
+      # The Windows artifact is downloaded by name into its own folder. (With a pattern, a single matching
       # artifact lands directly in `path`, so the loop below would zip the plug-in bundle instead – that
-      # broke the 0.22.0 release zip.) A new platform gets its own step here.
+      # broke the 0.22.0 release zip.) The macOS zip is added by release-macos.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: MIDI-Forge-Windows
@@ -298,3 +398,25 @@ jobs:
             gh release create "$TAG" ./*.zip --repo "$GITHUB_REPOSITORY" --title "$title" \
               --notes-file release-notes.md "${prerelease[@]}"
           fi
+
+  # The macOS zip is added to the release when its build is done, so a release never waits for a macOS runner.
+  # If the macOS build fails, the release keeps only the Windows zip; re-running the failed jobs adds it later.
+  release-macos:
+    name: Publish release (macOS zip)
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-macos, release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: MIDI-Forge-macOS
+          path: artifacts/macos
+
+      - name: Add the macOS zip to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release upload "$TAG" artifacts/macos/MIDI-Forge-macOS.zip --repo "$GITHUB_REPOSITORY" --clobber

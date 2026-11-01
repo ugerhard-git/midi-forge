@@ -5,7 +5,8 @@ and randomizers – in front of any instrument.
 
 ![MIDI Forge](docs/images/editor.png)
 
-- **Format:** VST3 · **System:** Windows (a macOS build is planned)
+- **Formats:** VST3 and CLAP (Windows, macOS), Audio Unit (macOS) · **macOS:** universal (Apple Silicon and Intel),
+  checked automatically but not yet tried on a Mac
 - **Made for:** Reaper and Bitwig Studio (any host that supports MIDI-effect plug-ins should work)
 - **25 modules:** Note Range, Velocity Range, Channel Filter, Event Blocker, Note Split, Transpose, Scale Quantize,
   Velocity Curve, Channel Remap, Note Dispatcher, Groove, Arpeggiator, Chord, Diatonic Harmonizer, Note Echo,
@@ -22,7 +23,8 @@ and randomizers – in front of any instrument.
 ## Download
 
 - **Releases:** the *Releases* section of this repository.
-- **Latest build:** *Actions* tab → latest green *Build* run → *Artifacts* → `MIDI-Forge-Windows`.
+- **Latest build:** *Actions* tab → latest green *Build* run → *Artifacts* → `MIDI-Forge-Windows` or
+  `MIDI-Forge-macOS`.
 
 Installation and usage: **[User manual](docs/MANUAL.md)**.
 
@@ -42,4 +44,5 @@ Built with [JUCE](https://juce.com).
 
 Copyright (C) 2026 Udo Gerhards. MIDI Forge is free software: you can redistribute it and/or modify it under the terms of the
 [GNU Affero General Public License, version 3](LICENSE). It comes with no warranty. JUCE is used under
-its AGPLv3 licence.
+its AGPLv3 licence; the licences of the other third-party code in the plug-ins (VST3 SDK, CLAP and
+clap-juce-extensions, Apple's Audio Unit SDK) come with every download in `THIRD-PARTY-NOTICES.txt`.

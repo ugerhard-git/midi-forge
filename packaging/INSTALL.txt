@@ -1,16 +1,34 @@
 MIDI Forge - installation
 =========================
 
-Windows (VST3)
---------------
-  Copy "MIDI Forge.vst3" to  C:\Program Files\Common Files\VST3\
+Copy the formats your DAW uses (most DAWs need just one), then rescan plug-ins in your DAW.
 
-Then rescan plug-ins in your DAW.
+Windows (MIDI-Forge-Windows.zip)
+--------------------------------
+  VST3: copy "MIDI Forge.vst3" to  C:\Program Files\Common Files\VST3\
+  CLAP: copy "MIDI Forge.clap" to  C:\Program Files\Common Files\CLAP\
+
+macOS (MIDI-Forge-macOS.zip; Apple Silicon and Intel, macOS 11 or newer)
+-----------------------------------------------------------------------
+  VST3:       copy "MIDI Forge.vst3"      to  ~/Library/Audio/Plug-Ins/VST3/
+  Audio Unit: copy "MIDI Forge.component" to  ~/Library/Audio/Plug-Ins/Components/
+  CLAP:       copy "MIDI Forge.clap"      to  ~/Library/Audio/Plug-Ins/CLAP/
+
+  The plug-ins are not notarized by Apple, so macOS blocks them after a download. Unblock them once in
+  the Terminal (leave out the formats you did not copy):
+
+    xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/VST3/"MIDI Forge.vst3"
+    xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/Components/"MIDI Forge.component"
+    xattr -dr com.apple.quarantine ~/Library/Audio/Plug-Ins/CLAP/"MIDI Forge.clap"
+
+  The macOS build is checked automatically but has not been tried in a DAW on a Mac yet.
 
 Using it
 --------
   Reaper: put MIDI Forge on a track's FX chain *before* the instrument.
   Bitwig: put MIDI Forge in the Note FX section of an instrument track (or before the instrument).
+  Logic Pro: on a software instrument track, click the MIDI FX slot and choose
+             Audio Units > ugerhard > MIDI Forge.
 
 Licence and source code
 -----------------------
@@ -18,4 +36,6 @@ Licence and source code
   MIDI Forge is free software under the GNU Affero General Public License, version 3 (see LICENSE.txt).
   It comes with ABSOLUTELY NO WARRANTY. The complete source code is at
   https://github.com/ugerhard-git/midi-forge
-  MIDI Forge is built with JUCE (https://juce.com), used under the AGPLv3.
+  MIDI Forge is built with JUCE (https://juce.com), used under the AGPLv3. The licences of the other
+  third-party code in the plug-ins (VST3 SDK, CLAP, clap-juce-extensions, Apple's Audio Unit SDK) are in
+  THIRD-PARTY-NOTICES.txt.
