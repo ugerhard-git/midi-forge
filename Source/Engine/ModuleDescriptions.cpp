@@ -204,6 +204,11 @@ const char* const ccOutControllerLabels[] = { "0 Bank Select",
                                               "127",
                                               "Pitch Bend",
                                               "Ch. Pressure" };
+const char* const noteLengthModeLabels[] = { "Note Value", "Milliseconds", "Stretch" };
+const char* const noteLengthValueLabels[] = { "1/64", "1/32T", "1/32", "1/16T", "1/32D", "1/16",
+                                              "1/8T", "1/16D", "1/8",  "1/4T",  "1/8D",  "1/4",
+                                              "1/2T", "1/4D",  "1/2",  "1/2D",  "1 Bar", "Legato" };
+const char* const noteLengthMaximumLabels[] = { "Off", "1/4", "1/2", "1 Bar", "2 Bars", "4 Bars" };
 const char* const ccOutSendLabels[] = { "Always", "While Playing", "While Notes Held" };
 const char* const arpeggiatorDivisionLabels[] = { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
 const char* const scaleLabels[] = { "Major",       "Minor",   "Dorian",      "Phrygian",   "Lydian",
@@ -267,6 +272,28 @@ ParameterDescription preDelayInNoteValues()
 ParameterDescription preDelayInMilliseconds()
 {
     return integerParameter ("Pre-Delay", 0, 1000, 0, " ms", "Off").withHelp (preDelayHelp).addedInLayout (4);
+}
+
+/** Help text of Note Length's Length knob; the same for all three of its units. */
+constexpr const char* noteLengthHelp = "How long every note lasts: a note value (or Legato: until the next note), a "
+                                       "time in ms, or a share of how long the key was held (Stretch).";
+
+/** Note Length's Length in Note Value mode (the module table's entry): 1/64 ... 1 Bar, Legato. */
+ParameterDescription noteLengthInNoteValues()
+{
+    return choiceParameter ("Length", noteLengthValueLabels, 8).withHelp (noteLengthHelp);
+}
+
+/** Note Length's Length in Milliseconds mode: 5 ... 2000 ms. */
+ParameterDescription noteLengthInMilliseconds()
+{
+    return integerParameter ("Length", 5, 2000, 250, " ms").withHelp (noteLengthHelp);
+}
+
+/** Note Length's Length in Stretch mode: 100 ... 400 % of the time the key was held. */
+ParameterDescription noteLengthAsStretch()
+{
+    return percentParameter ("Length", 100, 400, 200).withHelp (noteLengthHelp);
 }
 
 /** The module table, indexed by ModuleType. Keep the help texts in step with docs/MANUAL.md. */
@@ -670,6 +697,27 @@ const ModuleDescription* createModuleTable()
           "volume or any other controller. Low and High set the range Value sweeps. A value is sent only when it "
           "changes, at most once per millisecond. Incoming messages of the same controller on the same channel "
           "are blocked, so they never fight; everything else passes. Use one CC Out per controller." },
+
+        // Added in 0.26.0 --------------------------------------------------------------------------
+        { "Note Length",
+          ModuleCategory::Transform,
+          "Sets how long notes last: a note value, ms, stretched, or legato.",
+          { choiceParameter ("Mode", noteLengthModeLabels, 0)
+                .withHelp ("How Length is measured: a note value (up to Legato), milliseconds, or Stretch."),
+            noteLengthInNoteValues(),
+            integerParameter ("Overlap", 0, 50, 0, " ms")
+                .withHelp ("Legato: the old note ends this long after the new one starts (for mono synths' glide)."),
+            choiceParameter ("Max Length", noteLengthMaximumLabels, 4)
+                .withHelp ("Legato and Stretch: the longest a note may last, so a phrase's last note does not hang."),
+            // Page 2
+            integerParameter ("Velocity > Length", -100, 100, 0, "%")
+                .withHelp ("Harder notes last longer (positive) or shorter (negative); 0: all the same.") },
+          "Decides how long every note lasts, however long the key is held: a note value (a bar follows the time "
+          "signature), a time in milliseconds, or Stretch, a share of how long the key was held (100 ... 400 %; a "
+          "plug-in cannot know at a note's start when its key will be released, so it can only lengthen). The "
+          "last Length step in Note Value mode is Legato: each note lasts until the next note or chord starts "
+          "(notes within 30 ms count as a chord). Route a slow LFO to Length to go from staccato to legato over a "
+          "phrase. The note-on passes on time; Note Length sends its own note-off." },
     };
     return table;
 }
@@ -753,6 +801,11 @@ const BounceGravity bounceGravities[] = {
 };
 const int numBounceGravities = (int) std::size (bounceGravities);
 
+const NoteDivision noteLengthMaximumDivisions[] = {
+    { "1/4", 1.0 }, { "1/2", 2.0 }, { "1 Bar", 4.0, 1 }, { "2 Bars", 8.0, 2 }, { "4 Bars", 16.0, 4 },
+};
+const int numNoteLengthMaximumDivisions = (int) std::size (noteLengthMaximumDivisions);
+
 static_assert (std::size (echoDivisionLabels) == std::size (echoDivisions), "echo labels and table differ");
 static_assert (std::size (arpeggiatorDivisionLabels) == std::size (arpeggiatorDivisions), "arp labels differ");
 static_assert (std::size (repeaterDivisionLabels) == std::size (repeaterDivisions), "repeater labels differ");
@@ -764,6 +817,11 @@ static_assert (std::size (bounceHeightLabels) == std::size (bounceHeights), "bou
 static_assert (std::size (bounceMaterialLabels) == std::size (bounceMaterials), "bounce material labels differ");
 static_assert (std::size (bounceGravityLabels) == std::size (bounceGravities), "bounce gravity labels differ");
 static_assert (std::size (ccOutControllerLabels) == ccOutChannelPressureController + 1, "CC Out labels differ");
+static_assert (std::size (noteLengthValueLabels) == std::size (slideDivisions) + 1 &&
+                   noteLengthLegatoIndex == (int) std::size (slideDivisions),
+               "Note Length's values are the slide lengths plus Legato");
+static_assert (std::size (noteLengthMaximumLabels) == std::size (noteLengthMaximumDivisions) + 1,
+               "Note Length's Max Length labels differ");
 
 //==============================================================================
 
@@ -825,6 +883,22 @@ bool isParameterInactive (int moduleType, int parameterIndex, const float* norma
         return parameterIndex == delayIndex &&
                normalisedToInteger (description.parameters[modeIndex], normalisedValues[modeIndex]) >= firstFallMode;
     }
+    if (moduleType == (int) ModuleType::NoteLength)
+    {
+        // Note Length: Overlap (C) only in Legato; Max Length (D) in Legato and Stretch; Velocity > Length (E)
+        // everywhere but Legato (a legato note has no length of its own).
+        constexpr int modeIndex = 0, lengthIndex = 1, overlapIndex = 2, maximumIndex = 3, velocityIndex = 4;
+        constexpr int noteValueMode = 0, stretchMode = 2;
+        const int mode = normalisedToInteger (description.parameters[modeIndex], normalisedValues[modeIndex]);
+        const bool isLegato =
+            mode == noteValueMode && normalisedToInteger (description.parameters[lengthIndex],
+                                                          normalisedValues[lengthIndex]) == noteLengthLegatoIndex;
+        if (parameterIndex == overlapIndex)
+            return ! isLegato;
+        if (parameterIndex == maximumIndex)
+            return ! isLegato && mode != stretchMode;
+        return parameterIndex == velocityIndex && isLegato;
+    }
     if (moduleType == (int) ModuleType::Bounce)
     {
         // Bounce: Height (A) and Gravity (H) set the timing with Height Sync (E) on Height, First Gap (F) on Tempo.
@@ -852,6 +926,22 @@ const ParameterDescription& getEffectiveParameterDescription (int moduleType, in
         {
             static const ParameterDescription inMilliseconds = preDelayInMilliseconds();
             return inMilliseconds;
+        }
+    }
+    if (moduleType == (int) ModuleType::NoteLength)
+    {
+        // Note Length: Length (B) counts milliseconds or a stretch share, as Mode (A) says.
+        constexpr int modeIndex = 0, lengthIndex = 1, millisecondsMode = 1, stretchMode = 2;
+        const int mode = normalisedToInteger (description.parameters[modeIndex], normalisedValues[modeIndex]);
+        if (safeIndex == lengthIndex && mode == millisecondsMode)
+        {
+            static const ParameterDescription inMilliseconds = noteLengthInMilliseconds();
+            return inMilliseconds;
+        }
+        if (safeIndex == lengthIndex && mode == stretchMode)
+        {
+            static const ParameterDescription asStretch = noteLengthAsStretch();
+            return asStretch;
         }
     }
     return description.parameters[safeIndex];

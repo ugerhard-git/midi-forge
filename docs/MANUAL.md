@@ -161,7 +161,7 @@ last. The Arpeggiator and the Repeater can run their steps steadily or start the
 The knobs of a slot are called **A … H** in your DAW's automation lists (most modules use A … D; page 2 is
 E … H); what they mean depends on the module loaded in the slot.
 
-All 26 modules at a glance (click a name to jump to its description):
+All 27 modules at a glance (click a name to jump to its description):
 
 | Group | Module | What it does |
 |-------|--------|--------------|
@@ -176,6 +176,7 @@ All 26 modules at a glance (click a name to jump to its description):
 |  | [Channel Remap](#channel-remap) | Moves events from one channel to another. |
 |  | [Groove](#groove) | Pulls notes onto a groove: swing, laid-back snare, shuffle ... |
 |  | [Note Dispatcher](#note-dispatcher) | Spreads notes over several channels, one free channel at a time. |
+|  | [Note Length](#note-length) | Sets how long notes last: a note value, ms, stretched, or legato. |
 | Generators | [Arpeggiator](#arpeggiator) | Turns held notes into a tempo-synced pattern. |
 |  | [Chord](#chord) | Builds a chord on every incoming note. |
 |  | [Diatonic Harmonizer](#diatonic-harmonizer) | Adds one or two harmony notes that stay in key. |
@@ -379,6 +380,42 @@ sounds on different channels. A channel is free when none of the notes sent to i
 
 Tip: put a *Pitch Slide* after a Note Dispatcher and each synth gets its own slides, because every chord
 sits on its own channel.
+
+---
+
+#### Note Length
+
+Decides how long every note lasts, however long the key is held. The note starts on time as played; Note
+Length ignores the key's release and ends the note itself.
+
+- **Note Value:** every note lasts a note value, 1/64 … 1 Bar (a bar is a real bar of the time signature).
+  The last step of the knob is **Legato**: each note lasts until the next note or chord starts, so a part
+  plays smoothly connected. A new note or chord ends all notes that are waiting (notes within 30 ms count as
+  a chord). *Overlap* lets the old note sound a little into the new one – mono synths often need that to glide
+  instead of starting the note again.
+- **Milliseconds:** every note lasts 5 … 2000 ms, independent of the tempo.
+- **Stretch:** every note lasts 100 … 400 % of the time its key was held. Stretch can only lengthen: when a key
+  goes down, nobody knows yet when it will be released, so a note cannot be made shorter than played by a
+  percentage. For shorter notes, use a note value or milliseconds.
+- **Max Length** (Legato and Stretch): the longest a note may last, so the last note of a phrase does not ring
+  on until the next phrase. With *Off*, a legato note waits for the next note; when the DAW stops, notes whose
+  keys are no longer held end.
+- **Velocity > Length** (page 2): harder notes last longer (positive) or shorter (negative). At +100 %,
+  velocity 127 doubles the length and velocity 64 keeps it; soft notes get down to a tenth.
+- From staccato to smooth: route a slow LFO to *Length* (Note Value mode). As it moves up, the notes get longer
+  until they join up in Legato – see the *Staccato to Legato* preset. Like most settings, Length is read when
+  a note starts, so every note keeps the length it began with.
+- Playing the same key again before its note has ended ends the earlier note first. The sustain pedal passes
+  through: if it reaches the synth, the synth holds the notes anyway (an *Event Blocker* with CC on Block
+  takes it out).
+
+| Knob | Range | Meaning |
+|------|-------|---------|
+| Mode | Note Value / Milliseconds / Stretch | How Length is measured (default Note Value) |
+| Length | Note Value: 1/64 … 1 Bar (incl. T and D), Legato. Milliseconds: 5 … 2000 ms. Stretch: 100 … 400 % | How long every note lasts (default 1/8) |
+| Overlap | 0 … 50 ms | Legato: the old note ends this long after the new one starts. Dimmed outside Legato |
+| Max Length | Off, 1/4, 1/2, 1 Bar, 2 Bars, 4 Bars | Legato and Stretch: the longest a note may last (default 2 Bars). Dimmed otherwise |
+| Velocity > Length *(page 2)* | −100 … +100 % | How much harder notes last longer (or shorter). Dimmed in Legato |
 
 ### Generators (orange)
 
@@ -977,6 +1014,7 @@ than 256 KB are refused, and values outside a parameter's range are limited to t
 | Hi-Hat Ratchet (Drums) | Note Split (F#1, the General MIDI closed hi-hat) → Repeater (1/16, swing 56 %, accents on the beat) → Humanize; kick, snare and everything else pass untouched |
 | Random Voicings | Chord (Maj7) → Velocity Curve (40–100) → Humanize; Random 1 (4 steps, **+**) gives every chord one of the four inversions, Random 2 (smooth, **±**) gives it its own loudness |
 | Breathing Steps | Arpeggiator (1/16, Up/Down, 2 octaves) → Velocity Curve (40–105) → Note Echo (1/8); Steps 1 (16 steps, some tied into long steps) shapes the arpeggio's gate, Steps 2 (7 steps) adds accents that move against the bar, Steps 3 (4 steps of 1 bar) switches the echo on only in every fourth bar |
+| Staccato to Legato | Arpeggiator (1/8, Up/Down, 2 octaves) → Note Length (1/32, Max Length 2 bars); LFO 1 (triangle, 4 bars) moves Length up to Legato and back, so the arpeggio goes from short stabs to smoothly connected notes |
 | Breathing Cutoff | CC Out (CC 74, channel 1, range 40–100, while the DAW plays); LFO 1 (sine, 2 bars) sweeps its Value, so the synth's filter cutoff (on synths that use CC 74 for it) opens and closes |
 
 Your current settings are also saved with your DAW project, together with the name of the loaded preset.

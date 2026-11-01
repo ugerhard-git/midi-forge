@@ -64,6 +64,8 @@ enum class ModuleType : int
     Bounce, ///< Generator
     // Added in 0.25.0
     CcOut, ///< Generator
+    // Added in 0.26.0
+    NoteLength, ///< Transform
 
     Count
 };
@@ -264,7 +266,7 @@ extern const NoteDivision repeaterDivisions[];
 extern const int numRepeaterDivisions;
 /**
  * Slide lengths of the Pitch Slide, short to long. Its Delay knob and Note Echo's Pre-Delay (with *Tempo*) use
- * "Off" followed by the same lengths.
+ * "Off" followed by the same lengths; Note Length's Length uses them followed by "Legato".
  */
 extern const NoteDivision slideDivisions[];
 extern const int numSlideDivisions;
@@ -344,6 +346,11 @@ extern const int numBounceGravities;
  * CC Out's Controller knob: 0..127 are MIDI controllers, followed by these two (their order is stored in projects).
  */
 constexpr int ccOutPitchBendController = 128;
+/** Note Length's Length knob in Note Value mode: Pitch Slide's lengths (slideDivisions), then this "Legato" step. */
+constexpr int noteLengthLegatoIndex = 17;
+/** Note Length's Max Length knob: Off, then these lengths (bar-long ones follow the time signature). */
+extern const NoteDivision noteLengthMaximumDivisions[];
+extern const int numNoteLengthMaximumDivisions;
 constexpr int ccOutChannelPressureController = 129;
 
 } // namespace midiforge
