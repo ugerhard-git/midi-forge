@@ -4,42 +4,58 @@ What changed in each release of MIDI Forge. The release workflow publishes the s
 text of its GitHub release, so every section starts with `## [version]` and is written for users.
 Versions below 1.0 are betas: they are published as pre-releases.
 
-## [0.25.0] – CC Out: modulation that moves the synth
+## [0.25.0] – CC Out, Bounce, CLAP and macOS
 
-- **New module: CC Out** (a Generator). Sends a MIDI controller – or pitch bend, or channel pressure – to the
-  synth. Point a modulation route at its *Value*, and an LFO, a Random or a step modulator moves the synth's
-  filter cutoff, volume or any other controller, not just MIDI Forge's own knobs. *Low* and *High* set the
-  range, *Smoothing* takes the edge off jumps, and *Send* decides whether it sends always, only while the DAW
-  plays (the default) or only while keys are held. Incoming messages of the same controller are blocked, so
-  they never fight.
-- New factory preset **Breathing Cutoff**: a 2-bar LFO sweeps CC 74, on many synths the filter cutoff.
+The first release since 0.22.1, with everything built since then (0.23.0 and 0.24.0 were not published on
+their own).
 
-## [0.24.0] – CLAP, and MIDI Forge for macOS
+### New
 
-- **CLAP:** MIDI Forge now also comes as a CLAP plug-in, for Windows and macOS. Reaper and Bitwig Studio list
+- **CC Out** (a new Generator): turns modulation into sound. It sends a MIDI controller – or pitch bend, or
+  channel pressure – to the synth. Point a modulation route at its *Value*, and an LFO, a Random or a step
+  modulator moves the synth's filter cutoff, volume or any other controller, not just MIDI Forge's own knobs.
+  *Low* and *High* set the range, *Smoothing* takes the edge off jumps, and *Send* decides whether it sends
+  always, only while the DAW plays (the default) or only while keys are held. Incoming messages of the same
+  controller are blocked, so they never fight. New factory preset **Breathing Cutoff**: a 2-bar LFO sweeps
+  CC 74, on many synths the filter cutoff.
+- **Bounce** (a new Generator): a delay whose repeats follow a ball bouncing on the floor. The note you play is
+  the first impact, then every bounce comes sooner and softer than the one before. Pick the drop height
+  (5 cm … 5 m), the ball's material (Super Ball … Clay) and the gravity (Earth, Moon, Mars, Jupiter, Pluto,
+  Sun) – or let the first gap follow the tempo and the rest speed up freely. Bounces can climb in pitch, and
+  you can limit how many there are.
+- **Note Echo: Pre-Delay** (page 2): a pause before the first echo, as a note value (1/64 … 1 Bar) or in
+  milliseconds (1 … 1000 ms). The note itself still plays right away. Projects and presets from older
+  versions load with Pre-Delay off, so they sound as before.
+- **CLAP**: MIDI Forge now also comes as a CLAP plug-in, for Windows and macOS. Reaper and Bitwig Studio list
   it next to the VST3; both work the same.
-- **macOS:** `MIDI-Forge-macOS.zip` holds VST3, CLAP and – new – an **Audio Unit** for Logic Pro's MIDI FX
-  slot. Universal binaries for Apple Silicon and Intel, macOS 11 or newer. **Not tried on a Mac yet:** the
-  build is checked automatically (signature, both processor types, Apple's Audio Unit validator, the CLAP
-  validator), but no one has played it in a DAW on a Mac so far. Please report how it works in the *Issues*.
-  The plug-ins are not notarized by Apple: after copying them, unblock them once in the Terminal as
-  `INSTALL.txt` describes. The macOS zip may appear on this page a little after the Windows one.
-- Fixed: in CLAP hosts, typing a route target that contains "·" (e.g. "Slot 3 · A (unused)") selected *None*.
-- Every download now includes `THIRD-PARTY-NOTICES.txt` with the licences of the third-party code inside the
-  plug-ins (VST3 SDK, CLAP, Apple's Audio Unit SDK).
+- **macOS**: VST3, CLAP and an **Audio Unit** for Logic Pro's MIDI FX slot, as universal binaries for Apple
+  Silicon and Intel (macOS 11 or newer). See *Known limitations*: not tried on a Mac yet.
 
-## [0.23.0] – Bounce, and a Pre-Delay for Note Echo
+### Fixed
 
-- **New module: Bounce** (a Generator). A delay whose repeats follow a ball bouncing on the floor: the note
-  you play is the first impact, then every bounce comes sooner and softer than the one before. Pick the drop
-  height (5 cm … 5 m), the ball's material (Super Ball … Clay) and the gravity (Earth, Moon, Mars, Jupiter,
-  Pluto, Sun) – or let the first gap follow the tempo and the rest speed up freely. Bounces can climb in pitch,
-  and you can limit how many there are.
-- **Note Echo: Pre-Delay.** A pause before the first echo, as a note value (1/64 … 1 Bar) or in milliseconds
-  (1 … 1000 ms), on page 2. The note itself still plays right away. Projects and presets from older versions
-  load with Pre-Delay off, so they sound as before.
-- Fixed: with very many notes echoing at once (thousands of pending echoes), Note Echo could end another note
-  of the same pitch too early.
+- In CLAP hosts, typing a route target that contains "·" (e.g. "Slot 3 · A (unused)") selected *None*.
+- With very many notes echoing at once (thousands of pending echoes), Note Echo could end another note of the
+  same pitch too early.
+
+### Downloads
+
+- `MIDI-Forge-Windows.zip` – VST3 and CLAP for Windows (64-bit).
+- `MIDI-Forge-macOS.zip` – VST3, CLAP and Audio Unit for macOS. It may appear on this page a few minutes
+  after the Windows zip.
+
+Every zip contains `INSTALL.txt` (where each format goes), the licence and `THIRD-PARTY-NOTICES.txt` with the
+licences of the third-party code inside the plug-ins (VST3 SDK, CLAP, Apple's Audio Unit SDK). Installation:
+see `INSTALL.txt`, or the [user manual](https://github.com/ugerhard-git/midi-forge/blob/main/docs/MANUAL.md#installation).
+
+### Known limitations
+
+- **macOS: not tried on a Mac yet.** The build is checked automatically – signatures, both processor types,
+  Apple's Audio Unit validator and the CLAP validator – but no one has played it in a DAW on a Mac so far.
+  Please report how it works in the *Issues*.
+- The macOS plug-ins are not notarized by Apple: after copying them, unblock them once in the Terminal as
+  `INSTALL.txt` describes.
+- Made and tested for Reaper and Bitwig Studio on Windows; other hosts with MIDI effect support should work.
+- Pitch Slide bends a whole MIDI channel; notes of a chord slide together (no MPE yet).
 
 ## [0.22.1] – Diatonic Harmonizer is a Generator
 
