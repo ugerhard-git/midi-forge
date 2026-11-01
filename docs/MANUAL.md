@@ -161,7 +161,7 @@ last. The Arpeggiator and the Repeater can run their steps steadily or start the
 The knobs of a slot are called **A … H** in your DAW's automation lists (most modules use A … D; page 2 is
 E … H); what they mean depends on the module loaded in the slot.
 
-All 25 modules at a glance (click a name to jump to its description):
+All 26 modules at a glance (click a name to jump to its description):
 
 | Group | Module | What it does |
 |-------|--------|--------------|
@@ -184,6 +184,7 @@ All 25 modules at a glance (click a name to jump to its description):
 |  | [Strum](#strum) | Plays chords as strums: the notes one after another. |
 |  | [Ghost Notes](#ghost-notes) | Adds quiet extra hits around notes, mainly for drums. |
 |  | [Bounce](#bounce) | Repeats notes like a bouncing ball: ever faster and softer. |
+|  | [CC Out](#cc-out) | Sends a MIDI controller to the synth; modulate Value to move its sound. |
 | Randomizers | [Humanize](#humanize) | Adds random timing delay and velocity variation. |
 |  | [Probability](#probability) | Lets each note through with a given chance. |
 |  | [Random Pitch](#random-pitch) | Randomly shifts some of the notes. |
@@ -602,6 +603,42 @@ set by Material and Bounciness).
 
 Slow, bouncy settings last long: a super ball from 5 m on Pluto bounces for well over a minute.
 
+---
+
+#### CC Out
+
+Turns modulation into sound. CC Out sends one MIDI controller to the synth – or pitch bend, or channel
+pressure. Point a [modulation route](#modulation-routes) at its **Value** knob, and an LFO, a Random or a step
+modulator moves the synth's filter cutoff, volume or any other controller, not just MIDI Forge's own knobs.
+Example: the *Breathing Cutoff* preset lets a 2-bar LFO sweep CC 74 (on many synths the filter cutoff)
+between 40 and 100. Turning Value by hand sends too.
+
+- **Only changes are sent**, at most once per millisecond: a steady value sends nothing, a fast LFO a smooth
+  stream. Pitch bend uses its full fine resolution; Value 64 is the centre (no bend).
+- **Low and High** set the range Value sweeps: Value 0 sends Low, 127 sends High. Low may be above High to turn
+  the movement round.
+- **Incoming messages** of the same controller on the same channel (e.g. your own mod wheel, if CC Out sends
+  CC 1) are blocked, so the two never fight. Everything else passes unchanged.
+- **Send** decides when values go out: *Always*, *While Playing* (only while the DAW plays; quiet while you
+  set up a sound) or *While Notes Held*. When sending starts again, the current value goes out at once.
+- One CC Out sends one controller; use several slots for several controllers. Like every module, its place
+  in the chain counts: a Channel Filter or Event Blocker below it can block what it sends.
+- Removing CC Out (or switching it off) leaves the controller where it was; with pitch bend, the bend goes
+  back to what the slot received.
+
+| Knob | Range | Meaning |
+|------|-------|---------|
+| Controller | 0 … 127, Pitch Bend, Ch. Pressure | What is sent; common controllers are named (1 Mod Wheel, 7 Volume, 11 Expression, 74 Cutoff …). Default 74 Cutoff |
+| Channel | 1 … 16 | The MIDI channel it is sent on |
+| Value | 0 … 127 | The value sent (default 64). Point a modulation route here |
+| Send | Always / While Playing / While Notes Held | When values are sent (default While Playing) |
+| Low *(page 2)* | 0 … 127 | The value sent when Value is 0 (default 0) |
+| High *(page 2)* | 0 … 127 | The value sent when Value is 127 (default 127) |
+| Smoothing *(page 2)* | Off, 1 … 100 ms | Glides to a new value over about this time, so jumps (Random, steps without glide) do not click |
+
+Which controller does what depends on the synth: look for "MIDI CC" or "MIDI learn" in its manual. Many synths
+use 74 for the filter cutoff and 71 for the resonance.
+
 ### Randomizers (purple)
 
 #### Humanize
@@ -749,7 +786,8 @@ DAW automation:
 - four **step modulators** that play a sequence of 4 … 16 values you draw, in time with the song: accents,
   fills, a module that only joins in every fourth bar.
 
-They make no sound themselves; they only move the settings of the MIDI modules. All of this lives on the
+They make no sound themselves; they move the settings of the MIDI modules. To move the synth's sound
+directly – its filter cutoff, say – route them to a [CC Out](#cc-out) module, which sends a MIDI controller. All of this lives on the
 **Modulation** tab: the three small tabs at the top (**LFOs · Random · Steps**) switch between the sources,
 and the twelve **routes** below connect sources to knobs and switches – or to the settings of the
 modulation itself (see [Modulating the modulation](#modulating-the-modulation)). A yellow dot on one of the small tabs
@@ -939,6 +977,7 @@ than 256 KB are refused, and values outside a parameter's range are limited to t
 | Hi-Hat Ratchet (Drums) | Note Split (F#1, the General MIDI closed hi-hat) → Repeater (1/16, swing 56 %, accents on the beat) → Humanize; kick, snare and everything else pass untouched |
 | Random Voicings | Chord (Maj7) → Velocity Curve (40–100) → Humanize; Random 1 (4 steps, **+**) gives every chord one of the four inversions, Random 2 (smooth, **±**) gives it its own loudness |
 | Breathing Steps | Arpeggiator (1/16, Up/Down, 2 octaves) → Velocity Curve (40–105) → Note Echo (1/8); Steps 1 (16 steps, some tied into long steps) shapes the arpeggio's gate, Steps 2 (7 steps) adds accents that move against the bar, Steps 3 (4 steps of 1 bar) switches the echo on only in every fourth bar |
+| Breathing Cutoff | CC Out (CC 74, channel 1, range 40–100, while the DAW plays); LFO 1 (sine, 2 bars) sweeps its Value, so the synth's filter cutoff (on synths that use CC 74 for it) opens and closes |
 
 Your current settings are also saved with your DAW project, together with the name of the loaded preset.
 Your DAW's own program list shows only the factory presets; your DAW's preset functions keep working too.

@@ -1,7 +1,7 @@
 /**
  * @file GeneratorModules.cpp
  * @brief Modules that create new notes: Chord, Diatonic Harmonizer, Note Echo, Arpeggiator, Repeater, Strum,
- *        Ghost Notes and Bounce.
+ *        Ghost Notes, Bounce and CC Out.
  */
 #include "GeneratorModules.h"
 
@@ -1547,6 +1547,174 @@ private:
     std::array<bool, numChannelNoteCombinations> isHeldAtInput {};
 };
 
+//==============================================================================
+/**
+ * Sends one MIDI controller (or pitch bend, or channel pressure) that follows the Value knob, so modulation
+ * routes can move the synth's sound. A value is sent when it changes, at most once per millisecond; incoming
+ * messages of the same controller on the same channel are blocked, everything else passes.
+ */
+class CcOut final : public MidiModule
+{
+public:
+    CcOut() : MidiModule (ModuleType::CcOut) {}
+
+    void reset() override
+    {
+        lastSentValue = nothingSent;
+        smoothedValue = -1.0;
+        isHeldAtInput.fill (false);
+        numHeldNotes = 0;
+    }
+
+    void process (const MidiEventList& input, MidiEventList& output, const BlockContext& context,
+                  const float* parameterValues) override
+    {
+        const int controller =
+            std::clamp (integerParameter (parameterValues, controllerKnob), 0, ccOutChannelPressureController);
+        const int channel = std::clamp (integerParameter (parameterValues, channelKnob), 1, 16) - 1;
+        if (controller != sentController || channel != sentChannel)
+        {
+            // A new destination starts fresh: its first value is sent right away.
+            sentController = controller;
+            sentChannel = channel;
+            lastSentValue = nothingSent;
+        }
+
+        for (const auto& event : input)
+        {
+            trackHeldNote (event);
+            if (! isSentByThisModule (event, controller, channel))
+                output.push_back (event);
+        }
+
+        if (! isSending (parameterValues, context))
+        {
+            lastSentValue = nothingSent; // when sending resumes, the current value goes out at once
+            smoothedValue = -1.0;
+            return;
+        }
+
+        const double target = targetValue (parameterValues);
+        smoothedValue = smoothTowards (target, context, parameterValues);
+        const int value = valueToSend (smoothedValue, controller);
+        const int64_t now = context.blockStartSample;
+        const auto samplesPerMillisecond = (int64_t) std::max (1.0, context.sampleRate / 1000.0);
+        if (value == lastSentValue || (lastSentValue != nothingSent && now - lastSendTime < samplesPerMillisecond))
+            return;
+
+        output.push_back (createMessage (controller, channel, value));
+        lastSentValue = value;
+        lastSendTime = now;
+    }
+
+private:
+    enum Parameter
+    {
+        controllerKnob,
+        channelKnob,
+        valueKnob,
+        sendMode,
+        lowKnob, ///< page 2
+        highKnob,
+        smoothingKnob
+    };
+    enum SendMode
+    {
+        sendAlways,
+        sendWhilePlaying,
+        sendWhileNotesHeld
+    };
+    static constexpr int nothingSent = -1;
+
+    /** Counts the keys held at the input (for Send: While Notes Held); a repeated note-on is not counted twice. */
+    void trackHeldNote (const MidiEvent& event) noexcept
+    {
+        if (! event.isNoteOnOrOff())
+            return;
+        auto& isHeld = isHeldAtInput[channelNoteIndex (event.channel(), event.noteNumber())];
+        if (event.isNoteOn() != isHeld)
+        {
+            isHeld = event.isNoteOn();
+            numHeldNotes += isHeld ? 1 : -1;
+        }
+    }
+
+    /** @return True for an incoming message of the controller this module sends (it is blocked). */
+    static bool isSentByThisModule (const MidiEvent& event, int controller, int channel) noexcept
+    {
+        if (! event.isChannelMessage() || event.channel() != channel)
+            return false;
+        if (controller == ccOutPitchBendController)
+            return event.isPitchBend();
+        if (controller == ccOutChannelPressureController)
+            return event.isChannelPressure();
+        return event.isControlChange() && event.data1 == controller;
+    }
+
+    bool isSending (const float* parameterValues, const BlockContext& context) const noexcept
+    {
+        switch (integerParameter (parameterValues, sendMode))
+        {
+            case sendAlways: return true;
+            case sendWhilePlaying: return context.isPlaying;
+            default: return numHeldNotes > 0;
+        }
+    }
+
+    /**
+     * @return The value to send, 0..127 (not rounded): Value mapped onto Low ... High. The modulated Value is read
+     *         unrounded, so pitch bend uses its full 14-bit resolution.
+     */
+    double targetValue (const float* parameterValues) const noexcept
+    {
+        const double value = std::clamp ((double) parameterValues[valueKnob], 0.0, 1.0);
+        const double low = integerParameter (parameterValues, lowKnob);
+        const double high = integerParameter (parameterValues, highKnob);
+        return low + (high - low) * value;
+    }
+
+    /** Moves the sent value towards the target: it gets about 95 % there within Smoothing. */
+    double smoothTowards (double target, const BlockContext& context, const float* parameterValues) const noexcept
+    {
+        const int smoothingMilliseconds = integerParameter (parameterValues, smoothingKnob);
+        if (smoothingMilliseconds <= 0 || smoothedValue < 0.0)
+            return target;
+        const double timeConstantInSamples = smoothingMilliseconds / 3.0 * context.sampleRate / 1000.0;
+        const double share = 1.0 - std::exp (-context.numSamples / std::max (1.0, timeConstantInSamples));
+        return smoothedValue + (target - smoothedValue) * share;
+    }
+
+    /**
+     * @return The value as sent: 0..127 for a controller or channel pressure, 0..16383 for pitch bend, where 0,
+     *         64 and 127 map to 0, the centre (8192) and 16383.
+     */
+    static int valueToSend (double value, int controller) noexcept
+    {
+        if (controller != ccOutPitchBendController)
+            return std::clamp ((int) std::lround (value), 0, 127);
+        constexpr double centre = MidiEvent::pitchBendCentre;
+        const double bend = value <= 64.0 ? value / 64.0 * centre
+                                          : centre + (value - 64.0) / 63.0 * (MidiEvent::maximumPitchBend - centre);
+        return std::clamp ((int) std::lround (bend), 0, MidiEvent::maximumPitchBend);
+    }
+
+    static MidiEvent createMessage (int controller, int channel, int value) noexcept
+    {
+        if (controller == ccOutPitchBendController)
+            return MidiEvent::pitchBend (0, channel, value);
+        if (controller == ccOutChannelPressureController)
+            return MidiEvent::channelPressureMessage (0, channel, value);
+        return MidiEvent::controlChange (0, channel, controller, value);
+    }
+
+    int sentController = -1, sentChannel = -1; ///< Where the last value went
+    int lastSentValue = nothingSent;
+    int64_t lastSendTime = 0;
+    double smoothedValue = -1.0; ///< The value on its way to the target (0..127), or -1 before the first one
+    std::array<bool, numChannelNoteCombinations> isHeldAtInput {};
+    int numHeldNotes = 0;
+};
+
 } // namespace
 
 std::unique_ptr<MidiModule> createGeneratorModule (ModuleType type)
@@ -1561,6 +1729,7 @@ std::unique_ptr<MidiModule> createGeneratorModule (ModuleType type)
         case ModuleType::GhostNotes: return std::make_unique<GhostNotes>();
         case ModuleType::DiatonicHarmonizer: return std::make_unique<DiatonicHarmonizer>();
         case ModuleType::Bounce: return std::make_unique<Bounce>();
+        case ModuleType::CcOut: return std::make_unique<CcOut>();
         default: return nullptr;
     }
 }

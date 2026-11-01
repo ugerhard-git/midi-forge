@@ -162,7 +162,8 @@ TEST_CASE ("chain: randomized stress test leaves no stuck notes and no pitch ben
             }
         }
 
-        // Modules that block or move pitch bends may legitimately keep a slide's bend from being undone downstream.
+        // Modules that block or move pitch bends may legitimately keep a slide's bend from being undone downstream,
+        // and CC Out may send pitch bend itself.
         bool chainMayHoldBackBends = false;
         const auto noteModulesThatMoveOrBlockBends = [&]
         {
@@ -170,7 +171,8 @@ TEST_CASE ("chain: randomized stress test leaves no stuck notes and no pitch ben
                 chainMayHoldBackBends = chainMayHoldBackBends || slot.moduleType == (int) ModuleType::EventBlocker ||
                                         slot.moduleType == (int) ModuleType::ChannelFilter ||
                                         slot.moduleType == (int) ModuleType::ChannelRemap ||
-                                        slot.moduleType == (int) ModuleType::NoteDispatcher;
+                                        slot.moduleType == (int) ModuleType::NoteDispatcher ||
+                                        slot.moduleType == (int) ModuleType::CcOut;
         };
         noteModulesThatMoveOrBlockBends();
 

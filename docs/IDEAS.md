@@ -36,6 +36,11 @@ downloading (`xattr -dr com.apple.quarantine …`). With an Apple Developer acco
 sign them with a Developer ID certificate and have Apple notarize them: the downloads would then install
 without the Terminal step. Needs the certificate and an app-specific password as repository secrets.
 
+### CC Out: 14-bit controllers
+
+Discussed while planning CC Out (0.25.0): send controllers 0–31 with their fine partner (32–63) for 16 384
+steps instead of 128. Few synths read it, so CC Out sends 7-bit controllers (pitch bend is 14-bit already).
+
 ### Pitch Slide: MPE
 
 Discussed while planning the Pitch Slide (0.10.0): an MPE mode that gives every note its own channel, so

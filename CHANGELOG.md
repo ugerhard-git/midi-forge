@@ -4,6 +4,16 @@ What changed in each release of MIDI Forge. The release workflow publishes the s
 text of its GitHub release, so every section starts with `## [version]` and is written for users.
 Versions below 1.0 are betas: they are published as pre-releases.
 
+## [0.25.0] – CC Out: modulation that moves the synth
+
+- **New module: CC Out** (a Generator). Sends a MIDI controller – or pitch bend, or channel pressure – to the
+  synth. Point a modulation route at its *Value*, and an LFO, a Random or a step modulator moves the synth's
+  filter cutoff, volume or any other controller, not just MIDI Forge's own knobs. *Low* and *High* set the
+  range, *Smoothing* takes the edge off jumps, and *Send* decides whether it sends always, only while the DAW
+  plays (the default) or only while keys are held. Incoming messages of the same controller are blocked, so
+  they never fight.
+- New factory preset **Breathing Cutoff**: a 2-bar LFO sweeps CC 74, on many synths the filter cutoff.
+
 ## [0.24.0] – CLAP, and MIDI Forge for macOS
 
 - **CLAP:** MIDI Forge now also comes as a CLAP plug-in, for Windows and macOS. Reaper and Bitwig Studio list

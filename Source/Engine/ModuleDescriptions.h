@@ -62,6 +62,8 @@ enum class ModuleType : int
     DiatonicHarmonizer, ///< Generator (a Transform until 0.22.0; the number stays)
     // Added in 0.23.0
     Bounce, ///< Generator
+    // Added in 0.25.0
+    CcOut, ///< Generator
 
     Count
 };
@@ -337,5 +339,11 @@ struct BounceGravity
 };
 extern const BounceGravity bounceGravities[];
 extern const int numBounceGravities;
+
+/**
+ * CC Out's Controller knob: 0..127 are MIDI controllers, followed by these two (their order is stored in projects).
+ */
+constexpr int ccOutPitchBendController = 128;
+constexpr int ccOutChannelPressureController = 129;
 
 } // namespace midiforge

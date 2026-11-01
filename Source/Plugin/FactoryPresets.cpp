@@ -75,6 +75,8 @@ const std::vector<FactoryPreset>& getFactoryPresets()
                   steps3 = firstStepModulatorSource + 2;
     constexpr int sixteenthStep = 2, barStep = 12; // indices into stepDivisions
     constexpr float echoEighth = 5;
+    constexpr float cutoffController = 74, sendWhilePlaying = 1;
+    constexpr int ccOutValue = 2;
 
     static const std::vector<FactoryPreset> presets = {
         { "Init", {}, {}, {}, {} },
@@ -178,6 +180,13 @@ const std::vector<FactoryPreset>& getFactoryPresets()
                              { 2, 6, 10 }) }, // long-short-short: steps 2, 6 and 10 are tied
             { 1, steps (sixteenthStep, { 100, -40, 20, -80, 50, 0, -30 }) },
             { 2, steps (barStep, { -100, -100, -100, 100 }) } } },
+
+        // Added in 0.25.0 ------------------------------------------------------------------------
+        { "Breathing Cutoff",
+          { { ModuleType::CcOut, { cutoffController, 1, 64, sendWhilePlaying }, { 40, 100, keep, keep } } },
+          { { 0, syncedLfo (LfoWaveform::Sine, twoBars) } },
+          { { 0, 0, ccOutValue, 50.0f } }, // CC 74 (often the filter cutoff) breathes between 40 and 100
+          {} },
     };
     return presets;
 }
