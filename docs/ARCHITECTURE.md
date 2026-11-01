@@ -180,6 +180,15 @@ on all channels. The stress test also checks that no channel is left bent.
   note lasts half the next gap, so same-pitch bounces never overlap; its note-off is scheduled with it. The
   played note passes on time and ends with its key; a key repeated before its note-off (on, on, off from
   upstream) ends its earlier note first, so the one note-off upstream sends balances the count.
+- **CC Out** (0.25.0, a Generator) derives from `MidiModule` directly. Its Value knob is meant to be modulated:
+  per call (a segment of at most 32 samples while modulation is active) it maps the unrounded Value onto
+  Low … High, optionally smooths it (one pole, about 95 % within Smoothing), and sends the result when the
+  sent value changes and at least 1 ms has passed since the last one. Pitch bend maps 0 / 64 / 127 to
+  0 / 8192 / 16383 (two linear halves); channel pressure is a two-byte message
+  (`MidiEvent::channelPressureMessage`). Incoming messages of the same controller and channel are dropped. When
+  Send stops it (transport stopped, no key held) or the controller or channel changes, the last sent value is
+  forgotten, so the current one goes out as soon as it sends again. The stress test allows it to leave a
+  channel bent, like the modules that move or block bends.
 - **Diatonic Harmonizer** (a Generator since 0.22.1, in GeneratorModules.cpp; a Transform before) derives from
   `MidiModule` directly and keeps a `NoteMappingTable` and a `SoundingNoteCounter` itself: a note-on starts
   the note plus its harmony notes (`moveByScaleSteps()`, octaves ±12). A note-on within 30 ms of the previous

@@ -112,6 +112,13 @@ struct MidiEvent
                  (uint8_t) (clamped >> 7), 3 };
     }
 
+    /** Creates a channel pressure (channel aftertouch) message: two bytes, the pressure 0..127. */
+    static MidiEvent channelPressureMessage (int samplePosition, int channel, int pressure) noexcept
+    {
+        return { samplePosition, (uint8_t) (MidiStatus::channelPressure | (channel & 0x0F)),
+                 (uint8_t) std::clamp (pressure, 0, 127), 0, 2 };
+    }
+
     /** Creates a control change message. */
     static MidiEvent controlChange (int samplePosition, int channel, int controllerNumber, int value) noexcept
     {

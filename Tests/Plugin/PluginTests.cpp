@@ -1232,6 +1232,42 @@ TEST_CASE ("bounce: the host shows its knobs, and the bounces reach the plug-in'
 }
 
 //==============================================================================
+// CC Out (0.25.0)
+
+TEST_CASE ("cc out: the host shows its knobs, the preset sets it up, and its controller reaches the output")
+{
+    MidiForgeProcessor processor;
+    processor.loadModule (0, (int) ModuleType::CcOut);
+    EXPECT (hostTextOf (processor, 0, 0) == "74 Cutoff");
+    EXPECT (hostTextOf (processor, 0, 1) == "1");
+    EXPECT (hostTextOf (processor, 0, 2) == "64");
+    EXPECT (hostTextOf (processor, 0, 3) == "While Playing");
+    EXPECT (hostTextOf (processor, 0, 4) == "0");
+    EXPECT (hostTextOf (processor, 0, 5) == "127");
+    EXPECT (hostTextOf (processor, 0, 6) == "Off");
+    auto* controller = processor.parameters.getParameter (ParameterIds::moduleParameter (0, 0));
+    controller->setValueNotifyingHost (1.0f);
+    EXPECT (hostTextOf (processor, 0, 0) == "Ch. Pressure");
+
+    // The factory preset: CC Out with Low 40, High 100, its Value moved by a 2-bar LFO.
+    const auto& presets = getFactoryPresets();
+    for (int index = 0; index < (int) presets.size(); ++index)
+        if (juce::String (presets[(size_t) index].name) == "Breathing Cutoff")
+            processor.setCurrentProgram (index);
+    EXPECT (processor.getModuleType (0) == (int) ModuleType::CcOut);
+    EXPECT (hostTextOf (processor, 0, 4) == "40" && hostTextOf (processor, 0, 5) == "100");
+    EXPECT (processor.isParameterModulated (0, 2));
+
+    // With Send on Always (the test host is not playing), CC 74 reaches the plug-in's output.
+    processor.parameters.getParameter (ParameterIds::moduleParameter (0, 3))->setValueNotifyingHost (0.0f);
+    processor.prepareToPlay (testSampleRate, testBlockSize);
+    const auto messages = toMessages (processBlock (processor, juce::MidiBuffer()));
+    const bool sentCutoff = std::any_of (messages.begin(), messages.end(), [] (const juce::MidiMessage& message)
+                                         { return message.isController() && message.getControllerNumber() == 74; });
+    EXPECT (sentCutoff);
+}
+
+//==============================================================================
 // Removing modules
 
 namespace
