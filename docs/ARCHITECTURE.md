@@ -180,6 +180,15 @@ on all channels. The stress test also checks that no channel is left bent.
   note lasts half the next gap, so same-pitch bounces never overlap; its note-off is scheduled with it. The
   played note passes on time and ends with its key; a key repeated before its note-off (on, on, off from
   upstream) ends its earlier note first, so the one note-off upstream sends balances the count.
+- **Note Length** (0.26.0, a Transform) derives from `MidiModule` directly. It passes note-ons on time and keeps
+  a `NoteState` per output note (channel × note): its end time, Max Length's latest end, whether the key is
+  held, whether the next note ends it (Legato) and Stretch's share. Incoming note-offs of its notes are not
+  sent on; it sends its own when an end time is due (`sendNoteOffsDueBy()`, over a list of the sounding keys,
+  reserved in the constructor). Fixed lengths are known at note-on; Stretch sets the end at the key's release
+  (held time × share, at least 100 %); Legato waits: a note-on more than 30 ms after the previous one ends all
+  waiting notes Overlap later. A key played again ends its note first; when the transport stops, waiting notes
+  whose keys are up end. Length's unit follows Mode through `getEffectiveParameterDescription()` (note values
+  with a final "Legato" step, ms, or stretch %), like Note Echo's Pre-Delay.
 - **CC Out** (0.25.0, a Generator) derives from `MidiModule` directly. Its Value knob is meant to be modulated:
   per call (a segment of at most 32 samples while modulation is active) it maps the unrounded Value onto
   Low … High, optionally smooths it (one pole, about 95 % within Smoothing), and sends the result when the

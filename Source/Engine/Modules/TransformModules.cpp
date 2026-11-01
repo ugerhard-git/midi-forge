@@ -5,8 +5,10 @@
  */
 #include "TransformModules.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
+#include <vector>
 
 namespace midiforge
 {
@@ -647,6 +649,214 @@ private:
     std::array<int64_t, numChannelNoteCombinations> delayOfHeldNote {};
 };
 
+//==============================================================================
+/**
+ * Decides how long every note lasts: a note value, milliseconds, a stretch of the time the key was held, or
+ * Legato (until the next note or chord starts). Note-ons pass on time; the module ignores the incoming
+ * note-offs of the notes it handles and sends its own. It keeps the end time of each sounding note, so ends can
+ * be moved (Legato, Stretch) or cancelled (a key played again).
+ */
+class NoteLength final : public MidiModule
+{
+public:
+    NoteLength() : MidiModule (ModuleType::NoteLength)
+    {
+        soundingKeys.reserve (numChannelNoteCombinations); // never allocates on the audio thread
+    }
+
+    void reset() override
+    {
+        notes.fill (NoteState {});
+        soundingKeys.clear();
+        lastNoteOnTime = std::numeric_limits<int64_t>::min() / 2;
+        wasPlaying = false;
+    }
+
+    void process (const MidiEventList& input, MidiEventList& output, const BlockContext& context,
+                  const float* parameterValues) override
+    {
+        // When the DAW stops, notes waiting for the next note (Legato) end, unless their key is still held.
+        if (wasPlaying && ! context.isPlaying)
+            for (const auto key : soundingKeys)
+                if (notes[key].endTime == openEnd && ! notes[key].isKeyDown)
+                    notes[key].endTime = context.blockStartSample;
+        wasPlaying = context.isPlaying;
+
+        for (const auto& event : input)
+        {
+            const int64_t eventTime = context.blockStartSample + event.samplePosition;
+            sendNoteOffsDueBy (eventTime, context, output);
+            if (event.isNoteOn())
+                startNote (event, eventTime, context, parameterValues, output);
+            else if (event.isNoteOff())
+                releaseKey (event, eventTime, output);
+            else
+                output.push_back (event);
+        }
+        sendNoteOffsDueBy (context.blockStartSample + context.numSamples - 1, context, output);
+    }
+
+private:
+    enum Parameter
+    {
+        mode,
+        length,
+        overlap,
+        maximumLength,
+        velocityToLength ///< page 2
+    };
+    enum Mode
+    {
+        noteValueMode,
+        millisecondsMode,
+        stretchMode
+    };
+    /** An end time that is not known yet: the key is still held (Stretch) or the next note decides (Legato). */
+    static constexpr int64_t openEnd = std::numeric_limits<int64_t>::max();
+    static constexpr double chordWindowInSeconds = 0.030;
+
+    /** What the module knows about one output note (channel × note number). */
+    struct NoteState
+    {
+        bool isSounding = false;         ///< Its note-on was sent, its note-off not yet
+        bool isKeyDown = false;          ///< Its key is held at the input
+        bool endsWithNextNote = false;   ///< Legato: the next note or chord ends it
+        int64_t keyDownTime = 0;         ///< When its key went down
+        int64_t endTime = openEnd;       ///< When its note-off is due
+        int64_t latestEndTime = openEnd; ///< Max Length (Legato and Stretch)
+        double stretchShare = 0.0;       ///< Stretch: the note lasts this many times the held time
+    };
+
+    /** Sends the note-offs due at or before an absolute sample time. */
+    void sendNoteOffsDueBy (int64_t sampleTime, const BlockContext& context, MidiEventList& output)
+    {
+        for (size_t index = 0; index < soundingKeys.size();)
+        {
+            auto& note = notes[soundingKeys[index]];
+            const int64_t dueTime = std::min (note.endTime, note.latestEndTime);
+            if (dueTime > sampleTime)
+            {
+                ++index;
+                continue;
+            }
+            const int position =
+                (int) std::clamp<int64_t> (dueTime - context.blockStartSample, 0, std::max (0, context.numSamples - 1));
+            output.push_back (MidiEvent::noteOff (position, (int) soundingKeys[index] / numMidiNotes,
+                                                  (int) soundingKeys[index] % numMidiNotes));
+            note.isSounding = false;
+            soundingKeys[index] = soundingKeys.back(); // order does not matter: the chain sorts by position
+            soundingKeys.pop_back();
+        }
+    }
+
+    /** Ends a sounding note right now (a key played again before its note ended). */
+    void endNow (size_t key, int samplePosition, MidiEventList& output)
+    {
+        auto& note = notes[key];
+        if (! note.isSounding)
+            return;
+        output.push_back (MidiEvent::noteOff (samplePosition, (int) key / numMidiNotes, (int) key % numMidiNotes));
+        note.isSounding = false;
+        soundingKeys.erase (std::find (soundingKeys.begin(), soundingKeys.end(), (uint16_t) key));
+    }
+
+    void startNote (const MidiEvent& noteOn, int64_t now, const BlockContext& context, const float* parameterValues,
+                    MidiEventList& output)
+    {
+        // Legato: a new note or chord (not a note within 30 ms of the previous one) ends the notes waiting for it.
+        const bool startsNewChord = now - lastNoteOnTime > (int64_t) (chordWindowInSeconds * context.sampleRate);
+        lastNoteOnTime = now;
+        if (startsNewChord)
+        {
+            const auto overlapInSamples =
+                (int64_t) std::llround (integerParameter (parameterValues, overlap) * context.sampleRate / 1000.0);
+            for (const auto key : soundingKeys)
+                if (notes[key].endsWithNextNote)
+                    notes[key].endTime = std::min (notes[key].endTime, now + overlapInSamples);
+        }
+
+        const size_t key = channelNoteIndex (noteOn.channel(), noteOn.noteNumber());
+        endNow (key, noteOn.samplePosition, output);
+
+        auto& note = notes[key];
+        note = NoteState {};
+        note.isSounding = true;
+        note.isKeyDown = true;
+        note.keyDownTime = now;
+        decideEnd (note, noteOn.velocity(), now, context, parameterValues);
+        soundingKeys.push_back ((uint16_t) key);
+        output.push_back (noteOn);
+    }
+
+    /** Sets when a starting note ends, or how its end will be found (Stretch, Legato). */
+    void decideEnd (NoteState& note, int velocity, int64_t now, const BlockContext& context,
+                    const float* parameterValues) const noexcept
+    {
+        const auto& lengthDescription =
+            getEffectiveParameterDescription ((int) ModuleType::NoteLength, length, parameterValues);
+        const int lengthSetting = normalisedToInteger (lengthDescription, parameterValues[length]);
+        const int selectedMode = integerParameter (parameterValues, mode);
+        const bool isLegato = selectedMode == noteValueMode && lengthSetting >= noteLengthLegatoIndex;
+
+        if (isLegato || selectedMode == stretchMode)
+        {
+            const int maximumSetting = integerParameter (parameterValues, maximumLength);
+            if (maximumSetting > 0)
+            {
+                const auto& maximum =
+                    noteLengthMaximumDivisions[std::clamp (maximumSetting - 1, 0, numNoteLengthMaximumDivisions - 1)];
+                note.latestEndTime = now + std::llround (divisionLengthInBeats (maximum, context.timeSignature) *
+                                                         context.samplesPerBeat());
+            }
+        }
+        if (isLegato)
+        {
+            note.endsWithNextNote = true;
+            return;
+        }
+
+        // Velocity > Length: at +100 %, velocity 127 doubles the length and velocity 1 shortens it to a tenth.
+        const double velocityShare =
+            integerParameter (parameterValues, velocityToLength) / 100.0 * (velocity - 64) / 63.0;
+        const double velocityFactor = std::clamp (1.0 + velocityShare, 0.1, 2.0);
+        if (selectedMode == stretchMode)
+        {
+            note.stretchShare = std::max (1.0, lengthSetting / 100.0 * velocityFactor); // Stretch only lengthens
+            return;
+        }
+
+        double lengthInSamples = 0.0;
+        if (selectedMode == millisecondsMode)
+            lengthInSamples = lengthSetting * context.sampleRate / 1000.0;
+        else
+            lengthInSamples =
+                divisionLengthInBeats (slideDivisions[std::clamp (lengthSetting, 0, numSlideDivisions - 1)],
+                                       context.timeSignature) *
+                context.samplesPerBeat();
+        note.endTime = now + std::max<int64_t> (1, std::llround (lengthInSamples * velocityFactor));
+    }
+
+    /** A key was released: Stretch now knows the note's end; the incoming note-off itself is not sent on. */
+    void releaseKey (const MidiEvent& noteOff, int64_t now, MidiEventList& output)
+    {
+        auto& note = notes[channelNoteIndex (noteOff.channel(), noteOff.noteNumber())];
+        if (! note.isKeyDown)
+        {
+            if (! note.isSounding)
+                output.push_back (noteOff); // a note this module does not know: pass it on (see MidiModule.h)
+            return;
+        }
+        note.isKeyDown = false;
+        if (note.isSounding && note.stretchShare > 0.0)
+            note.endTime = note.keyDownTime + std::llround ((double) (now - note.keyDownTime) * note.stretchShare);
+    }
+
+    std::array<NoteState, numChannelNoteCombinations> notes {};
+    std::vector<uint16_t> soundingKeys; ///< Keys (channel × note) of the sounding notes, in no particular order
+    int64_t lastNoteOnTime = std::numeric_limits<int64_t>::min() / 2;
+    bool wasPlaying = false;
+};
+
 } // namespace
 
 std::unique_ptr<MidiModule> createTransformModule (ModuleType type)
@@ -659,6 +869,7 @@ std::unique_ptr<MidiModule> createTransformModule (ModuleType type)
         case ModuleType::ChannelRemap: return std::make_unique<ChannelRemap>();
         case ModuleType::NoteDispatcher: return std::make_unique<NoteDispatcher>();
         case ModuleType::Groove: return std::make_unique<Groove>();
+        case ModuleType::NoteLength: return std::make_unique<NoteLength>();
         default: return nullptr;
     }
 }

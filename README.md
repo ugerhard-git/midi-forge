@@ -8,8 +8,8 @@ and randomizers – in front of any instrument.
 - **Formats:** VST3 and CLAP (Windows, macOS), Audio Unit (macOS) · **macOS:** universal (Apple Silicon and Intel),
   checked automatically but not yet tried on a Mac
 - **Made for:** Reaper and Bitwig Studio (any host that supports MIDI-effect plug-ins should work)
-- **26 modules:** Note Range, Velocity Range, Channel Filter, Event Blocker, Note Split, Transpose, Scale Quantize,
-  Velocity Curve, Channel Remap, Note Dispatcher, Groove, Arpeggiator, Chord, Diatonic Harmonizer, Note Echo,
+- **27 modules:** Note Range, Velocity Range, Channel Filter, Event Blocker, Note Split, Transpose, Scale Quantize,
+  Velocity Curve, Channel Remap, Note Dispatcher, Groove, Note Length, Arpeggiator, Chord, Diatonic Harmonizer, Note Echo,
   Repeater (ratchets), Strum, Ghost Notes, Bounce, CC Out, Humanize, Probability, Beat Thinning, Random Pitch,
   Pitch Slide, Mutate
 - **Follows the DAW's time signature** (4/4, 3/4, 6/8, 7/8 …) wherever bars matter

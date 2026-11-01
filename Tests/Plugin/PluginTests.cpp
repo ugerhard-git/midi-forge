@@ -1268,6 +1268,38 @@ TEST_CASE ("cc out: the host shows its knobs, the preset sets it up, and its con
 }
 
 //==============================================================================
+// Note Length (0.26.0)
+
+TEST_CASE ("note length: the host shows Length in the unit Mode sets, and the preset sets it up")
+{
+    MidiForgeProcessor processor;
+    processor.loadModule (0, (int) ModuleType::NoteLength);
+    EXPECT (hostTextOf (processor, 0, 0) == "Note Value");
+    EXPECT (hostTextOf (processor, 0, 1) == "1/8");
+    EXPECT (hostTextOf (processor, 0, 2) == "0 ms");
+    EXPECT (hostTextOf (processor, 0, 3) == "2 Bars");
+    EXPECT (hostTextOf (processor, 0, 4) == "0%");
+
+    auto* length = processor.parameters.getParameter (ParameterIds::moduleParameter (0, 1));
+    length->setValueNotifyingHost (1.0f);
+    EXPECT (hostTextOf (processor, 0, 1) == "Legato");
+    auto* mode = processor.parameters.getParameter (ParameterIds::moduleParameter (0, 0));
+    mode->setValueNotifyingHost (0.5f); // Milliseconds
+    EXPECT (hostTextOf (processor, 0, 1) == "2000 ms");
+    mode->setValueNotifyingHost (1.0f); // Stretch
+    EXPECT (hostTextOf (processor, 0, 1) == "400%");
+
+    const auto& presets = getFactoryPresets();
+    for (int index = 0; index < (int) presets.size(); ++index)
+        if (juce::String (presets[(size_t) index].name) == "Staccato to Legato")
+            processor.setCurrentProgram (index);
+    EXPECT (processor.getModuleType (0) == (int) ModuleType::Arpeggiator);
+    EXPECT (processor.getModuleType (1) == (int) ModuleType::NoteLength);
+    EXPECT (hostTextOf (processor, 1, 1) == "1/32");
+    EXPECT (processor.isParameterModulated (1, 1));
+}
+
+//==============================================================================
 // Removing modules
 
 namespace

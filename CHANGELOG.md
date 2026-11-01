@@ -4,6 +4,16 @@ What changed in each release of MIDI Forge. The release workflow publishes the s
 text of its GitHub release, so every section starts with `## [version]` and is written for users.
 Versions below 1.0 are betas: they are published as pre-releases.
 
+## [0.26.0] – Note Length
+
+- **New module: Note Length** (a Transform). Decides how long every note lasts, however long the key is held:
+  a note value (1/64 … 1 Bar), a time in milliseconds, or *Stretch*, 100 … 400 % of how long the key was held.
+  The last note value is **Legato**: each note lasts until the next one starts, with an optional *Overlap* for
+  mono synths that glide. *Max Length* keeps a phrase's last note from hanging, and *Velocity > Length* lets
+  harder notes ring longer. Route a slow LFO to *Length* and a part goes from staccato to legato over a phrase.
+- New factory preset **Staccato to Legato**: an arpeggio whose notes a 4-bar LFO stretches from short stabs to
+  legato and back.
+
 ## [0.25.0] – CC Out, Bounce, CLAP and macOS
 
 The first release since 0.22.1, with everything built since then (0.23.0 and 0.24.0 were not published on

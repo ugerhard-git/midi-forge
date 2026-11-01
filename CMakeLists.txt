@@ -12,7 +12,7 @@
 
 cmake_minimum_required(VERSION 3.28)
 
-project(MidiForge VERSION 0.25.0 LANGUAGES C CXX)
+project(MidiForge VERSION 0.26.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -101,6 +101,7 @@ if(MIDI_FORGE_BUILD_ENGINE_TESTS)
         Tests/Engine/GeneratorAndRandomizerTests.cpp
         Tests/Engine/BounceAndPreDelayTests.cpp
         Tests/Engine/CcOutTests.cpp
+        Tests/Engine/NoteLengthTests.cpp
         Tests/Engine/ModuleChainTests.cpp
         Tests/Engine/ModulationTests.cpp
         Tests/Engine/RepeaterTests.cpp

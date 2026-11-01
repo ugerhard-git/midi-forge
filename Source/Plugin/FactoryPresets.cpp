@@ -77,6 +77,8 @@ const std::vector<FactoryPreset>& getFactoryPresets()
     constexpr float echoEighth = 5;
     constexpr float cutoffController = 74, sendWhilePlaying = 1;
     constexpr int ccOutValue = 2;
+    constexpr float eighthRate = 1, noteValueLengths = 0, thirtySecondLength = 2, twoBarsMaximum = 4;
+    constexpr int fourBars = 1, noteLengthLength = 1;
 
     static const std::vector<FactoryPreset> presets = {
         { "Init", {}, {}, {}, {} },
@@ -186,6 +188,14 @@ const std::vector<FactoryPreset>& getFactoryPresets()
           { { ModuleType::CcOut, { cutoffController, 1, 64, sendWhilePlaying }, { 40, 100, keep, keep } } },
           { { 0, syncedLfo (LfoWaveform::Sine, twoBars) } },
           { { 0, 0, ccOutValue, 50.0f } }, // CC 74 (often the filter cutoff) breathes between 40 and 100
+          {} },
+
+        // Added in 0.26.0 ------------------------------------------------------------------------
+        { "Staccato to Legato",
+          { { ModuleType::Arpeggiator, { eighthRate, upDownPattern, 2, 50 } },
+            { ModuleType::NoteLength, { noteValueLengths, thirtySecondLength, 0, twoBarsMaximum } } },
+          { { 0, syncedLfo (LfoWaveform::Triangle, fourBars) } },
+          { { 0, 1, noteLengthLength, 100.0f, true } }, // over 4 bars: short stabs, longer notes, legato, back
           {} },
     };
     return presets;
