@@ -392,9 +392,9 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md#building) for commands. The workflow
    under the job's own name. That is why every job has a fixed name (no `${{ }}` expressions, no matrix);
    these are the names to require in the `main` ruleset: *What changed*, *Format, lint and engine tests*,
    *Plug-in layer tests and editor screenshots*, *Plug-in (Windows)*, *CodeQL (C++)* and, from the second
-   workflow below, *Workflow security audit*. *Plug-in (macOS)* is deliberately not required yet: macOS
-   runners were unavailable for hours in October 2026, which would block every pull request. Add it once
-   the macOS runners have proven reliable.
+   workflow below, *Workflow security audit*. *Plug-in (macOS)* and its *Intel fallback* are deliberately
+   not required: Apple Silicon runners were unavailable for hours in October and November 2026, and when one
+   of the two macOS jobs is cancelled the other may be skipped, so neither name is reliably green.
 1. **Checks** (Linux): clang-format, clang-tidy, engine tests with warnings as errors, engine tests
    under address/UB sanitizers, plug-in layer tests, and screenshots of both editor pages (artifact
    `editor-screenshots`, the source of `docs/images/editor.png` and `docs/images/modulation.png`).
@@ -414,7 +414,14 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md#building) for commands. The workflow
      bundle ad hoc (no Apple Developer certificate; Apple Silicon loads only signed code), checks the
      signature and that each binary holds both architectures (`lipo -archs`), runs Apple's `auval -strict` on
      the AU, and zips the folder with `ditto` (an artifact would lose the bundles' file permissions and break
-     the signatures). The artifact `MIDI-Forge-macOS` holds that zip.
+     the signatures). The artifact `MIDI-Forge-macOS` holds that zip. The steps live in the local composite
+     action `.github/actions/build-macos`, shared by two jobs:
+     - **Plug-in (macOS)** runs on an Apple Silicon runner (`macos-latest`).
+     - **Plug-in (macOS, Intel fallback)** runs on `macos-15-intel` (offered until the macOS 15 image is
+       retired in autumn 2027), only when the first job was *cancelled*: GitHub cancels a job after about 15
+       minutes when no runner of its type is free ("not acquired by Runner … even after multiple attempts").
+       It does not run when the first job *failed* (a real build error) or when the whole run was cancelled
+       (`!cancelled()`). Its universal binary is the same; `auval` then checks the Intel half.
    - `packaging/write-third-party-notices.sh` writes THIRD-PARTY-NOTICES.txt from the licence files of the
      fetched sources (VST3 SDK, clap-juce-extensions, CLAP, clap-helpers; on macOS also Apple's Audio Unit
      SDK), so it always matches what was built.
@@ -432,9 +439,9 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md#building) for commands. The workflow
    release – a pre-release for versions below 1.0 or tags with a suffix. If a release for the tag exists already
    (published by hand), it uploads the zip (`--clobber`) and sets the text only if the release's own text is
    empty.
-5. **Publish release (macOS zip)** (tags only, after the release and the macOS build): uploads
-   `MIDI-Forge-macOS.zip` to the release. A release thus never waits for a macOS runner; if the macOS build
-   fails, the release has only the Windows zip until the failed jobs are re-run.
+5. **Publish release (macOS zip)** (tags only, after the release and whichever macOS job built the zip):
+   uploads `MIDI-Forge-macOS.zip` to the release. A release thus never waits for a macOS runner; if neither
+   macOS job succeeds, the release has only the Windows zip until the failed jobs are re-run.
 
 **JUCE modules linked** (plug-in and plug-in tests): `juce_audio_processors` – the plug-in wrapper (VST3),
 host parameters and state; it brings `juce_audio_processors_headless`, `juce_audio_basics`, `juce_events`,
@@ -448,14 +455,16 @@ README points to, and the release zips), and a poisoned cache would end up in th
 fresh instead, which costs about 1–2 minutes per job (the jobs run in parallel).
 
 A second workflow, `.github/workflows/workflow-security.yml`, runs the job **Workflow security audit** on
-every pull request and push to `main` (it is never skipped). It checks all workflows with
+every pull request and push to `main` (it is never skipped). It checks everything in `.github` – the
+workflows, the shared action in `.github/actions` and the Dependabot configuration – with
 [zizmor](https://docs.zizmor.sh) – unpinned actions, too many permissions, template injection, leaked
 credentials, cache poisoning – and fails on any finding of low severity or above. zizmor is installed in a
 virtual environment from `.github/requirements-ci.txt`, pinned by version and hash (`pip --require-hashes`).
 
 Dependencies (JUCE 9.0.4, clap-juce-extensions) are fetched by CMake at pinned versions; clap-validator is
 built from a pinned commit with `--locked`; GitHub Actions are pinned to commit SHAs, and the CI tools in `.github/requirements-ci.txt` by
-version and hash. Dependabot proposes updates to both every week.
+version and hash. Dependabot proposes updates to both every week, but only for versions released at least
+7 days earlier (`cooldown`), so a hijacked release is usually found and pulled before it reaches us.
 
 ## Licensing note
 
