@@ -54,13 +54,13 @@ const char* const dispatchAlgorithmLabels[] = { "Round Robin", "Random", "Ping P
 const char* const dispatchModeLabels[] = { "Single Notes", "Chords" };
 const char* const mutateDirectionLabels[] = { "Up", "Down", "Both" };
 const char* const mutateMemoryLabels[] = { "4 Bars", "2 Bars", "1 Bar", "Per Pitch" };
-const char* const grooveTemplateLabels[] = { "Swing", "Laid-back Snare", "Pushed Off-beats", "Shuffle", "Drunk" };
+const char* const grooveTemplateLabels[] = { "Swing", "Laid-back", "Pushed", "Shuffle", "Drunk" };
 const char* const grooveGridLabels[] = { "1/8", "1/16", "1/32" };
 const char* const strumDirectionLabels[] = { "Up", "Down", "Alternate", "Random" };
 const char* const ghostPositionLabels[] = { "After", "Before", "Both" };
 const char* const ghostDistanceLabels[] = { "1/32", "1/16T", "1/16", "1/8" };
 const char* const stepGridLabels[] = { "Steady", "Bar" };
-const char* const meterGroupingLabels[] = { "3 Last (2+2+3)", "3 First (3+2+2)", "3 Middle (2+3+2)" };
+const char* const meterGroupingLabels[] = { "3 Last", "3 First", "3 Middle" };
 const char* const harmonyIntervalLabels[] = { "Oct Down", "7th Down", "6th Down", "5th Down", "4th Down",
                                               "3rd Down", "2nd Down", "Off",      "2nd Up",   "3rd Up",
                                               "4th Up",   "5th Up",   "6th Up",   "7th Up",   "Oct Up" };
@@ -139,7 +139,7 @@ const char* const ccOutControllerLabels[] = { "0 Bank Select",
                                               "62",
                                               "63",
                                               "64 Sustain",
-                                              "65 Portamento",
+                                              "65 Porta On",
                                               "66 Sostenuto",
                                               "67 Soft Pedal",
                                               "68",
@@ -209,7 +209,7 @@ const char* const noteLengthValueLabels[] = { "1/64", "1/32T", "1/32", "1/16T", 
                                               "1/8T", "1/16D", "1/8",  "1/4T",  "1/8D",  "1/4",
                                               "1/2T", "1/4D",  "1/2",  "1/2D",  "1 Bar", "Legato" };
 const char* const noteLengthMaximumLabels[] = { "Off", "1/4", "1/2", "1 Bar", "2 Bars", "4 Bars" };
-const char* const ccOutSendLabels[] = { "Always", "While Playing", "While Notes Held" };
+const char* const ccOutSendLabels[] = { "Always", "While Playing", "Keys Held" };
 const char* const arpeggiatorDivisionLabels[] = { "1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32" };
 const char* const scaleLabels[] = { "Major",       "Minor",   "Dorian",      "Phrygian",   "Lydian",
                                     "Mixolydian",  "Locrian", "Harm. Minor", "Mel. Minor", "Major Pent.",
@@ -488,7 +488,7 @@ const ModuleDescription* createModuleTable()
         // Added in 0.5.0 ---------------------------------------------------------------------------
         { "Note Split",
           ModuleCategory::Filter,
-          "Selected notes continue down the chain; all others go straight out.",
+          "Selected notes go down the chain; all others straight out.",
           { noteParameter ("Low", 60).withHelp ("Lowest selected note."),
             noteParameter ("High", 60).withHelp ("Highest selected note. Same as Low selects exactly one note."),
             choiceParameter ("Octaves", noteSplitOctaveLabels, 0)
@@ -501,7 +501,7 @@ const ModuleDescription* createModuleTable()
         // Added in 0.10.0 --------------------------------------------------------------------------
         { "Pitch Slide",
           ModuleCategory::Randomizer,
-          "Slides notes in from, out to, or falls off to another pitch (pitch bend).",
+          "Slides notes in, out or off with pitch bend.",
           { integerParameter ("Offset", -24, 24, -2, " st")
                 .withHelp ("Where the slide starts (Slide In) or ends (Slide Out), relative to the note."),
             choiceParameter ("Mode", slideModeLabels, 0)
@@ -528,7 +528,7 @@ const ModuleDescription* createModuleTable()
         // Added in 0.12.0 --------------------------------------------------------------------------
         { "Note Dispatcher",
           ModuleCategory::Transform,
-          "Spreads notes over several channels, one free channel at a time.",
+          "Spreads notes over channels, one free channel each.",
           { choiceParameter ("Algorithm", dispatchAlgorithmLabels, 0)
                 .withHelp ("How the next free channel is chosen: in turn, at random, or up and down."),
             choiceParameter ("Mode", dispatchModeLabels, 0)
@@ -549,7 +549,7 @@ const ModuleDescription* createModuleTable()
         // Added in 0.15.0 --------------------------------------------------------------------------
         { "Mutate",
           ModuleCategory::Randomizer,
-          "Lets a melody drift: notes slowly move to neighbouring scale notes.",
+          "Lets a melody drift slowly to neighbouring scale notes.",
           { percentParameter ("Amount", 0, 100, 25).withHelp ("How often a note moves one more step away."),
             integerParameter ("Range", 1, 3, 1).withHelp ("How many scale steps a single change can move."),
             choiceParameter ("Direction", mutateDirectionLabels, 2).withHelp ("Which way the notes move."),
@@ -678,7 +678,7 @@ const ModuleDescription* createModuleTable()
         // Added in 0.25.0 --------------------------------------------------------------------------
         { "CC Out",
           ModuleCategory::Generator,
-          "Sends a MIDI controller to the synth; modulate Value to move its sound.",
+          "Sends a MIDI controller (e.g. filter cutoff) to the synth.",
           { choiceParameter ("Controller", ccOutControllerLabels, 74)
                 .withHelp ("What is sent: a MIDI controller (74 is often the filter cutoff), pitch bend or channel "
                            "pressure."),
@@ -701,7 +701,7 @@ const ModuleDescription* createModuleTable()
         // Added in 0.26.0 --------------------------------------------------------------------------
         { "Note Length",
           ModuleCategory::Transform,
-          "Sets how long notes last: a note value, ms, stretched, or legato.",
+          "Sets how long notes last: note value, ms, stretch, legato.",
           { choiceParameter ("Mode", noteLengthModeLabels, 0)
                 .withHelp ("How Length is measured: a note value (up to Legato), milliseconds, or Stretch."),
             noteLengthInNoteValues(),

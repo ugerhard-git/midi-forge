@@ -18,6 +18,7 @@
 #include "UI/ModuleBrowser.h"
 #include "UI/PluginEditor.h"
 #include "UI/PresetBar.h"
+#include "UI/SlotRow.h"
 #include "UI/Theme.h"
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -1297,6 +1298,125 @@ TEST_CASE ("note length: the host shows Length in the unit Mode sets, and the pr
     EXPECT (processor.getModuleType (1) == (int) ModuleType::NoteLength);
     EXPECT (hostTextOf (processor, 1, 1) == "1/32");
     EXPECT (processor.isParameterModulated (1, 1));
+}
+
+//==============================================================================
+// Knob and summary texts fit (0.26.1)
+
+namespace
+{
+/**
+ * @return True if a text fits a label in one line, condensed at most to the label's minimum horizontal scale (as
+ *         the look and feel draws it); otherwise the label would cut it off with "...".
+ * @param neededWidth     Receives the width the text needs at the minimum scale.
+ * @param availableWidth  Receives the label's width inside its border.
+ */
+bool fitsInLabel (const juce::Label& label, const juce::String& text, float& neededWidth, float& availableWidth)
+{
+    juce::GlyphArrangement glyphs;
+    glyphs.addLineOfText (label.getFont(), text, 0.0f, 0.0f);
+    neededWidth = glyphs.getBoundingBox (0, -1, true).getWidth() * label.getMinimumHorizontalScale();
+    availableWidth = (float) label.getBorderSize().subtractedFrom (label.getLocalBounds()).getWidth();
+    return neededWidth <= availableWidth;
+}
+
+/** @return Every text a knob can show for a description: its name and its values (all choices, or the extremes). */
+std::vector<juce::String> textsOfKnob (const ParameterDescription& parameter)
+{
+    std::vector<juce::String> values;
+    if (parameter.kind == ParameterKind::Choice)
+        for (int step = 0; step < getNumberOfSteps (parameter); ++step)
+            values.push_back (parameter.choiceLabels[step]);
+    else
+        for (float value : { 0.0f, 1.0f, getNormalisedDefault (parameter) })
+            values.push_back (formatParameterValue (parameter, value));
+    return values;
+}
+
+/** @return The components of a type below a component, in child order (depth first). */
+template <typename ComponentType> std::vector<ComponentType*> findAll (juce::Component& parent)
+{
+    std::vector<ComponentType*> found;
+    for (auto* child : parent.getChildren())
+    {
+        if (auto* match = dynamic_cast<ComponentType*> (child))
+            found.push_back (match);
+        const auto below = findAll<ComponentType> (*child);
+        found.insert (found.end(), below.begin(), below.end());
+    }
+    return found;
+}
+} // namespace
+
+TEST_CASE ("knob texts: every module's knob names, values and summary fit without being cut off")
+{
+    MidiForgeProcessor processor;
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditorAndMakeActive());
+    auto* forgeEditor = dynamic_cast<MidiForgeEditor*> (editor.get());
+    const auto slotRows = findAll<SlotRow> (*editor);
+    EXPECT (forgeEditor != nullptr && ! slotRows.empty());
+    if (forgeEditor == nullptr || slotRows.empty())
+        return;
+    auto& firstSlot = *slotRows.front();
+    const auto knobs = findAll<ParameterKnob> (firstSlot);
+    EXPECT (knobs.size() == (size_t) numParametersPerPage);
+    if (knobs.size() != (size_t) numParametersPerPage)
+        return;
+
+    int numCutOff = 0;
+    const auto check = [&numCutOff] (const juce::Label& label, const juce::String& text, const char* moduleName)
+    {
+        float needed = 0.0f, available = 0.0f;
+        if (! fitsInLabel (label, text, needed, available))
+        {
+            ++numCutOff;
+            std::printf ("    cut off: %s: \"%s\" needs %.0f px, has %.0f px\n", moduleName, text.toRawUTF8(), needed,
+                         available);
+        }
+    };
+
+    for (int type = 1; type < numModuleTypes; ++type)
+    {
+        const auto& description = getModuleDescription (type);
+        processor.loadModule (0, type);
+        forgeEditor->refreshFromProcessor();
+
+        // The summary under the module menu: the slot's label that shows it.
+        for (auto* label : findAll<juce::Label> (firstSlot))
+            if (label->getText() == juce::String (description.summary))
+                check (*label, description.summary, description.name);
+
+        // Every knob's name and values, in every unit it can have: a knob's unit may follow a choice knob of the
+        // same module (Note Echo's Pre-Delay, Note Length's Length), so every choice of every choice knob is tried.
+        float values[numParametersPerSlot] {};
+        for (int index = 0; index < numParametersPerSlot; ++index)
+            values[index] = getNormalisedDefault (description.parameters[index]);
+        for (int parameterIndex = 0; parameterIndex < numParametersPerSlot; ++parameterIndex)
+        {
+            if (! description.parameters[parameterIndex].isUsed())
+                continue;
+            const auto& knob = *knobs[(size_t) (parameterIndex % numParametersPerPage)];
+            check (knob.nameLabel, description.parameters[parameterIndex].name, description.name);
+            for (int selector = 0; selector < numParametersPerSlot; ++selector)
+            {
+                const auto& selectorParameter = description.parameters[selector];
+                if (selectorParameter.kind != ParameterKind::Choice)
+                    continue;
+                float variant[numParametersPerSlot];
+                std::copy (std::begin (values), std::end (values), std::begin (variant));
+                for (int step = 0; step < getNumberOfSteps (selectorParameter); ++step)
+                {
+                    variant[selector] = plainValueToNormalised (selectorParameter, (float) step);
+                    for (const auto& text :
+                         textsOfKnob (getEffectiveParameterDescription (type, parameterIndex, variant)))
+                        check (knob.valueLabel, text, description.name);
+                }
+            }
+            for (const auto& text : textsOfKnob (description.parameters[parameterIndex]))
+                check (knob.valueLabel, text, description.name);
+        }
+    }
+    EXPECT (numCutOff == 0);
 }
 
 //==============================================================================
