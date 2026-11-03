@@ -226,12 +226,18 @@ jobs:
   # When no Apple Silicon runner is free, GitHub cancels "Plug-in (macOS)" after about 15 minutes ("not acquired by
   # Runner"; it happened for hours in October and November 2026). This job then builds the same universal binaries
   # on an Intel runner (macos-15-intel, offered by GitHub until the macOS 15 image is retired in autumn 2027);
-  # auval checks the Intel half there. It only runs when that job was cancelled – not when it failed (a real
-  # build error would fail here too) and not when the whole run was cancelled (!cancelled()).
+  # auval checks the Intel half there. It runs only when that job was cancelled, not when it failed (a real build
+  # error would fail here too).
+  # always(): GitHub counts a cancelled job in `needs` as a cancelled run, so !cancelled() would skip this job
+  # exactly when it is needed (seen on PR #17). always() also runs after a cancelled run, though – and pull
+  # request runs are cancelled whenever a newer push replaces them. So the fallback serves pushes to main, tags
+  # (releases) and manual runs, where the downloads come from; not pull requests.
   build-macos-intel:
     name: Plug-in (macOS, Intel fallback)
     needs: [changes, build-macos]
-    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' && needs.build-macos.result == 'cancelled' }}
+    if: >-
+      ${{ always() && github.event_name != 'pull_request' && needs.changes.outputs.code == 'true' &&
+      needs.build-macos.result == 'cancelled' }}
     runs-on: macos-15-intel
     timeout-minutes: 120
     steps:
@@ -360,11 +366,12 @@ jobs:
 
   # The macOS zip is added to the release when its build is done, so a release never waits for a macOS runner.
   # If the macOS build fails, the release keeps only the Windows zip; re-running the failed jobs adds it later.
-  # The zip comes from whichever macOS job built it (Apple Silicon, or the Intel fallback).
+  # The zip comes from whichever macOS job built it (Apple Silicon, or the Intel fallback). always(), because a
+  # cancelled Apple Silicon job would otherwise skip this job too (see the fallback above).
   release-macos:
     name: Publish release (macOS zip)
     if: >-
-      ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.release.result == 'success' &&
+      ${{ always() && startsWith(github.ref, 'refs/tags/v') && needs.release.result == 'success' &&
       (needs.build-macos.result == 'success' || needs.build-macos-intel.result == 'success') }}
     needs: [build-macos, build-macos-intel, release]
     runs-on: ubuntu-latest
