@@ -177,7 +177,7 @@ Bounce's First Gap, slides and steps, LFO rates of 1 to 8 bars, which stay align
 
 How a bar is felt: its counts (quarter notes in x/4, eighth notes in x/8) are grouped in twos and threes.
 
-| Time signature | Groups | Backbeats (Groove's Laid-back Snare) |
+| Time signature | Groups | Backbeats (Groove's Laid-back) |
 |----------------|--------|--------------------------------------|
 | 2/4, 4/4 | 2 / 2+2 | beat 2 / beats 2 and 4 |
 | 3/4 | 3 | beats 2 and 3 |
@@ -201,14 +201,14 @@ All 27 modules at a glance (click a name to jump to its description):
 |  | [Velocity Range](#velocity-range) | Passes or blocks notes inside a velocity range. |
 |  | [Channel Filter](#channel-filter) | Keeps only one MIDI channel, or removes it. |
 |  | [Event Blocker](#event-blocker) | Blocks whole classes of MIDI events. |
-|  | [Note Split](#note-split) | Selected notes continue down the chain; all others go straight out. |
+|  | [Note Split](#note-split) | Selected notes go down the chain; all others straight out. |
 | Transforms | [Transpose](#transpose) | Shifts notes by semitones and octaves. |
 |  | [Scale Quantize](#scale-quantize) | Forces notes into a key and scale. |
 |  | [Velocity Curve](#velocity-curve) | Reshapes, compresses or fixes note velocities. |
 |  | [Channel Remap](#channel-remap) | Moves events from one channel to another. |
 |  | [Groove](#groove) | Pulls notes onto a groove: swing, laid-back snare, shuffle ... |
-|  | [Note Dispatcher](#note-dispatcher) | Spreads notes over several channels, one free channel at a time. |
-|  | [Note Length](#note-length) | Sets how long notes last: a note value, ms, stretched, or legato. |
+|  | [Note Dispatcher](#note-dispatcher) | Spreads notes over channels, one free channel each. |
+|  | [Note Length](#note-length) | Sets how long notes last: note value, ms, stretch, legato. |
 | Generators | [Arpeggiator](#arpeggiator) | Turns held notes into a tempo-synced pattern. |
 |  | [Chord](#chord) | Builds a chord on every incoming note. |
 |  | [Diatonic Harmonizer](#diatonic-harmonizer) | Adds one or two harmony notes that stay in key. |
@@ -217,13 +217,13 @@ All 27 modules at a glance (click a name to jump to its description):
 |  | [Strum](#strum) | Plays chords as strums: the notes one after another. |
 |  | [Ghost Notes](#ghost-notes) | Adds quiet extra hits around notes, mainly for drums. |
 |  | [Bounce](#bounce) | Repeats notes like a bouncing ball: ever faster and softer. |
-|  | [CC Out](#cc-out) | Sends a MIDI controller to the synth; modulate Value to move its sound. |
+|  | [CC Out](#cc-out) | Sends a MIDI controller (e.g. filter cutoff) to the synth. |
 | Randomizers | [Humanize](#humanize) | Adds random timing delay and velocity variation. |
 |  | [Probability](#probability) | Lets each note through with a given chance. |
 |  | [Random Pitch](#random-pitch) | Randomly shifts some of the notes. |
 |  | [Beat Thinning](#beat-thinning) | Drops notes by their place in the bar: off-beats go first. |
-|  | [Mutate](#mutate) | Lets a melody drift: notes slowly move to neighbouring scale notes. |
-|  | [Pitch Slide](#pitch-slide) | Slides notes in from, out to, or falls off to another pitch (pitch bend). |
+|  | [Mutate](#mutate) | Lets a melody drift slowly to neighbouring scale notes. |
+|  | [Pitch Slide](#pitch-slide) | Slides notes in, out or off with pitch bend. |
 
 ### Filters (blue)
 
@@ -359,8 +359,8 @@ DAW plays; when it is stopped, notes pass unchanged.
 | Groove | What it does |
 |--------|--------------|
 | Swing | Every second grid step comes later (60 % swing) and a little softer |
-| Laid-back Snare | The backbeats (beats 2 and 4 in 4/4; see [Time signatures](#time-signatures) for other meters) sit slightly behind the beat and are accented |
-| Pushed Off-beats | The "and" between the beats comes slightly early (needs *Early*, see below) and is accented |
+| Laid-back | The backbeats (beats 2 and 4 in 4/4; see [Time signatures](#time-signatures) for other meters) sit slightly behind the beat and are accented |
+| Pushed | The "and" between the beats comes slightly early (needs *Early*, see below) and is accented |
 | Shuffle | A full triplet feel: every second grid step two thirds of the way |
 | Drunk | Every grid step a little early or late in a four-step pattern |
 
@@ -378,7 +378,7 @@ to that much ahead of the others. MIDI Forge tells your DAW about this delay (as
 Reaper and Bitwig normally shift the track to compensate, so everything stays in time with the rest of the
 song. If the whole part sounds late, set the track's delay/offset in your DAW to minus the Early time.
 Strum's *Window* is reported the same way, and the delays of several modules add up.
-Without Early, grooves can only move notes later (which is all Swing, Shuffle and Laid-back Snare need), and
+Without Early, grooves can only move notes later (which is all Swing, Shuffle and Laid-back need), and
 late-played notes cannot be pulled back onto the beat. Keep a Groove with Early switched on: switching the
 slot on and off (also by modulation) changes the delay.
 
@@ -689,7 +689,7 @@ between 40 and 100. Turning Value by hand sends too.
 - **Incoming messages** of the same controller on the same channel (e.g. your own mod wheel, if CC Out sends
   CC 1) are blocked, so the two never fight. Everything else passes unchanged.
 - **Send** decides when values go out: *Always*, *While Playing* (only while the DAW plays; quiet while you
-  set up a sound) or *While Notes Held*. When sending starts again, the current value goes out at once.
+  set up a sound) or *Keys Held* (only while keys are held). When sending starts again, the current value goes out at once.
 - One CC Out sends one controller; use several slots for several controllers. Like every module, its place
   in the chain counts: a Channel Filter or Event Blocker below it can block what it sends.
 - Removing CC Out (or switching it off) leaves the controller where it was; with pitch bend, the bend goes
@@ -700,7 +700,7 @@ between 40 and 100. Turning Value by hand sends too.
 | Controller | 0 … 127, Pitch Bend, Ch. Pressure | What is sent; common controllers are named (1 Mod Wheel, 7 Volume, 11 Expression, 74 Cutoff …). Default 74 Cutoff |
 | Channel | 1 … 16 | The MIDI channel it is sent on |
 | Value | 0 … 127 | The value sent (default 64). Point a modulation route here |
-| Send | Always / While Playing / While Notes Held | When values are sent (default While Playing) |
+| Send | Always / While Playing / Keys Held | When values are sent (default While Playing) |
 | Low *(page 2)* | 0 … 127 | The value sent when Value is 0 (default 0) |
 | High *(page 2)* | 0 … 127 | The value sent when Value is 127 (default 127) |
 | Smoothing *(page 2)* | Off, 1 … 100 ms | Glides to a new value over about this time, so jumps (Random, steps without glide) do not click |
@@ -763,7 +763,7 @@ sixteenths in between never. Lower *Amount* scales all these chances down; at 0 
 |------|-------|---------|
 | Amount | 0 … 100 % | How much is thinned out (default 50 %) |
 | Grid | 1/8, 1/16, 1/32 | The grid notes are placed on to weigh them; its finest steps drop out most (default 1/16) |
-| Grouping | 3 Last (2+2+3), 3 First (3+2+2), 3 Middle (2+3+2) | Where the group of three goes in odd meters |
+| Grouping | 3 Last, 3 First, 3 Middle | Where the group of three goes in odd meters (in 7/8: 2+2+3, 3+2+2, 2+3+2) |
 
 ---
 

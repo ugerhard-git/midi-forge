@@ -24,6 +24,7 @@ ParameterKnob::ParameterKnob()
     for (auto* label : { &nameLabel, &valueLabel })
     {
         label->setJustificationType (juce::Justification::centredLeft);
+        label->setBorderSize ({ 1, 1, 1, 1 }); // the default 5 px at the sides costs value texts too much room
         label->setInterceptsMouseClicks (false, false);
         addAndMakeVisible (*label);
     }
@@ -55,8 +56,10 @@ void ParameterKnob::triggerButtonStateChanged()
 void ParameterKnob::resized()
 {
     auto area = getLocalBounds();
-    knob.setBounds (area.removeFromLeft (juce::jmin (area.getHeight(), 46))
-                        .withSizeKeepingCentre (juce::jmin (area.getHeight(), 46), juce::jmin (area.getHeight(), 46)));
+    // The knob is 42 px at most, so the texts beside it have room (the plug-in tests check that every knob's
+    // name and values fit).
+    const int knobSize = juce::jmin (area.getHeight(), 42);
+    knob.setBounds (area.removeFromLeft (knobSize).withSizeKeepingCentre (knobSize, knobSize));
     area.removeFromLeft (4);
     nameLabel.setBounds (area.removeFromTop (area.getHeight() / 2).withTrimmedTop (2));
     valueLabel.setBounds (area.withTrimmedBottom (4));
@@ -471,7 +474,7 @@ void SlotRow::resized()
     moveDownButton.setBounds (moveButtons.reduced (0, 1));
     area.removeFromRight (8);
 
-    auto moduleArea = area.removeFromLeft (248);
+    auto moduleArea = area.removeFromLeft (232);
     auto topLine = moduleArea.removeFromTop (28);
     powerSwitch.setBounds (topLine.removeFromLeft (40));
     topLine.removeFromLeft (4);

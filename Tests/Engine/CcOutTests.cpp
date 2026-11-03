@@ -99,7 +99,7 @@ TEST_CASE ("cc out: an LFO route sweeps the controller, at most once per millise
     EXPECT (lowest <= 2 && highest >= 125);
 }
 
-TEST_CASE ("cc out: Send While Playing and While Notes Held send the current value when they start")
+TEST_CASE ("cc out: Send While Playing and Keys Held send the current value when they start")
 {
     ChainTestRig playing;
     playing.loadModule (0, ModuleType::CcOut, { Cc::modWheel, 1, 100, Cc::whilePlaying });

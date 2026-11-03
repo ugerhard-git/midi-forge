@@ -49,7 +49,7 @@ wrapper comes from `clap-juce-extensions` (`MIDI_FORGE_BUILD_CLAP`, on by defaul
 | `Source/Plugin/RecentModuleList.*` | The recently used modules of the module browser, shared by all instances via `juce::SharedResourcePointer`, saved in `Documents/MIDI Forge/Settings.xml` |
 | `Source/UI/*` | Editor: `MidiForgeEditor` (tabs; the header's word mark, glow and ember line come from `ForgeLogo`, drawn with paths and gradients), `SlotRow` + `ParameterKnob` (Chain tab), `ModuleBrowser` + `ModuleInfoView` (pop-ups of the module menu and the ⓘ button), `ModulationPage` with `LfoPanel`, `WaveformPreview`, `NoteRandomPanel`, `RouteRow`, `CompactKnob` (Modulation tab), `PresetBar` (◀ menu ▶, Save, ⋯ menu with async dialogs), `ForgeLookAndFeel`, `Theme`. `ParameterKnob::attachTo()` sets the knob's step interval from the parameter description, so stepped parameters snap while dragging |
 | `Tests/Engine/*` | Engine tests (no JUCE) |
-| `Tests/Plugin/*` | Tests of the JUCE layer; can also render both editor pages and the module pop-ups to PNGs |
+| `Tests/Plugin/*` | Tests of the JUCE layer; can also render both editor pages and the module pop-ups to PNGs. One test loads every module into the editor and checks that every knob name, every value (in every unit a knob can have) and the module summary fit their labels, so a long new label fails CI instead of being cut off ("…") |
 | `docs/` | This document, the user manual, images |
 | `packaging/` | Files that go into the release zips |
 
@@ -141,7 +141,7 @@ on all channels. The stress test also checks that no channel is left bent.
   schedule no note-off for that note and stop the series (Note Echo, Bounce), so the queue never allocates.
 - **Groove** is a `SchedulingModule` (like Humanize): each note-on is delayed by Early plus the groove shift
   of its nearest grid step (clamped at 0), its note-off by the same amount. Grid steps count from the bar
-  start (`BlockContext::barPositionAtBeat()`); Laid-back Snare asks `BarStructure::isBackbeat()`. The Early time is reported as latency (see
+  start (`BlockContext::barPositionAtBeat()`); Laid-back asks `BarStructure::isBackbeat()`. The Early time is reported as latency (see
   `reportLatencyOfModules()` below), so hosts compensate.
 - **Strum** (a `SchedulingModule`) collects note-ons arriving within Window, sorts them, and schedules them
   Speed apart starting Window after the first one; everything else is delayed by Window. Each key stores its

@@ -562,7 +562,7 @@ public:
      * @return The template's timing and accent for a grid step.
      * @param stepInBar    The grid step counted from the start of the bar.
      * @param stepsPerBeat Grid steps per quarter note (2, 4 or 8).
-     * @param bar          The beat structure of the bar; Laid-back Snare delays its backbeats (2 and 4 in 4/4,
+     * @param bar          The beat structure of the bar; Laid-back delays its backbeats (2 and 4 in 4/4,
      *                     the second group in 6/8, groups 2 and 3 in 7/8 as 2+2+3).
      */
     static GroovePoint groovePoint (int grooveTemplate, int64_t stepInBar, int stepsPerBeat,

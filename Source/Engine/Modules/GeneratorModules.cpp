@@ -1626,7 +1626,7 @@ private:
     };
     static constexpr int nothingSent = -1;
 
-    /** Counts the keys held at the input (for Send: While Notes Held); a repeated note-on is not counted twice. */
+    /** Counts the keys held at the input (for Send: Keys Held); a repeated note-on is not counted twice. */
     void trackHeldNote (const MidiEvent& event) noexcept
     {
         if (! event.isNoteOnOrOff())

@@ -4,6 +4,16 @@ What changed in each release of MIDI Forge. The release workflow publishes the s
 text of its GitHub release, so every section starts with `## [version]` and is written for users.
 Versions below 1.0 are betas: they are published as pre-releases.
 
+## [0.26.1] – Knob texts are no longer cut off
+
+- **Fixed:** longer knob values were cut off ("Harm. …", "Mel. Mi…"): scale names in Scale Quantize, Mutate and
+  Diatonic Harmonizer, Note Dispatcher's "Round Robin", CC Out's controller names, Bounce's materials and more.
+  The knobs are a little smaller and their texts have more room, so all of them fit now.
+- To fit, a few names are shorter: Groove's *Laid-back Snare* and *Pushed Off-beats* are now **Laid-back** and
+  **Pushed**, Beat Thinning's groupings **3 Last**, **3 First** and **3 Middle**, CC Out's *While Notes Held*
+  **Keys Held** and controller 65 **65 Porta On**, and some module summaries are shorter. Only the names
+  changed: projects and presets sound as before.
+
 ## [0.26.0] – Note Length
 
 - **New module: Note Length** (a Transform). Decides how long every note lasts, however long the key is held:
