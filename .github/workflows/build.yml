@@ -237,10 +237,17 @@ jobs:
     needs: [changes, build-macos]
     if: >-
       ${{ always() && github.event_name != 'pull_request' && needs.changes.outputs.code == 'true' &&
-      needs.build-macos.result == 'cancelled' }}
+      needs.build-macos.result != 'success' && needs.build-macos.result != 'skipped' }}
     runs-on: macos-15-intel
     timeout-minutes: 120
     steps:
+      # The Apple Silicon job shows as "cancelled" when no runner took it, but its result in `needs` may read
+      # differently; recorded here so the condition above can be made exact.
+      - name: Why the fallback runs
+        env:
+          APPLE_SILICON_RESULT: ${{ needs.build-macos.result }}
+        run: echo "Plug-in (macOS) ended with result '$APPLE_SILICON_RESULT'" | tee -a "$GITHUB_STEP_SUMMARY"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
