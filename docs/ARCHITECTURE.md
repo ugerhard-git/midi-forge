@@ -427,8 +427,11 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md#building) for commands. The workflow
    workflow.)
 4. **Publish release** (tags `v*` only, after the Windows build, the plug-in tests and CodeQL): zips the
    Windows artifact folder, takes the text from the version's section of `CHANGELOG.md` (no section: the job
-   fails) and creates the GitHub release – a pre-release for versions below 1.0 or tags with a suffix. If a
-   release for the tag exists already, it only uploads the zip (`--clobber`).
+   fails), joins its wrapped lines with `packaging/unwrap-markdown.py` (GitHub shows every line break of a
+   release text; the script's self-test runs in *Format, lint and engine tests*) and creates the GitHub
+   release – a pre-release for versions below 1.0 or tags with a suffix. If a release for the tag exists already
+   (published by hand), it uploads the zip (`--clobber`) and sets the text only if the release's own text is
+   empty.
 5. **Publish release (macOS zip)** (tags only, after the release and the macOS build): uploads
    `MIDI-Forge-macOS.zip` to the release. A release thus never waits for a macOS runner; if the macOS build
    fails, the release has only the Windows zip until the failed jobs are re-run.

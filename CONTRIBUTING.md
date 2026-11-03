@@ -100,8 +100,12 @@ its outputs are the downloads, and a poisoned cache would end up in them.
 2. Add a section `## [x.y.z] – short title` to [CHANGELOG.md](CHANGELOG.md), written for users: it becomes
    the text of the GitHub release (the build fails without it).
 3. Push a tag `vx.y.z` (only the owner, or with the owner's go). CI builds the plug-in and publishes the release
-   with the zip. Versions below 1.0 and tags with a suffix (`v1.0.0-rc1`) become
-   pre-releases. A release made by hand on GitHub for the tag is kept; CI only attaches the zips.
+   with the zips. Versions below 1.0 and tags with a suffix (`v1.0.0-rc1`) become pre-releases. The release
+   text is the version's CHANGELOG section with its wrapped lines joined (`packaging/unwrap-markdown.py`), because
+   GitHub shows every line break of a release text.
+4. Or the owner publishes the release on GitHub (*Draft a new release*, tag `vx.y.z` created on publish, title,
+   pre-release ticked). CI keeps that release and attaches the zips. If its text was left **empty**, CI fills
+   it in from CHANGELOG.md; a text written by hand is kept.
 
 ## Pull requests
 
