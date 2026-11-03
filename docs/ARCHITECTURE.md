@@ -418,13 +418,15 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md#building) for commands. The workflow
      action `.github/actions/build-macos`, shared by two jobs:
      - **Plug-in (macOS)** runs on an Apple Silicon runner (`macos-latest`).
      - **Plug-in (macOS, Intel fallback)** runs on `macos-15-intel` (offered until the macOS 15 image is
-       retired in autumn 2027), only when the first job was *cancelled*: GitHub cancels a job after about 15
-       minutes when no runner of its type is free ("not acquired by Runner … even after multiple attempts").
-       It does not run when the first job *failed* (a real build error). Its condition uses `always()`: GitHub
-       counts a cancelled job in `needs` as a cancelled run, so `!cancelled()` skipped the fallback exactly when
-       it was needed (PR #17). Because `always()` also runs after a cancelled run, and pull request runs are
-       cancelled whenever a newer push replaces them, the fallback serves pushes to `main`, tags and manual runs,
-       not pull requests. Its universal binary is the same; `auval` then checks the Intel half.
+       retired in autumn 2027) when the first job did not succeed: GitHub cancels a job after about 15 minutes
+       when no runner of its type is free ("not acquired by Runner … even after multiple attempts").
+       Tested on PR #17: such a job shows as "cancelled", but neither `!cancelled()` nor
+       `needs.build-macos.result == 'cancelled'` started the fallback. So it runs on `always()` and any result
+       but *success* or *skipped*; after a real build error it simply fails too (a second opinion). Because
+       `always()` also runs after a cancelled run, and pull request runs are cancelled whenever a newer push
+       replaces them, the fallback serves pushes to `main`, tags and manual runs, not pull requests. Its first
+       step writes the Apple Silicon job's result into the run summary. Its universal binary is the same;
+       `auval` then checks the Intel half.
    - `packaging/write-third-party-notices.sh` writes THIRD-PARTY-NOTICES.txt from the licence files of the
      fetched sources (VST3 SDK, clap-juce-extensions, CLAP, clap-helpers; on macOS also Apple's Audio Unit
      SDK), so it always matches what was built.

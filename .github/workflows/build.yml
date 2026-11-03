@@ -226,12 +226,12 @@ jobs:
   # When no Apple Silicon runner is free, GitHub cancels "Plug-in (macOS)" after about 15 minutes ("not acquired by
   # Runner"; it happened for hours in October and November 2026). This job then builds the same universal binaries
   # on an Intel runner (macos-15-intel, offered by GitHub until the macOS 15 image is retired in autumn 2027);
-  # auval checks the Intel half there. It runs only when that job was cancelled, not when it failed (a real build
-  # error would fail here too).
-  # always(): GitHub counts a cancelled job in `needs` as a cancelled run, so !cancelled() would skip this job
-  # exactly when it is needed (seen on PR #17). always() also runs after a cancelled run, though – and pull
-  # request runs are cancelled whenever a newer push replaces them. So the fallback serves pushes to main, tags
-  # (releases) and manual runs, where the downloads come from; not pull requests.
+  # auval checks the Intel half there.
+  # The condition, as tested on PR #17: a job that no runner took shows as "cancelled", but neither
+  # !cancelled() nor `result == 'cancelled'` started this job, so it runs on any result but success or skipped
+  # (after a real build error it gives a second opinion and fails too). always() also runs after a cancelled
+  # run, and pull request runs are cancelled whenever a newer push replaces them; so the fallback serves pushes
+  # to main, tags (releases) and manual runs, where the downloads come from – not pull requests.
   build-macos-intel:
     name: Plug-in (macOS, Intel fallback)
     needs: [changes, build-macos]
@@ -241,8 +241,7 @@ jobs:
     runs-on: macos-15-intel
     timeout-minutes: 120
     steps:
-      # The Apple Silicon job shows as "cancelled" when no runner took it, but its result in `needs` may read
-      # differently; recorded here so the condition above can be made exact.
+      # Shows in the run's summary why the fallback ran (the Apple Silicon job's result).
       - name: Why the fallback runs
         env:
           APPLE_SILICON_RESULT: ${{ needs.build-macos.result }}
