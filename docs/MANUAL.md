@@ -63,7 +63,39 @@ Mac yet. Please report how it works for you in the repository's *Issues*.
 Reaper and Bitwig list MIDI Forge as VST3 and as CLAP; both work the same, pick one. Projects saved with one
 format load only with that format.
 
-MIDI Forge does not process audio. Ableton Live cannot host MIDI-effect plug-ins.
+MIDI Forge does not process audio.
+
+### Other DAWs
+
+MIDI Forge is made and tested for Reaper, Bitwig Studio and (as an Audio Unit) Logic Pro. Other DAWs load
+VST3 or CLAP plug-ins too, but many of them have no place for a *third-party MIDI effect* in front of an
+instrument: their MIDI effect slots take only their own effects. There, MIDI Forge goes on a track of its own,
+and its MIDI output is routed to the instrument's track. The steps below describe that routing in general;
+it has not been tested in these DAWs, and the menus differ between versions.
+
+| DAW | Formats | How to use MIDI Forge |
+|-----|---------|-----------------------|
+| Reaper, Bitwig Studio | VST3, CLAP | Directly in front of the instrument (see above) |
+| Logic Pro (Mac) | Audio Unit | In the instrument track's **MIDI FX** slot (see above) |
+| Ableton Live | VST3 | Two tracks: MIDI Forge on one MIDI track, the instrument on a second one whose *MIDI From* is set to the first track (post FX). Ableton Live may not list MIDI Forge at all, because it expects plug-ins on a track to have audio outputs |
+| Cubase, Studio One | VST3 | Two tracks, as in Live: MIDI Forge's MIDI output routed to the instrument's track or MIDI input |
+| FL Studio | VST3, CLAP | Set an output port in MIDI Forge's wrapper settings (gear icon → MIDI → *Output port*) and the same number as the instrument's *Input port* |
+| Pro Tools | AAX only | Not possible: MIDI Forge is not available as AAX |
+
+What works everywhere, but depends on what the DAW tells the plug-in:
+
+- **Time signature:** if a DAW does not report it, MIDI Forge counts in 4/4 (Groove's backbeats, Beat
+  Thinning, every "1 Bar").
+- **Song position:** modules that follow the bar – Groove, Beat Thinning, Ghost Notes' *Before*, the
+  Arpeggiator's and Repeater's *Bar* grid, CC Out's *While Playing* – behave as if the DAW were stopped when
+  it does not pass the transport on, e.g. on a track that is not playing back.
+- **Latency:** Groove's *Early* and Strum's *Window* delay notes and report that to the DAW. Notes only stay
+  in time if the DAW compensates plug-in latency for MIDI tracks; otherwise set them to 0.
+- **Pitch bend** (Pitch Slide, CC Out): one developer reported that FL Studio changed pitch bend that was
+  routed from one plug-in to another. If slides sound wrong there, check the routing first.
+
+If you use MIDI Forge in another DAW, please tell us how it went in the repository's *Issues*, so this table
+can say "tested".
 
 ## The window
 
