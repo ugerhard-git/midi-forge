@@ -86,6 +86,10 @@ jobs:
       - name: Check formatting
         run: ~/.local/bin/clang-format --dry-run --Werror $(git ls-files '*.cpp' '*.h')
 
+      # The release workflow joins CHANGELOG.md's wrapped lines with this script; check it here, not on release day.
+      - name: Check the release-notes script
+        run: python3 packaging/unwrap-markdown.py --self-test
+
       - name: Build engine tests (warnings are errors)
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DMIDI_FORGE_BUILD_PLUGIN=OFF -DMIDI_FORGE_WARNINGS_AS_ERRORS=ON
@@ -368,9 +372,10 @@ jobs:
           done
           ls -l *.zip
 
-      # The text comes from the version's section of CHANGELOG.md ("## [0.22.0] ..." up to the next "## ").
-      # Versions below 1.0 and tags with a suffix (v1.2.0-rc1) are published as pre-releases. A release that
-      # already exists for the tag (made by hand on GitHub) just gets the zips.
+      # The text comes from the version's section of CHANGELOG.md ("## [0.22.0] ..." up to the next "## "), with
+      # its wrapped lines joined (GitHub shows every line break of a release text). Versions below 1.0 and tags
+      # with a suffix (v1.2.0-rc1) are published as pre-releases. A release that already exists for the tag (made
+      # by hand on GitHub) gets the zips, and the text from CHANGELOG.md only if its own text is empty.
       - name: Create or update the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -382,7 +387,7 @@ jobs:
             inSection && /^## / { exit }
             inSection { print }
             END { if (title != "") print title > "release-subtitle.txt" }
-          ' source/CHANGELOG.md > release-notes.md
+          ' source/CHANGELOG.md | python3 source/packaging/unwrap-markdown.py > release-notes.md
           if [ ! -s release-notes.md ]; then
             echo "::error::CHANGELOG.md has no section '## [$version]'"
             exit 1
@@ -394,6 +399,10 @@ jobs:
 
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release upload "$TAG" ./*.zip --repo "$GITHUB_REPOSITORY" --clobber
+            existingText=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body)
+            if [ -z "${existingText//[[:space:]]/}" ]; then
+              gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file release-notes.md
+            fi
           else
             gh release create "$TAG" ./*.zip --repo "$GITHUB_REPOSITORY" --title "$title" \
               --notes-file release-notes.md "${prerelease[@]}"
