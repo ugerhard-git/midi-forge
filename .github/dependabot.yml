@@ -5,6 +5,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # New versions are proposed only after a week, so a hijacked release is usually found and pulled first.
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "ci"
 
@@ -13,5 +16,8 @@ updates:
     directory: /.github
     schedule:
       interval: weekly
+    # New versions are proposed only after a week, so a hijacked release is usually found and pulled first.
+    cooldown:
+      default-days: 7
     commit-message:
       prefix: "ci"

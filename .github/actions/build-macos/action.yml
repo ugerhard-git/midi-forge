@@ -1,0 +1,86 @@
+# Builds, signs, checks and zips MIDI Forge for macOS (VST3, AU and CLAP as universal binaries) and uploads the
+# artifact MIDI-Forge-macOS. Shared by the jobs "Plug-in (macOS)" (Apple Silicon runner) and "Plug-in (macOS,
+# Intel fallback)" in build.yml, so both build exactly the same way. Run it after actions/checkout.
+name: Build MIDI Forge for macOS
+description: Builds, signs, validates and zips the macOS plug-ins, then uploads the artifact MIDI-Forge-macOS.
+
+runs:
+  using: composite
+  steps:
+    - name: Configure
+      shell: bash
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DMIDI_FORGE_BUILD_ENGINE_TESTS=OFF -DFETCHCONTENT_BASE_DIR="$GITHUB_WORKSPACE/.deps"
+
+    - name: Build VST3, AU and CLAP
+      shell: bash
+      run: |
+        set -o pipefail
+        if ! cmake --build build --config Release --target MidiForge_VST3 MidiForge_AU MidiForge_CLAP --parallel 4 2>&1 | tee build.log; then
+          grep -E "error|fatal" build.log | sort -u | head -n 20 | sed 's/^/::error::/'
+          exit 1
+        fi
+
+    # Ad-hoc signing (no Apple Developer certificate): Apple Silicon only loads signed code. Users still
+    # remove the quarantine flag after downloading (see INSTALL.txt). Every bundle must hold both CPUs.
+    - name: Collect, sign and check the plug-ins
+      shell: bash
+      run: |
+        mkdir -p dist
+        for format in "VST3/MIDI Forge.vst3" "AU/MIDI Forge.component" "CLAP/MIDI Forge.clap"; do
+          cp -R "build/MidiForge_artefacts/Release/$format" dist/
+        done
+        for bundle in dist/*.vst3 dist/*.component dist/*.clap; do
+          codesign --force --deep --sign - "$bundle"
+          codesign --verify --deep --strict --verbose=2 "$bundle"
+          architectures=$(lipo -archs "$bundle/Contents/MacOS/MIDI Forge")
+          echo "$bundle: $architectures"
+          if [[ "$architectures" != *arm64* || "$architectures" != *x86_64* ]]; then
+            echo "::error::$bundle is not a universal binary ($architectures)"
+            exit 1
+          fi
+        done
+        cp packaging/INSTALL.txt dist/
+        cp LICENSE dist/LICENSE.txt
+        packaging/write-third-party-notices.sh .deps dist/THIRD-PARTY-NOTICES.txt --with-audio-unit
+
+    # Apple's Audio Unit validator: the AU is a MIDI processor ('aumi'), subtype MFrg, manufacturer Ugrh.
+    - name: Validate the AU (auval)
+      shell: bash
+      run: |
+        mkdir -p ~/Library/Audio/Plug-Ins/Components
+        cp -R "dist/MIDI Forge.component" ~/Library/Audio/Plug-Ins/Components/
+        killall -9 AudioComponentRegistrar || true # makes macOS find the new component
+        auval -strict -v aumi MFrg Ugrh | tee auval.log
+        grep -q "AU VALIDATION SUCCEEDED" auval.log
+
+    # clap-validator 0.4.1 (free-audio), built from its pinned commit; --locked checks every Rust dependency
+    # against the checksums in its Cargo.lock. The state-reproducibility tests are left out: since 0.4.1
+    # they also demand that a plug-in asks the host to re-read all values after loading a state, which the
+    # CLAP wrapper (clap-juce-extensions) does not do. The values themselves load correctly (checked by the
+    # plug-in tests); the hosts read them when they process the next block.
+    - name: Validate the CLAP
+      shell: bash
+      env:
+        VALIDATOR_COMMIT: 152b9823e992d782c5c1fd33bca0295478b919aa # clap-validator 0.4.1
+      run: |
+        rustup toolchain install 1.97.0 --profile minimal
+        cargo +1.97.0 install --git https://github.com/free-audio/clap-validator --rev "$VALIDATOR_COMMIT" \
+          --locked --root "$RUNNER_TEMP/clap-validator"
+        "$RUNNER_TEMP/clap-validator/bin/clap-validator" validate --only-failed --exclude 'state-reproducibility' \
+          "dist/MIDI Forge.clap"
+
+    # A GitHub artifact loses the bundles' file permissions, which breaks their signatures. So the folder is
+    # zipped here with ditto (keeps permissions and signatures), and the release job uploads that zip as it is.
+    - name: Zip the plug-ins
+      shell: bash
+      run: |
+        mkdir -p package
+        ditto -c -k --sequesterRsrc dist package/MIDI-Forge-macOS.zip
+        unzip -l package/MIDI-Forge-macOS.zip | tail -n 3
+
+    - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: MIDI-Forge-macOS # release-macos downloads it by this name
+        path: package/MIDI-Forge-macOS.zip
+        if-no-files-found: error
+        retention-days: 30
